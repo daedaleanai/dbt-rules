@@ -1,27 +1,25 @@
-package basic
+package core
 
 import (
 	"fmt"
 	"strings"
-
-	"dbt-rules/RULES/core"
 )
 
 // ExpandTemplate expands `Template` by performing `Substitutions` and storing the result in `Out`.
 type ExpandTemplate struct {
-	Out           core.OutPath
-	Template      core.Path
+	Out           OutPath
+	Template      Path
 	Substitutions map[string]string
 }
 
 // BuildSteps for ExpandTemplate.
-func (tmpl ExpandTemplate) Build(ctx core.Context) {
+func (tmpl ExpandTemplate) Build(ctx Context) {
 	substitutions := []string{}
 	for old, new := range tmpl.Substitutions {
 		substitutions = append(substitutions, fmt.Sprintf("-e 's/%s/%s/g'", old, new))
 	}
 	cmd := fmt.Sprintf("sed %s %q > %q", strings.Join(substitutions, " "), tmpl.Template, tmpl.Out)
-	ctx.AddBuildStep(core.BuildStep{
+	ctx.AddBuildStep(BuildStep{
 		Out:   tmpl.Out,
 		In:    tmpl.Template,
 		Cmd:   cmd,
@@ -29,6 +27,6 @@ func (tmpl ExpandTemplate) Build(ctx core.Context) {
 	})
 }
 
-func (tmpl ExpandTemplate) Output() core.OutPath {
+func (tmpl ExpandTemplate) Output() OutPath {
 	return tmpl.Out
 }

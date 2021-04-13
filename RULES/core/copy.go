@@ -1,20 +1,16 @@
-package basic
+package core
 
-import (
-	"fmt"
-
-	"dbt-rules/RULES/core"
-)
+import "fmt"
 
 // CopyFile copies a single file.
 type CopyFile struct {
-	From core.Path
-	To   core.OutPath
+	From Path
+	To   OutPath
 }
 
 // Build for CopyFile.
-func (copy CopyFile) Build(ctx core.Context) {
-	ctx.AddBuildStep(core.BuildStep{
+func (copy CopyFile) Build(ctx Context) {
+	ctx.AddBuildStep(BuildStep{
 		Out:   copy.To,
 		In:    copy.From,
 		Cmd:   fmt.Sprintf("cp %q %q", copy.From, copy.To),
@@ -22,6 +18,6 @@ func (copy CopyFile) Build(ctx core.Context) {
 	})
 }
 
-func (copy CopyFile) Output() core.OutPath {
+func (copy CopyFile) Output() OutPath {
 	return copy.To
 }

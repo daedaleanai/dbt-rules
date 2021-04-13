@@ -3,7 +3,7 @@ package cc
 import (
 	"fmt"
 
-	"dbt/RULES/core"
+	"dbt-rules/RULES/core"
 )
 
 // ObjectFile compiles a single C++ source file.
@@ -55,7 +55,7 @@ func flattenDeps(deps []Dep) []Library {
 }
 
 func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []Library, toolchain Toolchain) []core.Path {
-	includes := []core.Path{core.NewInPath(".")}
+	includes := []core.Path{ctx.SourcePath("")}
 	for _, dep := range deps {
 		includes = append(includes, dep.Includes...)
 	}

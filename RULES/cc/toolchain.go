@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"dbt/RULES/core"
+	"dbt-rules/RULES/core"
 )
 
 type Toolchain interface {
