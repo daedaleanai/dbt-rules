@@ -130,3 +130,12 @@ func NewOutPath(pkg interface{}, p string) OutPath {
 func NewGlobalPath(p string) GlobalPath {
 	return globalPath{p}
 }
+
+// BuildPath returns a path relative to the build directory.
+func BuildPath(p string) OutPath {
+	return outPath{p}
+}
+// SourcePath returns a path relative to the source directory.
+func SourcePath(p string) Path {
+	return inPath{p}
+}
