@@ -43,48 +43,23 @@ type descriptionInterface interface {
 }
 
 type context struct {
-	skipNinjaFile bool
-
 	cwd         OutPath
 	leafOutputs map[Path]struct{}
-
 	nextRuleID int
-
 	ninjaFile strings.Builder
-	targets   map[string]string
 }
 
-func newContext(skipNinja bool) *context {
+func newContext() *context {
 	ctx := &context{}
-	ctx.skipNinjaFile = skipNinja
-	ctx.targets = map[string]string{}
-
-	if !ctx.skipNinjaFile {
-		fmt.Fprintf(&ctx.ninjaFile, "build __phony__: phony\n\n")
-	}
-
+	fmt.Fprintf(&ctx.ninjaFile, "build __phony__: phony\n\n")
 	return ctx
 }
 
-func (ctx *context) addTarget(cwd OutPath, name string, target interface{}) {
+func (ctx *context) handleTarget(name string, target buildInterface) {
 	currentTarget = name
-	ctx.cwd = cwd
+	ctx.cwd = outPath{path.Dir(name)}
 	ctx.leafOutputs = map[Path]struct{}{}
-
-	iface, ok := target.(buildInterface)
-	if !ok {
-		return
-	}
-	if !ctx.skipNinjaFile {
-		iface.Build(ctx)
-	}
-
-	if iface, ok := target.(descriptionInterface); ok {
-		ctx.targets[name] = iface.Description()
-	} else {
-		ctx.targets[name] = ""
-	}
-
+	target.Build(ctx)
 	if len(ctx.leafOutputs) == 0 {
 		return
 	}

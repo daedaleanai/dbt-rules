@@ -8,6 +8,10 @@ import (
 
 var currentTarget string
 
+func mode() string {
+	return os.Args[1]
+}
+
 func sourceDir() string {
 	return os.Args[2]
 }
@@ -18,6 +22,19 @@ func buildDir() string {
 
 func workingDir() string {
 	return os.Args[4]
+}
+
+func flags() map[string]string {
+	flags := map[string]string{}
+	for _, arg := range os.Args[5:] {
+		parts := strings.SplitN(arg, "=", 2)
+		if len(parts) > 1 {
+			flags[parts[0]] = parts[1]
+		} else {
+			flags[parts[0]] = "true"
+		}
+	}
+	return flags
 }
 
 var allowNewFlags = true
