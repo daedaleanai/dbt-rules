@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io/ioutil"
+	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -15,6 +16,7 @@ const scriptFileMode = 0755
 type Context interface {
 	AddBuildStep(BuildStep)
 	Cwd() OutPath
+	Fatal(format string, a ...interface{})
 }
 
 // BuildStep represents one build step (i.e., one build command).
@@ -43,10 +45,11 @@ type descriptionInterface interface {
 }
 
 type context struct {
-	cwd         OutPath
-	leafOutputs map[Path]struct{}
-	nextRuleID int
-	ninjaFile strings.Builder
+	currentTarget string
+	cwd           OutPath
+	leafOutputs   map[Path]struct{}
+	nextRuleID    int
+	ninjaFile     strings.Builder
 }
 
 func newContext() *context {
@@ -55,13 +58,14 @@ func newContext() *context {
 	return ctx
 }
 
-func (ctx *context) handleTarget(name string, target buildInterface) {
-	currentTarget = name
+func (ctx *context) handleTarget(name string, target buildInterface) bool {
+	ctx.currentTarget = name
 	ctx.cwd = outPath{path.Dir(name)}
 	ctx.leafOutputs = map[Path]struct{}{}
 	target.Build(ctx)
+
 	if len(ctx.leafOutputs) == 0 {
-		return
+		return false
 	}
 
 	ninjaOuts := []string{}
@@ -93,6 +97,8 @@ func (ctx *context) handleTarget(name string, target buildInterface) {
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
 
 	ctx.nextRuleID++
+
+	return true
 }
 
 func (ctx *context) AddBuildStep(step BuildStep) {
@@ -120,13 +126,17 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 	}
 
 	if step.Script != "" {
-		Assert(step.Cmd == "", "cannot specify Cmd and Script in a build step")
+		if step.Cmd != "" {
+			ctx.Fatal("cannot specify Cmd and Script in a build step")
+		}
 		script := []byte(step.Script)
 		hash := crc32.ChecksumIEEE([]byte(script))
 		scriptFileName := fmt.Sprintf("%08X.sh", hash)
 		scriptFilePath := path.Join(buildDir(), "..", scriptFileName)
 		err := ioutil.WriteFile(scriptFilePath, script, scriptFileMode)
-		Assert(err == nil, "%s", err)
+		if err != nil {
+			ctx.Fatal("%s", err)
+		}
 		step.Cmd = scriptFilePath
 	}
 
@@ -151,6 +161,10 @@ func (ctx *context) Cwd() OutPath {
 	return ctx.cwd
 }
 
+func (ctx *context) Fatal(format string, a ...interface{}) {
+	msg := fmt.Sprintf(format, a...)
+	fmt.Fprintf(os.Stderr, "Error while processing target '%s': %s.\n", ctx.currentTarget, msg)
+}
 
 func ninjaEscape(s string) string {
 	return strings.ReplaceAll(s, " ", "$ ")

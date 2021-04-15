@@ -3,10 +3,9 @@ package core
 import (
 	"fmt"
 	"os"
-	"strings"
 )
 
-var currentTarget string
+const fileMode = 0755
 
 func mode() string {
 	return os.Args[1]
@@ -16,7 +15,7 @@ func sourceDir() string {
 	return os.Args[2]
 }
 
-func buildDir() string {
+func buildDirPrefix() string {
 	return os.Args[3]
 }
 
@@ -24,73 +23,25 @@ func workingDir() string {
 	return os.Args[4]
 }
 
-func flags() map[string]string {
-	flags := map[string]string{}
-	for _, arg := range os.Args[5:] {
-		parts := strings.SplitN(arg, "=", 2)
-		if len(parts) > 1 {
-			flags[parts[0]] = parts[1]
-		} else {
-			flags[parts[0]] = "true"
-		}
-	}
-	return flags
+func otherArgs() []string {
+	return os.Args[5:]
 }
 
-var allowNewFlags = true
-var BuildFlags = map[string]string{}
+var buildDirSuffix = ""
 
-func flagValue(name string) string {
-	prefix := fmt.Sprintf("%s=", name)
-	for _, arg := range os.Args[4:] {
-		if strings.HasPrefix(arg, prefix) {
-			return strings.TrimPrefix(arg, prefix)
-		}
+func buildDir() string {
+	if !flagsLocked {
+		fatal("cannot use build directory before all flag values are known")
 	}
-	return ""
+	return buildDirPrefix() + buildDirSuffix
 }
 
-// LockBuildFlags prevents new flags from being used.
-func LockBuildFlags() {
-	allowNewFlags = false
-}
-
-// Flag provides the value of a build config flags.
-func Flag(name string) string {
-	if allowNewFlags {
-		BuildFlags[name] = flagValue(name)
-	}
-
-	if value, exists := BuildFlags[name]; exists {
-		return value
-	}
-
-	Fatal("Tried to use flag '%s' after flags were locked. Flags must be accessed outside of build rule definitions.", name)
-	return ""
-}
-
-// Assert can be used in build rules to abort build file generation with an error message if `cond` is true.
-func Assert(cond bool, format string, args ...interface{}) {
-	if cond {
+func fatal(format string, a ...interface{}) {
+	if mode() == "completion" {
 		return
 	}
 
-	msg := fmt.Sprintf(format, args...)
-	if currentTarget == "" {
-		fmt.Fprintf(os.Stderr, "Assertion failed while processing target '%s': %s", currentTarget, msg)
-	} else {
-		fmt.Fprintf(os.Stderr, "Assertion failed: %s", msg)
-	}
-	os.Exit(1)
-}
-
-// Fatal can be used in build rules to abort build file generation with an error message unconditionally.
-func Fatal(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
-	if currentTarget == "" {
-		fmt.Fprintf(os.Stderr, "A fatal error occured: %s", msg)
-	} else {
-		fmt.Fprintf(os.Stderr, "A fatal error occured while processing target '%s': %s", currentTarget, msg)
-	}
+	fmt.Fprintf(os.Stderr, "Error: %s.\n", msg)
 	os.Exit(1)
 }

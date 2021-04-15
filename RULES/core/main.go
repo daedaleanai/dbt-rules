@@ -5,29 +5,25 @@ import (
 	"io/ioutil"
 )
 
-const outputFileMode = 0755
 const outputFileName = "output.json"
 
-type target struct {
+type targetInfo struct {
 	Description string
-	build buildInterface
-}
-
-type flag struct {
-	Type string
-	Alias string
-	AllowedValues []string
-	Value string
+	build       buildInterface
 }
 
 type generatorOutput struct {
 	NinjaFile string
-	Targets   map[string]target
-	Flags     map[string]flag
+	Targets   map[string]targetInfo
+	Flags     map[string]flagInfo
+	BuildDir  string
 }
 
 func GeneratorMain(vars map[string]interface{}) {
-	output := generatorOutput{"", map[string]target{}, map[string]flag{}}
+	output := generatorOutput{"", map[string]targetInfo{}, map[string]flagInfo{}, ""}
+
+	output.Flags = lockAndGetFlags()
+	output.BuildDir = buildDir()
 
 	for name, variable := range vars {
 		if buildIface, ok := variable.(buildInterface); ok {
@@ -35,21 +31,29 @@ func GeneratorMain(vars map[string]interface{}) {
 			if descriptionIface, ok := variable.(descriptionInterface); ok {
 				description = descriptionIface.Description()
 			}
-			output.Targets[name] = target{description, buildIface}
+			output.Targets[name] = targetInfo{description, buildIface}
 		}
 	}
-	
+
+	// Create build.ninja file.
 	if mode() == "ninja" {
 		ctx := newContext()
 		for name, target := range output.Targets {
-			ctx.handleTarget(name, target.build)
+			if !ctx.handleTarget(name, target.build) {
+				delete(output.Targets, name)
+			}
 		}
-		
+
 		output.NinjaFile = ctx.ninjaFile.String()
 	}
 
+	// Serialize generator output.
 	data, err := json.MarshalIndent(output, "", "  ")
-	Assert(err == nil, "failed to marshall generator output: %s", err)
-	err = ioutil.WriteFile(outputFileName, data, outputFileMode)
-	Assert(err == nil, "failed to write generator output: %s", err)
+	if err != nil {
+		fatal("failed to marshall generator output: %s", err)
+	}
+	err = ioutil.WriteFile(outputFileName, data, fileMode)
+	if err != nil {
+		fatal("failed to write generator output: %s", err)
+	}
 }
