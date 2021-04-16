@@ -37,11 +37,9 @@ func GeneratorMain(vars map[string]interface{}) {
 
 	// Create build.ninja file.
 	if mode() == "ninja" {
-		ctx := newContext()
+		ctx := newContext(vars)
 		for name, target := range output.Targets {
-			if !ctx.handleTarget(name, target.build) {
-				delete(output.Targets, name)
-			}
+			ctx.handleTarget(name, target.build)
 		}
 
 		output.NinjaFile = ctx.ninjaFile.String()

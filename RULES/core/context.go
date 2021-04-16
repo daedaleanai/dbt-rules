@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -17,6 +18,8 @@ type Context interface {
 	AddBuildStep(BuildStep)
 	Cwd() OutPath
 	Fatal(format string, a ...interface{})
+
+	addTargetDependency(interface{})
 }
 
 // BuildStep represents one build step (i.e., one build command).
@@ -45,28 +48,35 @@ type descriptionInterface interface {
 }
 
 type context struct {
-	currentTarget string
-	cwd           OutPath
-	leafOutputs   map[Path]struct{}
-	nextRuleID    int
-	ninjaFile     strings.Builder
+	targetNames        map[interface{}]string
+	currentTarget      string
+	cwd                OutPath
+	targetDependencies []string
+	leafOutputs        map[Path]struct{}
+	nextRuleID         int
+	ninjaFile          strings.Builder
 }
 
-func newContext() *context {
+func newContext(vars map[string]interface{}) *context {
 	ctx := &context{}
+
+	ctx.targetNames = map[interface{}]string{}
+	for name := range vars {
+		ctx.targetNames[vars[name]] = name
+	}
+
 	fmt.Fprintf(&ctx.ninjaFile, "build __phony__: phony\n\n")
+
 	return ctx
 }
 
-func (ctx *context) handleTarget(name string, target buildInterface) bool {
+func (ctx *context) handleTarget(name string, target buildInterface) {
 	ctx.currentTarget = name
 	ctx.cwd = outPath{path.Dir(name)}
 	ctx.leafOutputs = map[Path]struct{}{}
-	target.Build(ctx)
+	ctx.targetDependencies = []string{}
 
-	if len(ctx.leafOutputs) == 0 {
-		return false
-	}
+	target.Build(ctx)
 
 	ninjaOuts := []string{}
 	for out := range ctx.leafOutputs {
@@ -88,17 +98,19 @@ func (ctx *context) handleTarget(name string, target buildInterface) bool {
 	}
 	sort.Strings(printOuts)
 
+	if len(printOuts) == 0 {
+		printOuts = []string{"<no outputs produced>"}
+	}
+
 	fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
 	fmt.Fprintf(&ctx.ninjaFile, "  command = echo \"%s\"\n", strings.Join(printOuts, "\\n"))
 	fmt.Fprintf(&ctx.ninjaFile, "  description = Created %s:", name)
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
-	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s __phony__\n", name, ctx.nextRuleID, strings.Join(ninjaOuts, " "))
+	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s %s __phony__\n", name, ctx.nextRuleID, strings.Join(ninjaOuts, " "), strings.Join(ctx.targetDependencies, " "))
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
 
 	ctx.nextRuleID++
-
-	return true
 }
 
 func (ctx *context) AddBuildStep(step BuildStep) {
@@ -164,6 +176,17 @@ func (ctx *context) Cwd() OutPath {
 func (ctx *context) Fatal(format string, a ...interface{}) {
 	msg := fmt.Sprintf(format, a...)
 	fmt.Fprintf(os.Stderr, "Error while processing target '%s': %s.\n", ctx.currentTarget, msg)
+}
+
+func (ctx *context) addTargetDependency(target interface{}) {
+	if reflect.TypeOf(target).Kind() != reflect.Ptr {
+		fatal("adding target dependency to non-pointer target")
+	}
+	name, exists := ctx.targetNames[target]
+	if !exists {
+		fatal("adding target dependency to invalid target")
+	}
+	ctx.targetDependencies = append(ctx.targetDependencies, name)
 }
 
 func ninjaEscape(s string) string {
