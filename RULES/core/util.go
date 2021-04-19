@@ -1,9 +1,11 @@
 package core
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
+	"text/template"
 )
 
 var currentTarget string
@@ -76,4 +78,18 @@ func Fatal(format string, a ...interface{}) {
 		fmt.Fprintf(os.Stderr, "A fatal error occured while processing target '%s': %s", currentTarget, msg)
 	}
 	os.Exit(1)
+}
+
+// Compile a go text template, execute it, and return the result as a string
+func CompileTemplate(tmpl, name string, data interface{}) string {
+	t, err := template.New(name).Parse(tmpl)
+	if err != nil {
+		Fatal("Cannot parse the IP generator template: %s", err)
+	}
+	var buff bytes.Buffer
+	err = t.Execute(&buff, data)
+	if err != nil {
+		Fatal("Cannot execute the IP generator template: %s", err)
+	}
+	return buff.String()
 }
