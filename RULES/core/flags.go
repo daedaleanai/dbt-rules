@@ -90,7 +90,7 @@ func (flag *BoolFlag) setFromString(value string) {
 	case "false":
 		flag.value = false
 	default:
-		fatal("invalid value '%s' for boolean flag '%s'", value, flag.Name)
+		Fatal("invalid value '%s' for boolean flag '%s'", value, flag.Name)
 	}
 }
 
@@ -128,7 +128,7 @@ func (flag *IntFlag) info() flagInfo {
 func (flag *IntFlag) setFromString(value string) {
 	i64, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
-		fatal("invalid value '%s' for integer flag '%s': %s", value, flag.Name, err)
+		Fatal("invalid value '%s' for integer flag '%s': %s", value, flag.Name, err)
 	}
 	flag.value = i64
 }
@@ -162,7 +162,7 @@ func (flag *FloatFlag) info() flagInfo {
 func (flag *FloatFlag) setFromString(value string) {
 	f64, err := strconv.ParseFloat(value, 64)
 	if err != nil {
-		fatal("invalid value '%s' for floating-point flag '%s': %s", value, flag.Name, err)
+		Fatal("invalid value '%s' for floating-point flag '%s': %s", value, flag.Name, err)
 	}
 	flag.value = f64
 }
@@ -181,12 +181,12 @@ func initializeFlag(flag flagInterface, name string, isInitialized *bool) {
 	}
 
 	if flagsLocked {
-		fatal("flags must be accessed outside build rules at least once")
+		Fatal("flags must be accessed outside build rules at least once")
 	}
 
 	*isInitialized = true
 	if _, exists := registeredFlags[name]; exists {
-		fatal("multiple flags with name '%s'", name)
+		Fatal("multiple flags with name '%s'", name)
 	}
 	registeredFlags[name] = flag
 
@@ -195,7 +195,7 @@ func initializeFlag(flag flagInterface, name string, isInitialized *bool) {
 	} else if value, exists := configFileFlags[name]; exists {
 		flag.setFromString(value)
 	} else if !flag.setToDefault() {
-		fatal("flag '%s' has no value", name)
+		Fatal("flag '%s' has no value", name)
 	}
 
 	info := flag.info()
@@ -207,7 +207,7 @@ func initializeFlag(flag flagInterface, name string, isInitialized *bool) {
 			return
 		}
 	}
-	fatal("flag '%s' has unallowed value '%s'", name, info.Value)
+	Fatal("flag '%s' has unallowed value '%s'", name, info.Value)
 }
 
 func lockAndGetFlags() map[string]flagInfo {
@@ -231,11 +231,11 @@ func lockAndGetFlags() map[string]flagInfo {
 	// Store config flag values in file.
 	data, err := json.Marshal(flagValues)
 	if err != nil {
-		fatal("failed to marshal config flag values: %s", err)
+		Fatal("failed to marshal config flag values: %s", err)
 	}
 	err = ioutil.WriteFile(configFilePath, data, fileMode)
 	if err != nil {
-		fatal("failed to write config flag values: %s", err)
+		Fatal("failed to write config flag values: %s", err)
 	}
 
 	return flagInfo
@@ -262,11 +262,11 @@ func getConfigFileFlags() map[string]string {
 		return flags
 	}
 	if err != nil {
-		fatal("failed to read config flags: %s", err)
+		Fatal("failed to read config flags: %s", err)
 	}
 	err = json.Unmarshal(data, &flags)
 	if err != nil {
-		fatal("failed to unmarshall config flags: %s", err)
+		Fatal("failed to unmarshall config flags: %s", err)
 	}
 
 	return flags

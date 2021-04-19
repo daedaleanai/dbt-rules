@@ -7,6 +7,8 @@ import (
 
 const fileMode = 0755
 
+var currentTarget = ""
+
 func mode() string {
 	return os.Args[1]
 }
@@ -31,17 +33,21 @@ var buildDirSuffix = ""
 
 func buildDir() string {
 	if !flagsLocked {
-		fatal("cannot use build directory before all flag values are known")
+		Fatal("cannot use build directory before all flag values are known")
 	}
 	return buildDirPrefix() + buildDirSuffix
 }
 
-func fatal(format string, a ...interface{}) {
+func Fatal(format string, a ...interface{}) {
 	if mode() == "completion" {
 		return
 	}
 
 	msg := fmt.Sprintf(format, a...)
-	fmt.Fprintf(os.Stderr, "Error: %s.\n", msg)
+	if currentTarget == "" {
+		fmt.Fprintf(os.Stderr, "Error: %s.\n", msg)
+	} else {
+		fmt.Fprintf(os.Stderr, "Error while processing target '%s': %s.\n", currentTarget, msg)
+	}
 	os.Exit(1)
 }

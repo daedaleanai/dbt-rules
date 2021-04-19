@@ -14,13 +14,14 @@ type targetInfo struct {
 
 type generatorOutput struct {
 	NinjaFile string
+	BashFile  string
 	Targets   map[string]targetInfo
 	Flags     map[string]flagInfo
 	BuildDir  string
 }
 
 func GeneratorMain(vars map[string]interface{}) {
-	output := generatorOutput{"", map[string]targetInfo{}, map[string]flagInfo{}, ""}
+	output := generatorOutput{"", "", map[string]targetInfo{}, map[string]flagInfo{}, ""}
 
 	output.Flags = lockAndGetFlags()
 	output.BuildDir = buildDir()
@@ -35,23 +36,24 @@ func GeneratorMain(vars map[string]interface{}) {
 		}
 	}
 
-	// Create build.ninja file.
-	if mode() == "ninja" {
+	// Create build files.
+	if mode() == "buildFiles" {
 		ctx := newContext(vars)
 		for name, target := range output.Targets {
 			ctx.handleTarget(name, target.build)
 		}
-
+		ctx.finish()
 		output.NinjaFile = ctx.ninjaFile.String()
+		output.BashFile = ctx.bashFile.String()
 	}
 
 	// Serialize generator output.
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		fatal("failed to marshall generator output: %s", err)
+		Fatal("failed to marshall generator output: %s", err)
 	}
 	err = ioutil.WriteFile(outputFileName, data, fileMode)
 	if err != nil {
-		fatal("failed to write generator output: %s", err)
+		Fatal("failed to write generator output: %s", err)
 	}
 }
