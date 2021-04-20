@@ -28,7 +28,3 @@ func (tmpl ExpandTemplate) Build(ctx core.Context) {
 		Descr: fmt.Sprintf("TEMPLATE %s", tmpl.Out.Relative()),
 	})
 }
-
-func (tmpl ExpandTemplate) Output() core.OutPath {
-	return tmpl.Out
-}

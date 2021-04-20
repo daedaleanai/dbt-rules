@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"path"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -14,9 +15,9 @@ const scriptFileMode = 0755
 
 type Context interface {
 	AddBuildStep(BuildStep)
-	BuildPath(string) OutPath
 	Cwd() OutPath
-	SourcePath(string) Path
+
+	addTargetDependency(interface{})
 }
 
 // BuildStep represents one build step (i.e., one build command).
@@ -32,16 +33,26 @@ type BuildStep struct {
 	Descr   string
 }
 
+func (step *BuildStep) outs() []OutPath {
+	if step.Out == nil {
+		return step.Outs
+	}
+	return append(step.Outs, step.Out)
+}
+
+func (step *BuildStep) ins() []Path {
+	if step.In == nil {
+		return step.Ins
+	}
+	return append(step.Ins, step.In)
+}
+
 type buildInterface interface {
 	Build(ctx Context)
 }
 
-type outputInterface interface {
-	Output() OutPath
-}
-
 type outputsInterface interface {
-	Outputs() []OutPath
+	Outputs() []Path
 }
 
 type descriptionInterface interface {
@@ -49,116 +60,70 @@ type descriptionInterface interface {
 }
 
 type context struct {
-	skipNinjaFile bool
+	cwd                OutPath
+	targetDependencies []string
+	leafOutputs        map[Path]bool
 
-	cwd         OutPath
-	leafOutputs map[string]struct{}
-
-	nextRuleID int
-
-	ninjaFile strings.Builder
-	targets   map[string]string
+	targetNames  map[interface{}]string
+	buildOutputs map[string]BuildStep
+	ninjaFile    strings.Builder
+	bashFile     strings.Builder
+	nextRuleID   int
 }
 
-func newContext(skipNinja bool) *context {
-	ctx := &context{}
-	ctx.skipNinjaFile = skipNinja
-	ctx.targets = map[string]string{}
+func newContext(vars map[string]interface{}) *context {
+	ctx := &context{
+		outPath{""},
+		[]string{},
+		map[Path]bool{},
 
-	if !ctx.skipNinjaFile {
-		fmt.Fprintf(&ctx.ninjaFile, "build __phony__: phony\n\n")
+		map[interface{}]string{},
+		map[string]BuildStep{},
+		strings.Builder{},
+		strings.Builder{},
+		0,
 	}
+
+	for name := range vars {
+		ctx.targetNames[vars[name]] = name
+	}
+
+	fmt.Fprintf(&ctx.ninjaFile, "build __phony__: phony\n\n")
 
 	return ctx
 }
 
-func (ctx *context) addTarget(cwd OutPath, name string, target interface{}) {
-	currentTarget = name
-	ctx.cwd = cwd
-	ctx.leafOutputs = map[string]struct{}{}
-
-	iface, ok := target.(buildInterface)
-	if !ok {
-		return
-	}
-	if !ctx.skipNinjaFile {
-		iface.Build(ctx)
-	}
-
-	if iface, ok := target.(descriptionInterface); ok {
-		ctx.targets[name] = iface.Description()
-	} else {
-		ctx.targets[name] = ""
-	}
-
-	ninjaOuts := []string{}
-	for out := range ctx.leafOutputs {
-		ninjaOuts = append(ninjaOuts, out)
-	}
-	sort.Strings(ninjaOuts)
-	if len(ninjaOuts) == 0 {
-		return
-	}
-
-	printOuts := []string{}
-	if iface, ok := target.(outputsInterface); ok {
-		for _, out := range iface.Outputs() {
-			rel, _ := filepath.Rel(workingDir(), out.Absolute())
-			printOuts = append(printOuts, rel)
-		}
-	}
-	if iface, ok := target.(outputInterface); ok {
-		rel, _ := filepath.Rel(workingDir(), iface.Output().Absolute())
-		printOuts = append(printOuts, rel)
-	}
-
-	fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
-	fmt.Fprintf(&ctx.ninjaFile, "  command = echo \"%s\"\n", strings.Join(printOuts, "\\n"))
-	fmt.Fprintf(&ctx.ninjaFile, "  description = Created %s:", name)
-	fmt.Fprintf(&ctx.ninjaFile, "\n")
-	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s __phony__\n", name, ctx.nextRuleID, strings.Join(ninjaOuts, " "))
-	fmt.Fprintf(&ctx.ninjaFile, "\n")
-	fmt.Fprintf(&ctx.ninjaFile, "\n")
-
-	ctx.nextRuleID++
-}
-
+// AddBuildStep adds a build step for the current target.
 func (ctx *context) AddBuildStep(step BuildStep) {
 	outs := []string{}
-	for _, out := range step.Outs {
-		ninjaOut := ninjaEscape(out.Absolute())
-		outs = append(outs, ninjaOut)
-		ctx.leafOutputs[ninjaOut] = struct{}{}
-	}
-	if step.Out != nil {
-		ninjaOut := ninjaEscape(step.Out.Absolute())
-		outs = append(outs, ninjaOut)
-		ctx.leafOutputs[ninjaOut] = struct{}{}
+	for _, out := range step.outs() {
+		ctx.buildOutputs[out.Absolute()] = step
+		outs = append(outs, ninjaEscape(out.Absolute()))
+		ctx.leafOutputs[out] = true
 	}
 	if len(outs) == 0 {
 		return
 	}
 
 	ins := []string{}
-	for _, in := range step.Ins {
-		ninjaIn := ninjaEscape(in.Absolute())
-		ins = append(ins, ninjaIn)
-		delete(ctx.leafOutputs, ninjaIn)
-	}
-	if step.In != nil {
-		ninjaIn := ninjaEscape(step.In.Absolute())
-		ins = append(ins, ninjaIn)
-		delete(ctx.leafOutputs, ninjaIn)
+	for _, in := range step.ins() {
+		ins = append(ins, ninjaEscape(in.Absolute()))
+		delete(ctx.leafOutputs, in)
 	}
 
 	if step.Script != "" {
-		Assert(step.Cmd == "", "cannot specify Cmd and Script in a build step")
+		if step.Cmd != "" {
+			Fatal("cannot specify both Cmd and Script in a build step")
+		}
+
 		script := []byte(step.Script)
 		hash := crc32.ChecksumIEEE([]byte(script))
 		scriptFileName := fmt.Sprintf("%08X.sh", hash)
 		scriptFilePath := path.Join(buildDir(), "..", scriptFileName)
 		err := ioutil.WriteFile(scriptFilePath, script, scriptFileMode)
-		Assert(err == nil, "%s", err)
+		if err != nil {
+			Fatal("%s", err)
+		}
 		step.Cmd = scriptFilePath
 	}
 
@@ -178,19 +143,96 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 	ctx.nextRuleID++
 }
 
-// BuildPath returns a path relative to the build directory.
-func (ctx *context) BuildPath(p string) OutPath {
-	return outPath{p}
-}
-
 // Cwd returns the build directory of the current target.
 func (ctx *context) Cwd() OutPath {
 	return ctx.cwd
 }
 
-// SourcePath returns a path relative to the source directory.
-func (ctx *context) SourcePath(p string) Path {
-	return inPath{p}
+func (ctx *context) handleTarget(name string, target buildInterface) {
+	currentTarget = name
+	ctx.cwd = outPath{path.Dir(name)}
+	ctx.leafOutputs = map[Path]bool{}
+	ctx.targetDependencies = []string{}
+
+	target.Build(ctx)
+
+	ninjaOuts := []string{}
+	for out := range ctx.leafOutputs {
+		ninjaOuts = append(ninjaOuts, ninjaEscape(out.Absolute()))
+	}
+	sort.Strings(ninjaOuts)
+
+	printOuts := []string{}
+	if iface, ok := target.(outputsInterface); ok {
+		for _, out := range iface.Outputs() {
+			relPath, _ := filepath.Rel(workingDir(), out.Absolute())
+			printOuts = append(printOuts, relPath)
+		}
+	} else {
+		for out := range ctx.leafOutputs {
+			relPath, _ := filepath.Rel(workingDir(), out.Absolute())
+			printOuts = append(printOuts, relPath)
+		}
+	}
+	sort.Strings(printOuts)
+
+	if len(printOuts) == 0 {
+		printOuts = []string{"<no outputs produced>"}
+	}
+
+	fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
+	fmt.Fprintf(&ctx.ninjaFile, "  command = echo \"%s\"\n", strings.Join(printOuts, "\\n"))
+	fmt.Fprintf(&ctx.ninjaFile, "  description = Created %s:", name)
+	fmt.Fprintf(&ctx.ninjaFile, "\n")
+	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s %s __phony__\n", name, ctx.nextRuleID, strings.Join(ninjaOuts, " "), strings.Join(ctx.targetDependencies, " "))
+	fmt.Fprintf(&ctx.ninjaFile, "\n")
+	fmt.Fprintf(&ctx.ninjaFile, "\n")
+
+	ctx.nextRuleID++
+}
+
+func (ctx *context) finish() {
+	currentTarget = ""
+
+	// Generate the bash script
+	fmt.Fprintf(&ctx.bashFile, "#!/bin/bash\n\nset -e\n\n")
+	for out := range ctx.buildOutputs {
+		ctx.addOutputToBashScript(out)
+	}
+}
+
+func (ctx *context) addOutputToBashScript(output string) {
+	step, exists := ctx.buildOutputs[output]
+	if !exists {
+		return
+	}
+
+	for _, in := range step.ins() {
+		ctx.addOutputToBashScript(in.Absolute())
+	}
+
+	for _, out := range step.outs() {
+		delete(ctx.buildOutputs, out.Absolute())
+		fmt.Fprintf(&ctx.bashFile, "mkdir -p %q\n", path.Dir(out.Absolute()))
+	}
+
+	fmt.Fprintf(&ctx.bashFile, "echo %q\n", step.Cmd)
+	if step.Script != "" {
+		fmt.Fprintf(&ctx.bashFile, "%s\n", step.Script)
+	} else {
+		fmt.Fprintf(&ctx.bashFile, "%s\n", step.Cmd)
+	}
+}
+
+func (ctx *context) addTargetDependency(target interface{}) {
+	if reflect.TypeOf(target).Kind() != reflect.Ptr {
+		Fatal("adding target dependency to non-pointer target")
+	}
+	name, exists := ctx.targetNames[target]
+	if !exists {
+		Fatal("adding target dependency to invalid target")
+	}
+	ctx.targetDependencies = append(ctx.targetDependencies, name)
 }
 
 func ninjaEscape(s string) string {

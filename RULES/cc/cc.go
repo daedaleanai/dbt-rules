@@ -22,18 +22,17 @@ func (obj ObjectFile) Build(ctx core.Context) {
 	}
 
 	depfile := obj.Src.WithExt("d")
-	cmd := toolchain.ObjectFile(obj.Output(), depfile, obj.Flags, obj.Includes, obj.Src)
+	cmd := toolchain.ObjectFile(obj.out(), depfile, obj.Flags, obj.Includes, obj.Src)
 	ctx.AddBuildStep(core.BuildStep{
-		Out:     obj.Output(),
+		Out:     obj.out(),
 		Depfile: depfile,
 		In:      obj.Src,
 		Cmd:     cmd,
-		Descr:   fmt.Sprintf("CC %s", obj.Output().Relative()),
+		Descr:   fmt.Sprintf("CC %s", obj.out().Relative()),
 	})
 }
 
-// Output for ObjectFile returns the produced object file.
-func (obj ObjectFile) Output() core.OutPath {
+func (obj ObjectFile) out() core.OutPath {
 	return obj.Src.WithExt("o")
 }
 
@@ -55,7 +54,7 @@ func flattenDeps(deps []Dep) []Library {
 }
 
 func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []Library, toolchain Toolchain) []core.Path {
-	includes := []core.Path{ctx.SourcePath("")}
+	includes := []core.Path{core.SourcePath("")}
 	for _, dep := range deps {
 		includes = append(includes, dep.Includes...)
 	}
@@ -70,7 +69,7 @@ func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []L
 			Toolchain: toolchain,
 		}
 		obj.Build(ctx)
-		objs = append(objs, obj.Output())
+		objs = append(objs, obj.out())
 	}
 
 	return objs
@@ -119,11 +118,6 @@ func (lib Library) Build(ctx core.Context) {
 		Cmd:   cmd,
 		Descr: descr,
 	})
-}
-
-// Output for Library returns the produced library.
-func (lib Library) Output() core.OutPath {
-	return lib.Out
 }
 
 // CcLibrary for Library is just the identity.
@@ -175,9 +169,4 @@ func (bin Binary) Build(ctx core.Context) {
 		Cmd:   cmd,
 		Descr: fmt.Sprintf("LD %s", bin.Out.Relative()),
 	})
-}
-
-// Output for Binary returns the resulting binary.
-func (bin Binary) Output() core.OutPath {
-	return bin.Out
 }

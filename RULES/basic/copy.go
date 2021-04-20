@@ -21,7 +21,3 @@ func (copy CopyFile) Build(ctx core.Context) {
 		Descr: fmt.Sprintf("CP %s", copy.To.Relative()),
 	})
 }
-
-func (copy CopyFile) Output() core.OutPath {
-	return copy.To
-}
