@@ -35,7 +35,7 @@ type UBoot struct {
 
 func (rule UBoot) Build(ctx core.Context) {
 	var config string
-	board := BoardName()
+	board := BoardName.Value()
 	for pattern, cfg := range rule.Configs {
 		matched, err := regexp.MatchString(pattern, board)
 		if err != nil {
@@ -47,19 +47,19 @@ func (rule UBoot) Build(ctx core.Context) {
 	}
 
 	if config == "" {
-		core.Fatal("Unable to determine U-Boot config for board: %s", BoardName())
+		core.Fatal("Unable to determine U-Boot config for board: %s", BoardName.Value())
 	}
 
 	data := UBootScriptParams{
 		Out:    rule.Out,
-		Repo:   ctx.SourcePath("u-boot"),
+		Repo:   core.SourcePath("u-boot"),
 		Config: config,
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
 		Out:    rule.Out,
-		In:     ctx.SourcePath("u-boot"),
+		In:     core.SourcePath("u-boot"),
 		Script: core.CompileTemplate(uBootScript, "uboot-script", data),
-		Descr:  fmt.Sprintf("Building U-Boot for board %s", BoardName()),
+		Descr:  fmt.Sprintf("Building U-Boot for board %s", BoardName.Value()),
 	})
 }

@@ -71,7 +71,7 @@ func (rule Handoff) Build(ctx core.Context) {
 	}
 
 	var patch core.Path
-	board := BoardName()
+	board := BoardName.Value()
 	for pattern, patchPath := range rule.Patches {
 		matched, err := regexp.MatchString(pattern, board)
 		if err != nil {
@@ -84,7 +84,7 @@ func (rule Handoff) Build(ctx core.Context) {
 
 	data := HandoffScriptParams{
 		HwDef:      hwdef,
-		EmbeddedSw: ctx.SourcePath("embeddedsw"),
+		EmbeddedSw: core.SourcePath("embeddedsw"),
 		Fsbl:       rule.Fsbl,
 		PmuFw:      rule.PmuFw,
 		Patch:      patch,
@@ -99,6 +99,6 @@ func (rule Handoff) Build(ctx core.Context) {
 		Outs:   outs,
 		In:     hwdef,
 		Script: core.CompileTemplate(handoffScript, "handoff-script", data),
-		Descr:  fmt.Sprintf("Building Handoff Software for board %s", BoardName()),
+		Descr:  fmt.Sprintf("Building Handoff Software for board %s", BoardName.Value()),
 	})
 }

@@ -49,6 +49,11 @@ func (flag *StringFlag) Value() string {
 	return flag.value
 }
 
+func (flag StringFlag) Register() *StringFlag {
+	initializeFlag(&flag, flag.Name, &flag.isInitialized)
+	return &flag
+}
+
 func (flag *StringFlag) info() flagInfo {
 	return flagInfo{flag.Description, "string", flag.AllowedValues, flag.value}
 }
@@ -77,6 +82,11 @@ type BoolFlag struct {
 func (flag *BoolFlag) Value() bool {
 	initializeFlag(flag, flag.Name, &flag.isInitialized)
 	return flag.value
+}
+
+func (flag BoolFlag) Register() *BoolFlag {
+	initializeFlag(&flag, flag.Name, &flag.isInitialized)
+	return &flag
 }
 
 func (flag *BoolFlag) info() flagInfo {
@@ -117,6 +127,11 @@ func (flag *IntFlag) Value() int64 {
 	return flag.value
 }
 
+func (flag IntFlag) Register() *IntFlag {
+	initializeFlag(&flag, flag.Name, &flag.isInitialized)
+	return &flag
+}
+
 func (flag *IntFlag) info() flagInfo {
 	allowedValues := []string{}
 	for _, value := range flag.AllowedValues {
@@ -155,6 +170,11 @@ func (flag *FloatFlag) Value() float64 {
 	return flag.value
 }
 
+func (flag FloatFlag) Register() *FloatFlag {
+	initializeFlag(&flag, flag.Name, &flag.isInitialized)
+	return &flag
+}
+
 func (flag *FloatFlag) info() flagInfo {
 	return flagInfo{flag.Description, "float", []string{}, strconv.FormatFloat(flag.value, 'f', -1, 64)}
 }
@@ -181,7 +201,7 @@ func initializeFlag(flag flagInterface, name string, isInitialized *bool) {
 	}
 
 	if flagsLocked {
-		Fatal("flags must be accessed outside build rules at least once")
+		Fatal("flag '%s' accessed, but not reistered", name)
 	}
 
 	*isInitialized = true
