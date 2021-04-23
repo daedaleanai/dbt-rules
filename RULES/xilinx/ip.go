@@ -69,8 +69,8 @@ func (rule Ip) Build(ctx core.Context) {
 	}
 
 	data := IpScriptParams{
-		PartName:   PartName(),
-		BoardName:  BoardName(),
+		PartName:   PartName.Value(),
+		BoardName:  BoardName.Value(),
 		Design:     rule.Design,
 		BoardFiles: rule.BoardFiles,
 		Out:        rule.Out,

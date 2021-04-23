@@ -63,7 +63,7 @@ func (rule DeviceTree) Build(ctx core.Context) {
 	}
 
 	var boardDts core.Path
-	board := BoardName()
+	board := BoardName.Value()
 	for pattern, dtsPath := range rule.BoardDts {
 		matched, err := regexp.MatchString(pattern, board)
 		if err != nil {
@@ -79,7 +79,7 @@ func (rule DeviceTree) Build(ctx core.Context) {
 		Out:            rule.Out,
 		BoardDts:       boardDts,
 		HwDef:          hwdef,
-		DeviceTreeXlnx: ctx.SourcePath("device-tree-xlnx"),
+		DeviceTreeXlnx: core.SourcePath("device-tree-xlnx"),
 	}
 
 	ctx.AddBuildStep(core.BuildStep{

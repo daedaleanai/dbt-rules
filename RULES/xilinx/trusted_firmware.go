@@ -32,11 +32,11 @@ type ArmTrustedFirmware struct {
 func (rule ArmTrustedFirmware) Build(ctx core.Context) {
 	data := AtfScriptParams{
 		Bl31: rule.Bl31,
-		Repo: ctx.SourcePath("arm-trusted-firmware"),
+		Repo: core.SourcePath("arm-trusted-firmware"),
 	}
 	ctx.AddBuildStep(core.BuildStep{
 		Out:    rule.Bl31,
-		In:     ctx.SourcePath("arm-trusted-firmware"),
+		In:     core.SourcePath("arm-trusted-firmware"),
 		Script: core.CompileTemplate(atfScript, "atf-script", data),
 		Descr:  fmt.Sprintf("Building Xilinx Arm Trusted Firmware"),
 	})

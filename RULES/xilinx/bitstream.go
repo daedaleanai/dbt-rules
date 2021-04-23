@@ -111,7 +111,7 @@ func (rule Bitstream) Build(ctx core.Context) {
 	bfData := BuildFileScriptParams{
 		Out:     outBf,
 		Name:    rule.Name,
-		Part:    PartName(),
+		Part:    PartName.Value(),
 		Timing:  outTiming,
 		Ips:     ips,
 		Rtls:    rtls,
