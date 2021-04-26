@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#375EAB">
+
+  <title>cc - Go Documentation Server</title>
+
+<link type="text/css" rel="stylesheet" href="../../lib/godoc/style.css">
+
+<script>window.initFuncs = [];</script>
+<script src="../../lib/godoc/jquery.js" defer></script>
+
+
+
+<script>var goVersion = "go1.16";</script>
+<script src="../../lib/godoc/godocs.js" defer></script>
+</head>
+<body>
+
+<div id='lowframe' style="position: fixed; bottom: 0; left: 0; height: 0; width: 100%; border-top: thin solid grey; background-color: white; overflow: auto;">
+...
+</div><!-- #lowframe -->
+
+<div id="topbar" class="wide"><div class="container">
+<div class="top-heading" id="heading-wide"><a href="../index.html">Go Documentation Server</a></div>
+<div class="top-heading" id="heading-narrow"><a href="../index.html">GoDoc</a></div>
+<a href="index.html#" id="menu-button"><span id="menu-button-arrow">&#9661;</span></a>
+<form method="GET" action="http://localhost:8080/search">
+<div id="menu">
+
+<span class="search-box"><input type="search" id="search" name="q" placeholder="Search" aria-label="Search" required><button type="submit"><span><!-- magnifying glass: --><svg width="24" height="24" viewBox="0 0 24 24"><title>submit search</title><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/><path d="M0 0h24v24H0z" fill="none"/></svg></span></button></span>
+</div>
+</form>
+
+</div></div>
+
+
+
+<div id="page" class="wide">
+<div class="container">
+
+
+  <h1>
+    Package cc
+    <span class="text-muted"></span>
+  </h1>
+
+
+
+
+
+
+
+<div id="nav"></div>
+
+
+<!--
+	Copyright 2009 The Go Authors. All rights reserved.
+	Use of this source code is governed by a BSD-style
+	license that can be found in the LICENSE file.
+-->
+<!--
+	Note: Static (i.e., not template-generated) href and id
+	attributes start with "pkg-" to make it impossible for
+	them to conflict with generated attributes (some of which
+	correspond to Go identifiers).
+-->
+
+	<script>
+	document.ANALYSIS_DATA = null;
+	document.CALLGRAPH = null;
+	</script>
+
+	
+		
+		<div id="short-nav">
+			<dl>
+			<dd><code>import "cc"</code></dd>
+			</dl>
+			<dl>
+			<dd><a href="index.html#pkg-overview" class="overviewLink">Overview</a></dd>
+			<dd><a href="index.html#pkg-index" class="indexLink">Index</a></dd>
+			
+			
+			</dl>
+		</div>
+		<!-- The package's Name is printed as title by the top-level template -->
+		<div id="pkg-overview" class="toggleVisible">
+			<div class="collapsed">
+				<h2 class="toggleButton" title="Click to show Overview section">Overview ▹</h2>
+			</div>
+			<div class="expanded">
+				<h2 class="toggleButton" title="Click to hide Overview section">Overview ▾</h2>
+				
+				
+			</div>
+		</div>
+
+		<div id="pkg-index" class="toggleVisible">
+		<div class="collapsed">
+			<h2 class="toggleButton" title="Click to show Index section">Index ▹</h2>
+		</div>
+		<div class="expanded">
+			<h2 class="toggleButton" title="Click to hide Index section">Index ▾</h2>
+
+		<!-- Table of contents for API; must be named manual-nav to turn off auto nav. -->
+			<div id="manual-nav">
+			<dl>
+			
+			
+			
+			
+				
+				<dd><a href="index.html#Binary">type Binary</a></dd>
+				
+				
+					
+					<dd>&nbsp; &nbsp; <a href="index.html#Binary.Build">func (bin Binary) Build(ctx core.Context)</a></dd>
+				
+			
+				
+				<dd><a href="index.html#Dep">type Dep</a></dd>
+				
+				
+			
+				
+				<dd><a href="index.html#GccToolchain">type GccToolchain</a></dd>
+				
+				
+					
+					<dd>&nbsp; &nbsp; <a href="index.html#GccToolchain.Binary">func (gcc GccToolchain) Binary(out core.Path, objs []core.Path, alwaysLinkLibs []core.Path, libs []core.Path, flags []string, script core.Path) string</a></dd>
+				
+					
+					<dd>&nbsp; &nbsp; <a href="index.html#GccToolchain.EmbeddedBlob">func (gcc GccToolchain) EmbeddedBlob(out core.OutPath, src core.Path) string</a></dd>
+				
+					
+					<dd>&nbsp; &nbsp; <a href="index.html#GccToolchain.ObjectFile">func (gcc GccToolchain) ObjectFile(out core.OutPath, depfile core.OutPath, flags []string, includes []core.Path, src core.Path) string</a></dd>
+				
+					
+					<dd>&nbsp; &nbsp; <a href="index.html#GccToolchain.SharedLibrary">func (gcc GccToolchain) SharedLibrary(out core.Path, objs []core.Path) string</a></dd>
+				
+					
+					<dd>&nbsp; &nbsp; <a href="index.html#GccToolchain.StaticLibrary">func (gcc GccToolchain) StaticLibrary(out core.Path, objs []core.Path) string</a></dd>
+				
+			
+				
+				<dd><a href="index.html#Library">type Library</a></dd>
+				
+				
+					
+					<dd>&nbsp; &nbsp; <a href="index.html#Library.Build">func (lib Library) Build(ctx core.Context)</a></dd>
+				
+					
+					<dd>&nbsp; &nbsp; <a href="index.html#Library.CcLibrary">func (lib Library) CcLibrary() Library</a></dd>
+				
+			
+				
+				<dd><a href="index.html#ObjectFile">type ObjectFile</a></dd>
+				
+				
+					
+					<dd>&nbsp; &nbsp; <a href="index.html#ObjectFile.Build">func (obj ObjectFile) Build(ctx core.Context)</a></dd>
+				
+			
+				
+				<dd><a href="index.html#Toolchain">type Toolchain</a></dd>
+				
+				
+			
+			
+			</dl>
+			</div><!-- #manual-nav -->
+
+		
+
+		
+			<h3>Package files</h3>
+			<p>
+			<span style="font-size:90%">
+			
+				<a href="http://localhost:8080/src/cc/cc.go">cc.go</a>
+			
+				<a href="http://localhost:8080/src/cc/toolchain.go">toolchain.go</a>
+			
+			</span>
+			</p>
+		
+		</div><!-- .expanded -->
+		</div><!-- #pkg-index -->
+
+		
+
+		
+		
+		
+		
+			
+			
+			<h2 id="Binary">type <a href="http://localhost:8080/src/cc/cc.go?s=2898:3094#L119">Binary</a>
+				<a class="permalink" href="index.html#Binary">&#xb6;</a>
+				
+				
+			</h2>
+			<p>
+Binary builds and links an executable.
+</p>
+
+			<pre>type Binary struct {
+<span id="Binary.Out"></span>    Out           <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#OutPath">OutPath</a>
+<span id="Binary.Srcs"></span>    Srcs          []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>
+<span id="Binary.CompilerFlags"></span>    CompilerFlags []<a href="http://localhost:8080/pkg/builtin/#string">string</a>
+<span id="Binary.LinkerFlags"></span>    LinkerFlags   []<a href="http://localhost:8080/pkg/builtin/#string">string</a>
+<span id="Binary.Deps"></span>    Deps          []<a href="index.html#Dep">Dep</a>
+<span id="Binary.Script"></span>    Script        <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>
+<span id="Binary.Toolchain"></span>    Toolchain     <a href="index.html#Toolchain">Toolchain</a>
+}
+</pre>
+
+			
+
+			
+
+			
+			
+			
+
+			
+
+			
+				
+				<h3 id="Binary.Build">func (Binary) <a href="http://localhost:8080/src/cc/cc.go?s=3115:3156#L130">Build</a>
+					<a class="permalink" href="index.html#Binary.Build">&#xb6;</a>
+					
+					
+				</h3>
+				<pre>func (bin <a href="index.html#Binary">Binary</a>) Build(ctx <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Context">Context</a>)</pre>
+				<p>
+Build a Binary.
+</p>
+
+				
+				
+				
+			
+		
+			
+			
+			<h2 id="Dep">type <a href="http://localhost:8080/src/cc/cc.go?s=1779:1822#L69">Dep</a>
+				<a class="permalink" href="index.html#Dep">&#xb6;</a>
+				
+				
+			</h2>
+			<p>
+Dep is an interface implemented by dependencies that can be linked into a library.
+</p>
+
+			<pre>type Dep interface {
+    CcLibrary() <a href="index.html#Library">Library</a>
+}</pre>
+
+			
+
+			
+
+			
+			
+			
+
+			
+
+			
+		
+			
+			
+			<h2 id="GccToolchain">type <a href="http://localhost:8080/src/cc/toolchain.go?s=542:831#L9">GccToolchain</a>
+				<a class="permalink" href="index.html#GccToolchain">&#xb6;</a>
+				
+				
+			</h2>
+			<p>
+Toolchain represents a C++ toolchain.
+</p>
+
+			<pre>type GccToolchain struct {
+<span id="GccToolchain.Ar"></span>    Ar      <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#GlobalPath">GlobalPath</a>
+<span id="GccToolchain.As"></span>    As      <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#GlobalPath">GlobalPath</a>
+<span id="GccToolchain.Cc"></span>    Cc      <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#GlobalPath">GlobalPath</a>
+<span id="GccToolchain.Cpp"></span>    Cpp     <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#GlobalPath">GlobalPath</a>
+<span id="GccToolchain.Cxx"></span>    Cxx     <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#GlobalPath">GlobalPath</a>
+<span id="GccToolchain.Objcopy"></span>    Objcopy <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#GlobalPath">GlobalPath</a>
+
+<span id="GccToolchain.Includes"></span>    Includes []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>
+
+<span id="GccToolchain.CompilerFlags"></span>    CompilerFlags []<a href="http://localhost:8080/pkg/builtin/#string">string</a>
+<span id="GccToolchain.LinkerFlags"></span>    LinkerFlags   []<a href="http://localhost:8080/pkg/builtin/#string">string</a>
+
+<span id="GccToolchain.ArchName"></span>    ArchName   <a href="http://localhost:8080/pkg/builtin/#string">string</a>
+<span id="GccToolchain.TargetName"></span>    TargetName <a href="http://localhost:8080/pkg/builtin/#string">string</a>
+}
+</pre>
+
+			
+
+			
+
+			
+			
+			
+
+			
+
+			
+				
+				<h3 id="GccToolchain.Binary">func (GccToolchain) <a href="http://localhost:8080/src/cc/toolchain.go?s=1978:2128#L65">Binary</a>
+					<a class="permalink" href="index.html#GccToolchain.Binary">&#xb6;</a>
+					
+					
+				</h3>
+				<pre>func (gcc <a href="index.html#GccToolchain">GccToolchain</a>) Binary(out <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, objs []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, alwaysLinkLibs []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, libs []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, flags []<a href="http://localhost:8080/pkg/builtin/#string">string</a>, script <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>) <a href="http://localhost:8080/pkg/builtin/#string">string</a></pre>
+				<p>
+Binary generates the command to build an executable.
+</p>
+
+				
+				
+				
+			
+				
+				<h3 id="GccToolchain.EmbeddedBlob">func (GccToolchain) <a href="http://localhost:8080/src/cc/toolchain.go?s=2468:2544#L81">EmbeddedBlob</a>
+					<a class="permalink" href="index.html#GccToolchain.EmbeddedBlob">&#xb6;</a>
+					
+					
+				</h3>
+				<pre>func (gcc <a href="index.html#GccToolchain">GccToolchain</a>) EmbeddedBlob(out <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#OutPath">OutPath</a>, src <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>) <a href="http://localhost:8080/pkg/builtin/#string">string</a></pre>
+				
+				
+				
+				
+			
+				
+				<h3 id="GccToolchain.ObjectFile">func (GccToolchain) <a href="http://localhost:8080/src/cc/toolchain.go?s=876:1010#L27">ObjectFile</a>
+					<a class="permalink" href="index.html#GccToolchain.ObjectFile">&#xb6;</a>
+					
+					
+				</h3>
+				<pre>func (gcc <a href="index.html#GccToolchain">GccToolchain</a>) ObjectFile(out <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#OutPath">OutPath</a>, depfile <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#OutPath">OutPath</a>, flags []<a href="http://localhost:8080/pkg/builtin/#string">string</a>, includes []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, src <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>) <a href="http://localhost:8080/pkg/builtin/#string">string</a></pre>
+				<p>
+ObjectFile generates a compile command.
+</p>
+
+				
+				
+				
+			
+				
+				<h3 id="GccToolchain.SharedLibrary">func (GccToolchain) <a href="http://localhost:8080/src/cc/toolchain.go?s=1749:1826#L56">SharedLibrary</a>
+					<a class="permalink" href="index.html#GccToolchain.SharedLibrary">&#xb6;</a>
+					
+					
+				</h3>
+				<pre>func (gcc <a href="index.html#GccToolchain">GccToolchain</a>) SharedLibrary(out <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, objs []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>) <a href="http://localhost:8080/pkg/builtin/#string">string</a></pre>
+				<p>
+SharedLibrary generates the command to build a shared library.
+</p>
+
+				
+				
+				
+			
+				
+				<h3 id="GccToolchain.StaticLibrary">func (GccToolchain) <a href="http://localhost:8080/src/cc/toolchain.go?s=1502:1579#L47">StaticLibrary</a>
+					<a class="permalink" href="index.html#GccToolchain.StaticLibrary">&#xb6;</a>
+					
+					
+				</h3>
+				<pre>func (gcc <a href="index.html#GccToolchain">GccToolchain</a>) StaticLibrary(out <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, objs []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>) <a href="http://localhost:8080/pkg/builtin/#string">string</a></pre>
+				<p>
+StaticLibrary generates the command to build a static library.
+</p>
+
+				
+				
+				
+			
+		
+			
+			
+			<h2 id="Library">type <a href="http://localhost:8080/src/cc/cc.go?s=1874:2116#L74">Library</a>
+				<a class="permalink" href="index.html#Library">&#xb6;</a>
+				
+				
+			</h2>
+			<p>
+Library builds and links a static C++ library.
+</p>
+
+			<pre>type Library struct {
+<span id="Library.Out"></span>    Out           <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#OutPath">OutPath</a>
+<span id="Library.Srcs"></span>    Srcs          []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>
+<span id="Library.Objs"></span>    Objs          []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>
+<span id="Library.Includes"></span>    Includes      []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>
+<span id="Library.CompilerFlags"></span>    CompilerFlags []<a href="http://localhost:8080/pkg/builtin/#string">string</a>
+<span id="Library.Deps"></span>    Deps          []<a href="index.html#Dep">Dep</a>
+<span id="Library.Shared"></span>    Shared        <a href="http://localhost:8080/pkg/builtin/#bool">bool</a>
+<span id="Library.AlwaysLink"></span>    AlwaysLink    <a href="http://localhost:8080/pkg/builtin/#bool">bool</a>
+<span id="Library.Toolchain"></span>    Toolchain     <a href="index.html#Toolchain">Toolchain</a>
+}
+</pre>
+
+			
+
+			
+
+			
+			
+			
+
+			
+
+			
+				
+				<h3 id="Library.Build">func (Library) <a href="http://localhost:8080/src/cc/cc.go?s=2138:2180#L87">Build</a>
+					<a class="permalink" href="index.html#Library.Build">&#xb6;</a>
+					
+					
+				</h3>
+				<pre>func (lib <a href="index.html#Library">Library</a>) Build(ctx <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Context">Context</a>)</pre>
+				<p>
+Build a Library.
+</p>
+
+				
+				
+				
+			
+				
+				<h3 id="Library.CcLibrary">func (Library) <a href="http://localhost:8080/src/cc/cc.go?s=2800:2838#L114">CcLibrary</a>
+					<a class="permalink" href="index.html#Library.CcLibrary">&#xb6;</a>
+					
+					
+				</h3>
+				<pre>func (lib <a href="index.html#Library">Library</a>) CcLibrary() <a href="index.html#Library">Library</a></pre>
+				<p>
+CcLibrary for Library is just the identity.
+</p>
+
+				
+				
+				
+			
+		
+			
+			
+			<h2 id="ObjectFile">type <a href="http://localhost:8080/src/cc/cc.go?s=105:216#L1">ObjectFile</a>
+				<a class="permalink" href="index.html#ObjectFile">&#xb6;</a>
+				
+				
+			</h2>
+			<p>
+ObjectFile compiles a single C++ source file.
+</p>
+
+			<pre>type ObjectFile struct {
+<span id="ObjectFile.Src"></span>    Src       <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>
+<span id="ObjectFile.Includes"></span>    Includes  []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>
+<span id="ObjectFile.Flags"></span>    Flags     []<a href="http://localhost:8080/pkg/builtin/#string">string</a>
+<span id="ObjectFile.Toolchain"></span>    Toolchain <a href="index.html#Toolchain">Toolchain</a>
+}
+</pre>
+
+			
+
+			
+
+			
+			
+			
+
+			
+
+			
+				
+				<h3 id="ObjectFile.Build">func (ObjectFile) <a href="http://localhost:8080/src/cc/cc.go?s=242:287#L8">Build</a>
+					<a class="permalink" href="index.html#ObjectFile.Build">&#xb6;</a>
+					
+					
+				</h3>
+				<pre>func (obj <a href="index.html#ObjectFile">ObjectFile</a>) Build(ctx <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Context">Context</a>)</pre>
+				<p>
+Build an ObjectFile.
+</p>
+
+				
+				
+				
+			
+		
+			
+			
+			<h2 id="Toolchain">type <a href="http://localhost:8080/src/cc/toolchain.go?s=67:499#L1">Toolchain</a>
+				<a class="permalink" href="index.html#Toolchain">&#xb6;</a>
+				
+				
+			</h2>
+			
+			<pre>type Toolchain interface {
+    ObjectFile(out <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#OutPath">OutPath</a>, depfile <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#OutPath">OutPath</a>, flags []<a href="http://localhost:8080/pkg/builtin/#string">string</a>, includes []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, src <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>) <a href="http://localhost:8080/pkg/builtin/#string">string</a>
+    StaticLibrary(out <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, objs []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>) <a href="http://localhost:8080/pkg/builtin/#string">string</a>
+    SharedLibrary(out <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, objs []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>) <a href="http://localhost:8080/pkg/builtin/#string">string</a>
+    Binary(out <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, objs []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, alwaysLinkLibs []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, libs []<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>, flags []<a href="http://localhost:8080/pkg/builtin/#string">string</a>, script <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>) <a href="http://localhost:8080/pkg/builtin/#string">string</a>
+    EmbeddedBlob(out <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#OutPath">OutPath</a>, src <a href="http://localhost:8080/pkg/dbt-rules/RULES/core/">core</a>.<a href="http://localhost:8080/pkg/dbt-rules/RULES/core/#Path">Path</a>) <a href="http://localhost:8080/pkg/builtin/#string">string</a>
+}</pre>
+
+			
+
+			
+
+			
+			
+			
+
+			
+
+			
+		
+	
+
+	
+
+
+
+
+
+
+
+<div id="footer">
+Build version go1.16.<br>
+Except as <a href="https://developers.google.com/site-policies#restrictions">noted</a>,
+the content of this page is licensed under the
+Creative Commons Attribution 3.0 License,
+and code is licensed under a <a href="http://localhost:8080/LICENSE">BSD license</a>.<br>
+<a href="http://localhost:8080/doc/tos.html">Terms of Service</a> |
+<a href="http://www.google.com/intl/en/policies/privacy/">Privacy Policy</a>
+</div>
+
+</div><!-- .container -->
+</div><!-- #page -->
+</body>
+</html>
