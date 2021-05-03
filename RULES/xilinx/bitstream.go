@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"dbt-rules/RULES/core"
-	"dbt-rules/RULES/verilog"
+	"dbt-rules/RULES/hdl"
 )
 
 type BuildFileScriptParams struct {
@@ -78,7 +78,7 @@ rm -rf ${TMPDIR}
 type Bitstream struct {
 	Name string
 	Src  core.Path
-	Ips  []verilog.Ip
+	Ips  []hdl.Ip
 }
 
 func (rule Bitstream) Build(ctx core.Context) {

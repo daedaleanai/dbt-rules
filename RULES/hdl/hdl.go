@@ -1,4 +1,4 @@
-package verilog
+package hdl
 
 import (
 	"dbt-rules/RULES/core"
