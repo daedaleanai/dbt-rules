@@ -227,7 +227,7 @@ func initializeFlag(flag flagInterface, name string, isInitialized *bool) {
 			return
 		}
 	}
-	Fatal("flag '%s' has unallowed value '%s'", name, info.Value)
+	Fatal("flag '%s' has disallowed value '%s'", name, info.Value)
 }
 
 func lockAndGetFlags() map[string]flagInfo {

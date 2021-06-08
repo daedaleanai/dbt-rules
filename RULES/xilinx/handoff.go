@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"dbt-rules/RULES/core"
+	"dbt-rules/RULES/hdl"
 )
 
 type HandoffScriptParams struct {
@@ -71,7 +72,7 @@ func (rule Handoff) Build(ctx core.Context) {
 	}
 
 	var patch core.Path
-	board := BoardName.Value()
+	board := hdl.BoardName.Value()
 	for pattern, patchPath := range rule.Patches {
 		matched, err := regexp.MatchString(pattern, board)
 		if err != nil {
@@ -99,6 +100,6 @@ func (rule Handoff) Build(ctx core.Context) {
 		Outs:   outs,
 		In:     hwdef,
 		Script: core.CompileTemplate(handoffScript, "handoff-script", data),
-		Descr:  fmt.Sprintf("Building Handoff Software for board %s", BoardName.Value()),
+		Descr:  fmt.Sprintf("Building Handoff Software for board %s", hdl.BoardName.Value()),
 	})
 }
