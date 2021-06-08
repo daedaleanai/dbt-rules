@@ -67,3 +67,17 @@ func CompileTemplate(tmpl, name string, data interface{}) string {
 	}
 	return buff.String()
 }
+
+// Compile a go text template from a file, execute it, and return the result as a string
+func CompileTemplateFile(tmplFile string, data interface{}) string {
+	t, err := template.ParseFiles(tmplFile)
+	if err != nil {
+		Fatal("Cannot parse the IP generator template: %s", err)
+	}
+	var buff bytes.Buffer
+	err = t.Execute(&buff, data)
+	if err != nil {
+		Fatal("Cannot execute the IP generator template: %s", err)
+	}
+	return buff.String()
+}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"dbt-rules/RULES/core"
+	"dbt-rules/RULES/hdl"
 )
 
 type DeviceTreeScriptParams struct {
@@ -63,7 +64,7 @@ func (rule DeviceTree) Build(ctx core.Context) {
 	}
 
 	var boardDts core.Path
-	board := BoardName.Value()
+	board := hdl.BoardName.Value()
 	for pattern, dtsPath := range rule.BoardDts {
 		matched, err := regexp.MatchString(pattern, board)
 		if err != nil {

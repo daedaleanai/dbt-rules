@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"dbt-rules/RULES/core"
+	"dbt-rules/RULES/hdl"
 )
 
 type IpScriptParams struct {
@@ -15,6 +16,7 @@ type IpScriptParams struct {
 	Out        map[string]core.OutPath
 	OutOrder   []string
 	BoardFiles []core.Path
+	Verbose    bool
 }
 
 var ipScript = `#!/bin/bash
@@ -40,8 +42,13 @@ set_property "target_language"    "Verilog"        [current_project]
 
 source "{{ .Design }}"
 EOF
-
+    {{ if .Verbose }}
+    vivado -mode batch -nolog -nojournal  -notrace -source generate.tcl
+    find -type f
+    {{ else }}
     vivado -mode batch -nolog -nojournal  -notrace -source generate.tcl | ( grep -E "^(ERROR|WARNING|CRITICAL)" || true )
+    {{ end }}
+
     {{ $out := .Out }}
     {{ range .OutOrder }}
     cp {{ . }} {{ index $out  . }}
@@ -55,6 +62,7 @@ type Ip struct {
 	Out        map[string]core.OutPath
 	Design     core.Path
 	BoardFiles []core.Path
+	Verbose    bool
 }
 
 func (rule Ip) Build(ctx core.Context) {
@@ -69,12 +77,13 @@ func (rule Ip) Build(ctx core.Context) {
 	}
 
 	data := IpScriptParams{
-		PartName:   PartName.Value(),
-		BoardName:  BoardName.Value(),
+		PartName:   hdl.PartName.Value(),
+		BoardName:  hdl.BoardName.Value(),
 		Design:     rule.Design,
 		BoardFiles: rule.BoardFiles,
 		Out:        rule.Out,
 		OutOrder:   exports,
+		Verbose:    rule.Verbose,
 	}
 
 	ctx.AddBuildStep(core.BuildStep{

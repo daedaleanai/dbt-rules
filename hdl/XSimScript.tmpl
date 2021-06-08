@@ -1,0 +1,99 @@
+#!/bin/bash
+
+set -eu -o pipefail
+
+{{ $name := .Name }}
+{{ $outDir := .OutDir }}
+{{ $outScript := .OutScript }}
+{{ $partName := .PartName }}
+{{ $boardName := .BoardName }}
+{{ $verbose := .Verbose }}
+
+rm -rf {{ .OutDir }}
+mkdir -p {{ .OutDir }}
+TMPDIR=$(mktemp -d -t ci-XXXXXXXXXX)
+
+(
+    cd ${TMPDIR}
+
+    {{ range .Ips }}
+    NAME=`basename {{ . }} .xci`
+    mkdir $NAME
+    cd $NAME
+    cp {{ . }} .
+
+    cat > generate.tcl << EOF
+set_part "{{ $partName }}"
+set_property "board_part"         "{{ $boardName}}" [current_project]
+set_property "target_language"    "Verilog"         [current_project]
+
+set ip $NAME.xci
+read_ip \$ip
+generate_target simulation [get_files \$ip]
+EOF
+
+    {{ if $verbose }}
+    vivado -mode batch -nolog -nojournal  -notrace -source generate.tcl
+    find -type f
+    {{ else }}
+    vivado -mode batch -nolog -nojournal  -notrace -source generate.tcl | ( grep -E "^(ERROR|WARNING|CRITICAL)" || true )
+    {{ end }}
+    cd ..
+    {{ end }}
+
+    cp -af . {{ .OutDir }}
+)
+
+cat > {{ .OutScript }} <<EOF
+#!/bin/bash
+set -eu -o pipefail
+
+COMPILE=1
+if [ \$# -ge 1 ] && [ \$1 == "simonly" ]; then
+    COMPILE=0
+    shift
+fi
+
+if [ \$COMPILE -eq 1 ]; then
+{{ range .Srcs }}    xvlog -work {{ $name }} --sv {{ . }}
+{{ end }}
+EOF
+
+{{range .Ips}}
+    NAME=`basename {{ . }} .xci`
+    SIM=`find {{ $outDir }}/$NAME/sim -type f`
+    SRCS=`find {{ $outDir }}/$NAME/source -type f`
+
+    for SRC in $SIM; do
+        echo "    xvlog -work {{ $name }} --sv $SRC" >> {{ $outScript }}
+    done
+    for SRC in $SRCS; do
+        echo "    xvlog -work {{ $name }} --sv $SRC" >> {{ $outScript }}
+    done
+{{end}}
+
+    XSIMDIR=`which xsim`
+    XSIMIP=`dirname $XSIMDIR`/../data/xsim/ip/xsim_ip.ini
+    GLBL=`dirname $XSIMDIR`/../data/verilog/src/glbl.v
+
+    cat >> {{ .OutScript }} << EOF
+    xvlog -work {{ .Name }} $GLBL
+    xelab -initfile=$XSIMIP  --timescale 1ns/1ps -debug typical {{ .Name }}.board {{ .Name }}.glbl -s {{ .Name }}_sim -L {{ .Name }} {{range .Libs}}-L {{ . }} {{end}}
+fi # compile"
+
+if [ \$# -ge 1 ]; then
+    xsim {{ .Name }}_sim -t \$1
+else
+    xsim {{ .Name }}_sim -t {{ .OutSimScript }}
+fi
+
+EOF
+chmod 755 {{ .OutScript }}
+
+cat > {{ .OutSimScript }} << EOF
+open_vcd
+log_vcd [get_objects -r * ]
+run all
+close_vcd
+exit
+EOF

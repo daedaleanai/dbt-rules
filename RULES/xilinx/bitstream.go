@@ -9,31 +9,39 @@ import (
 )
 
 type BuildFileScriptParams struct {
-	Out     core.Path
-	Part    string
-	Name    string
-	Timing  core.Path
-	Ips     []core.Path
-	Constrs []core.Path
-	Rtls    []core.Path
+	Out       core.Path
+	PartName  string
+	BoardName string
+	Name      string
+	Timing    core.Path
+	Ips       []core.Path
+	Constrs   []core.Path
+	Rtls      []core.Path
 }
 
 var buildFileScript = `#!/bin/bash
 set -eu -o pipefail
 
 cat > {{ .Out }} <<EOF
-set_part "{{ .Part }}"
+set_part "{{ .PartName }}"
+set_property "board_part"         "{{ .BoardName}}"       [current_project]
+set_property "target_language"    "Verilog"        [current_project]
 
 {{ range .Ips }}
 set path "{{ . }}"
 set normalized [file normalize [string range \$path 1 [string length \$path]]]
 set dir [file join [pwd] [file dirname \$normalized]]
 set filename [file tail \$normalized]
-puts \$dir
 file mkdir \$dir
 file copy "{{ . }}" \$dir
-read_ip [file join \$dir \$filename]
+set ip [file join \$dir \$filename]
+read_ip \$ip
+generate_target all [get_files \$ip]
+set_property GENERATE_SYNTH_CHECKPOINT true [get_files \$ip]
+synth_ip [get_files \$ip]
 {{ end }}
+
+report_ip_status
 
 {{ range .Rtls }}
 read_verilog "{{ . }}"
@@ -42,8 +50,6 @@ read_verilog "{{ . }}"
 {{ range .Constrs }}
 read_xdc "{{ . }}"
 {{ end }}
-
-synth_ip [get_ips -all]
 
 synth_design -top {{ .Name }}
 opt_design
@@ -58,6 +64,8 @@ EOF
 type RunSynthesisScriptParams struct {
 	BuildScript core.Path
 	Bitstream   core.Path
+	Verbose     bool
+	Postprocess string
 }
 
 var runSynthesisScript = `#!/bin/bash
@@ -66,19 +74,34 @@ set -eu -o pipefail
 TMPDIR=$(mktemp -d -t ci-XXXXXXXXXX)
 (
     cd $TMPDIR
+    {{ if .Verbose }}
+    vivado -mode batch -nolog -nojournal  -notrace -source {{ .BuildScript }}
+    {{ else }}
     vivado -mode batch -nolog -nojournal  -notrace -source {{ .BuildScript }} | ( grep -E "^(ERROR|WARNING|CRITICAL)" || true )
+    {{ end }}
     echo "all: { bitstream.bit }" > bitstream.bif
-    bootgen -image bitstream.bif -arch zynqmp -process_bitstream bin -w | ( grep -E "^\[ERROR\]" || true )
+    {{ if ne .Postprocess "" }}
+    {{ if .Verbose }}
+    bootgen -image bitstream.bif -arch zynqmp -process_bitstream {{ .Postprocess }} -w
+    {{ else }}
+    bootgen -image bitstream.bif -arch zynqmp -process_bitstream {{ .Postprocess }} -w | ( grep -E "^\[ERROR\]" || true )
+    {{ end }}
     cp bitstream.bit.bin {{ .Bitstream }}
+    {{ else }}
+    cp bitstream.bit {{ .Bitstream }}
+    {{ end }}
 )
 
 rm -rf ${TMPDIR}
 `
 
 type Bitstream struct {
-	Name string
-	Src  core.Path
-	Ips  []hdl.Ip
+	Name        string
+	Src         core.Path
+	Constraints core.Path
+	Ips         []hdl.Ip
+	Postprocess string
+	Verbose     bool
 }
 
 func (rule Bitstream) Build(ctx core.Context) {
@@ -107,15 +130,20 @@ func (rule Bitstream) Build(ctx core.Context) {
 
 	ins = append(ins, rule.Src)
 	rtls = append(rtls, rule.Src)
+	if rule.Constraints != nil {
+		ins = append(ins, rule.Constraints)
+		constrs = append(constrs, rule.Constraints)
+	}
 
 	bfData := BuildFileScriptParams{
-		Out:     outBf,
-		Name:    rule.Name,
-		Part:    PartName.Value(),
-		Timing:  outTiming,
-		Ips:     ips,
-		Rtls:    rtls,
-		Constrs: constrs,
+		Out:       outBf,
+		Name:      rule.Name,
+		PartName:  hdl.PartName.Value(),
+		BoardName: hdl.BoardName.Value(),
+		Timing:    outTiming,
+		Ips:       ips,
+		Rtls:      rtls,
+		Constrs:   constrs,
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
@@ -128,6 +156,8 @@ func (rule Bitstream) Build(ctx core.Context) {
 	rsData := RunSynthesisScriptParams{
 		BuildScript: outBf,
 		Bitstream:   out,
+		Verbose:     rule.Verbose,
+		Postprocess: rule.Postprocess,
 	}
 
 	outs := []core.OutPath{out, outTiming}

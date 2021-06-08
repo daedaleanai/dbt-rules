@@ -5,6 +5,7 @@ import (
 	"regexp"
 
 	"dbt-rules/RULES/core"
+	"dbt-rules/RULES/hdl"
 )
 
 type UBootScriptParams struct {
@@ -35,7 +36,7 @@ type UBoot struct {
 
 func (rule UBoot) Build(ctx core.Context) {
 	var config string
-	board := BoardName.Value()
+	board := hdl.BoardName.Value()
 	for pattern, cfg := range rule.Configs {
 		matched, err := regexp.MatchString(pattern, board)
 		if err != nil {
@@ -47,7 +48,7 @@ func (rule UBoot) Build(ctx core.Context) {
 	}
 
 	if config == "" {
-		core.Fatal("Unable to determine U-Boot config for board: %s", BoardName.Value())
+		core.Fatal("Unable to determine U-Boot config for board: %s", hdl.BoardName.Value())
 	}
 
 	data := UBootScriptParams{
@@ -60,6 +61,6 @@ func (rule UBoot) Build(ctx core.Context) {
 		Out:    rule.Out,
 		In:     core.SourcePath("u-boot"),
 		Script: core.CompileTemplate(uBootScript, "uboot-script", data),
-		Descr:  fmt.Sprintf("Building U-Boot for board %s", BoardName.Value()),
+		Descr:  fmt.Sprintf("Building U-Boot for board %s", hdl.BoardName.Value()),
 	})
 }
