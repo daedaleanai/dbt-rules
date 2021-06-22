@@ -15,6 +15,7 @@ type XSimScriptParams struct {
 	OutDir       core.Path
 	OutScript    core.Path
 	OutSimScript core.Path
+	IncDir       core.Path
 	Srcs         []core.Path
 	Ips          []core.Path
 	Libs         []string
@@ -58,6 +59,7 @@ func (rule SimulationXsim) Build(ctx core.Context) {
 		OutDir:       outDir,
 		OutScript:    outScript,
 		OutSimScript: outSimScript,
+		IncDir:       core.SourcePath(""),
 		Srcs:         srcs,
 		Ips:          ips,
 		Libs:         rule.Libs,

@@ -8,6 +8,7 @@ set -eu -o pipefail
 {{ $partName := .PartName }}
 {{ $boardName := .BoardName }}
 {{ $verbose := .Verbose }}
+{{ $incDir := .IncDir }}
 
 rm -rf {{ .OutDir }}
 mkdir -p {{ .OutDir }}
@@ -49,7 +50,7 @@ cat > {{ .OutScript }} <<EOF
 set -eu -o pipefail
 
 vlib work
-{{ range .Srcs }}vlog +acc=rn -sv -nologo -quiet {{ . }}
+{{ range .Srcs }}vlog +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} {{ . }}
 {{ end }}
 EOF
 
@@ -59,10 +60,10 @@ EOF
     SRCS=`find {{ $outDir }}/$NAME/source -type f`
 
     for SRC in $SIM; do
-        echo "vlog +acc=rn -sv -nologo -quiet $SRC" >> {{ $outScript }}
+        echo "vlog +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} $SRC" >> {{ $outScript }}
     done
     for SRC in $SRCS; do
-        echo "vlog +acc=rn -sv -nologo -quiet $SRC" >> {{ $outScript }}
+        echo "vlog +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} $SRC" $SRC" >> {{ $outScript }}
     done
 {{end}}
 
@@ -71,7 +72,7 @@ EOF
     GLBL=`dirname $XSIMDIR`/../data/verilog/src/glbl.v
 
     cat >> {{ .OutScript }} << EOF
-vlog +acc=rn -sv -nologo -quiet $GLBL
+vlog +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} $GLBL
 
 if [ \$# -ge 1 ]; then
     vsim -c -modelsimini {{ .LibDir }}/modelsim.ini {{range .Libs}}-L {{ . }} {{end}} work.board work.glbl -do \$1
