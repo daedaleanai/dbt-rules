@@ -82,7 +82,7 @@ EOF
 fi # compile"
 
 if [ \$# -ge 1 ]; then
-    xsim {{ .Name }}_sim -t \$1
+    xsim {{ .Name }}_sim "\$@"
 else
     xsim {{ .Name }}_sim -t {{ .OutSimScript }}
 fi

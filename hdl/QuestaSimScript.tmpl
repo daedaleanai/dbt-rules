@@ -74,7 +74,7 @@ EOF
 vlog +acc=rn -sv -nologo -quiet $GLBL
 
 if [ \$# -ge 1 ]; then
-    vsim -c -modelsimini {{ .LibDir }}/modelsim.ini {{range .Libs}}-L {{ . }} {{end}} work.board work.glbl -do \$1
+    vsim -modelsimini {{ .LibDir }}/modelsim.ini {{range .Libs}}-L {{ . }} {{end}} work.board work.glbl "\$@"
 else
     vsim -c -modelsimini {{ .LibDir }}/modelsim.ini {{range .Libs}}-L {{ . }} {{end}} work.board work.glbl -do {{ .OutSimScript }}
 fi
