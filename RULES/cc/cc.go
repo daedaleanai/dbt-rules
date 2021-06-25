@@ -6,9 +6,12 @@ import (
 	"dbt-rules/RULES/core"
 )
 
+const objsDirSuffix = "-OBJS"
+
 // ObjectFile compiles a single C++ source file.
 type ObjectFile struct {
 	Src       core.Path
+	OutDir    core.OutPath
 	Includes  []core.Path
 	Flags     []string
 	Toolchain Toolchain
@@ -21,7 +24,7 @@ func (obj ObjectFile) Build(ctx core.Context) {
 		toolchain = &defaultToolchain
 	}
 
-	depfile := obj.Src.WithExt("d")
+	depfile := obj.out().WithExt("d")
 	cmd := toolchain.ObjectFile(obj.out(), depfile, obj.Flags, obj.Includes, obj.Src)
 	ctx.AddBuildStep(core.BuildStep{
 		Out:     obj.out(),
@@ -33,7 +36,11 @@ func (obj ObjectFile) Build(ctx core.Context) {
 }
 
 func (obj ObjectFile) out() core.OutPath {
-	return obj.Src.WithExt("o")
+	defaultOut := obj.Src.WithExt("o")
+	if obj.OutDir == nil {
+		return defaultOut
+	}
+	return obj.OutDir.WithSuffix("/"+defaultOut.Relative())
 }
 
 func flattenDepsRec(deps []Dep, visited map[string]bool) []Library {
@@ -53,7 +60,7 @@ func flattenDeps(deps []Dep) []Library {
 	return flattenDepsRec(deps, map[string]bool{})
 }
 
-func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []Library, toolchain Toolchain) []core.Path {
+func compileSources(ctx core.Context, outDir core.OutPath, srcs []core.Path, flags []string, deps []Library, toolchain Toolchain) []core.Path {
 	includes := []core.Path{core.SourcePath("")}
 	for _, dep := range deps {
 		includes = append(includes, dep.Includes...)
@@ -64,6 +71,7 @@ func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []L
 	for _, src := range srcs {
 		obj := ObjectFile{
 			Src:       src,
+			OutDir:    outDir,
 			Includes:  includes,
 			Flags:     flags,
 			Toolchain: toolchain,
@@ -100,7 +108,8 @@ func (lib Library) Build(ctx core.Context) {
 		toolchain = &defaultToolchain
 	}
 
-	objs := compileSources(ctx, lib.Srcs, lib.CompilerFlags, flattenDeps([]Dep{lib}), toolchain)
+	objsDir := lib.Out.WithSuffix(objsDirSuffix)
+	objs := compileSources(ctx, objsDir, lib.Srcs, lib.CompilerFlags, flattenDeps([]Dep{lib}), toolchain)
 	objs = append(objs, lib.Objs...)
 
 	var cmd, descr string
@@ -144,7 +153,8 @@ func (bin Binary) Build(ctx core.Context) {
 	}
 
 	deps := flattenDeps(bin.Deps)
-	objs := compileSources(ctx, bin.Srcs, bin.CompilerFlags, deps, toolchain)
+	objsDir := bin.Out.WithSuffix(objsDirSuffix)
+	objs := compileSources(ctx, objsDir, bin.Srcs, bin.CompilerFlags, deps, toolchain)
 
 	ins := objs
 	alwaysLinkLibs := []core.Path{}
