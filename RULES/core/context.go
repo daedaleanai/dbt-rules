@@ -11,13 +11,28 @@ import (
 	"strings"
 )
 
+var env = map[string]interface{}{}
+
 const scriptFileMode = 0755
 
 type Context interface {
 	AddBuildStep(BuildStep)
+
 	Cwd() OutPath
+	OutPath(Path) OutPath
+
+	GetBuildOption(*BuildParam) interface{}
+	SetBuildOption(*BuildParam, interface{})
+	GetFlag(string) string
+
+	Build(target buildInterface) BuildOutput
 
 	addTargetDependency(interface{})
+}
+
+type BuildOutput interface {
+	Output() OutPath
+	Outputs() []OutPath
 }
 
 // BuildStep represents one build step (i.e., one build command).
@@ -48,11 +63,7 @@ func (step *BuildStep) ins() []Path {
 }
 
 type buildInterface interface {
-	Build(ctx Context)
-}
-
-type outputsInterface interface {
-	Outputs() []Path
+	Build(ctx Context) BuildOutput
 }
 
 type descriptionInterface interface {
@@ -62,26 +73,41 @@ type descriptionInterface interface {
 type context struct {
 	cwd                OutPath
 	targetDependencies []string
-	leafOutputs        map[Path]bool
 
-	targetNames  map[interface{}]string
+	targetNames map[interface{}]string
+	ninjaFile   strings.Builder
+	bashFile    strings.Builder
+	nextRuleID  int
+
+	buildOptions map[*BuildParam]interface{}
+	flags        map[string]string
+	hash         string
+
+	buildCache   map[string]BuildOutput
 	buildOutputs map[string]BuildStep
-	ninjaFile    strings.Builder
-	bashFile     strings.Builder
-	nextRuleID   int
 }
 
 func newContext(vars map[string]interface{}) *context {
 	ctx := &context{
-		outPath{""},
+		outPath{"", ""},
 		[]string{},
-		map[Path]bool{},
 
 		map[interface{}]string{},
-		map[string]BuildStep{},
 		strings.Builder{},
 		strings.Builder{},
 		0,
+
+		map[*BuildParam]interface{}{},
+		map[string]string{},
+		"",
+
+		map[string]BuildOutput{},
+		map[string]BuildStep{},
+	}
+
+	for _, buildParam := range buildParams {
+		optionName := flags[buildParam.Name].Value
+		ctx.buildOptions[buildParam] = buildParam.Options[optionName]
 	}
 
 	for name := range vars {
@@ -93,13 +119,41 @@ func newContext(vars map[string]interface{}) *context {
 	return ctx
 }
 
+func (ctx *context) Build(target buildInterface) BuildOutput {
+	flagStrings := []string{}
+	for name, value := range ctx.flags {
+		flagStrings = append(flagStrings, fmt.Sprintf("flag:%s$%s", name, value))
+	}
+	for param, option := range ctx.buildOptions {
+		flagStrings = append(flagStrings, fmt.Sprintf("buildOption:%s$%s", param.Name, option.(buildOptionName).Name()))
+	}
+	sort.Strings(flagStrings)
+	ctx.hash = fmt.Sprintf("%08X", crc32.ChecksumIEEE([]byte(strings.Join(flagStrings, "#"))))
+	targetHash := ctx.hash + fmt.Sprintf("%08X", crc32.ChecksumIEEE([]byte(fmt.Sprintf("%v", target))))
+
+	if _, exists := ctx.buildCache[targetHash]; !exists {
+		if name, exists := ctx.targetNames[target]; exists {
+			ctx.cwd = outPath{ctx.hash, path.Dir(name) + "/"}
+		}
+		ctx.cwd = outPath{ctx.hash, ctx.cwd.relative()}
+
+		buildOptions := map[*BuildParam]interface{}{}
+		for param, value := range ctx.buildOptions {
+			buildOptions[param] = value
+		}
+		ctx.buildCache[targetHash] = target.Build(ctx)
+		ctx.buildOptions = buildOptions
+	}
+
+	return ctx.buildCache[targetHash]
+}
+
 // AddBuildStep adds a build step for the current target.
 func (ctx *context) AddBuildStep(step BuildStep) {
 	outs := []string{}
 	for _, out := range step.outs() {
 		ctx.buildOutputs[out.Absolute()] = step
 		outs = append(outs, ninjaEscape(out.Absolute()))
-		ctx.leafOutputs[out] = true
 	}
 	if len(outs) == 0 {
 		return
@@ -108,7 +162,6 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 	ins := []string{}
 	for _, in := range step.ins() {
 		ins = append(ins, ninjaEscape(in.Absolute()))
-		delete(ctx.leafOutputs, in)
 	}
 
 	if step.Script != "" {
@@ -148,31 +201,40 @@ func (ctx *context) Cwd() OutPath {
 	return ctx.cwd
 }
 
+func (ctx *context) OutPath(p Path) OutPath {
+	return outPath{ctx.hash, p.relative()}
+}
+
+func (ctx *context) GetBuildOption(param *BuildParam) interface{} {
+	return ctx.buildOptions[param]
+}
+
+func (ctx *context) SetBuildOption(param *BuildParam, option interface{}) {
+	if reflect.TypeOf(option) != param.Type && !reflect.TypeOf(option).Implements(param.Type) {
+		Fatal("option for build param '%s' has incorrect type", param.Name)
+	}
+	ctx.buildOptions[param] = option
+}
+
+func (ctx *context) GetFlag(name string) string {
+	return ""
+}
+
 func (ctx *context) handleTarget(name string, target buildInterface) {
 	currentTarget = name
-	ctx.cwd = outPath{path.Dir(name)}
-	ctx.leafOutputs = map[Path]bool{}
 	ctx.targetDependencies = []string{}
 
-	target.Build(ctx)
-
-	ninjaOuts := []string{}
-	for out := range ctx.leafOutputs {
-		ninjaOuts = append(ninjaOuts, ninjaEscape(out.Absolute()))
+	outs := ctx.Build(target).Outputs()
+	ruleOuts := []string{}
+	for _, out := range outs {
+		ruleOuts = append(ruleOuts, ninjaEscape(out.Absolute()))
 	}
-	sort.Strings(ninjaOuts)
+	sort.Strings(ruleOuts)
 
 	printOuts := []string{}
-	if iface, ok := target.(outputsInterface); ok {
-		for _, out := range iface.Outputs() {
-			relPath, _ := filepath.Rel(workingDir(), out.Absolute())
-			printOuts = append(printOuts, relPath)
-		}
-	} else {
-		for out := range ctx.leafOutputs {
-			relPath, _ := filepath.Rel(workingDir(), out.Absolute())
-			printOuts = append(printOuts, relPath)
-		}
+	for _, out := range outs {
+		relPath, _ := filepath.Rel(workingDir(), out.Absolute())
+		printOuts = append(printOuts, relPath)
 	}
 	sort.Strings(printOuts)
 
@@ -184,7 +246,7 @@ func (ctx *context) handleTarget(name string, target buildInterface) {
 	fmt.Fprintf(&ctx.ninjaFile, "  command = echo \"%s\"\n", strings.Join(printOuts, "\\n"))
 	fmt.Fprintf(&ctx.ninjaFile, "  description = Created %s:", name)
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
-	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s %s __phony__\n", name, ctx.nextRuleID, strings.Join(ninjaOuts, " "), strings.Join(ctx.targetDependencies, " "))
+	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s %s __phony__\n", name, ctx.nextRuleID, strings.Join(ruleOuts, " "), strings.Join(ctx.targetDependencies, " "))
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
 
@@ -225,9 +287,6 @@ func (ctx *context) addOutputToBashScript(output string) {
 }
 
 func (ctx *context) addTargetDependency(target interface{}) {
-	if reflect.TypeOf(target).Kind() != reflect.Ptr {
-		Fatal("adding target dependency to non-pointer target")
-	}
 	name, exists := ctx.targetNames[target]
 	if !exists {
 		Fatal("adding target dependency to invalid target")

@@ -23,7 +23,7 @@ type generatorOutput struct {
 func GeneratorMain(vars map[string]interface{}) {
 	output := generatorOutput{"", "", map[string]targetInfo{}, map[string]flagInfo{}, ""}
 
-	output.Flags = lockAndGetFlags()
+	output.Flags = initializeFlags()
 	output.BuildDir = buildDir()
 
 	for name, variable := range vars {

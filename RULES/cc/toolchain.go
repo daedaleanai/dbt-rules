@@ -1,22 +1,72 @@
 package cc
 
 import (
+	"dbt-rules/RULES/core"
 	"fmt"
 	"strings"
-
-	"dbt-rules/RULES/core"
 )
 
 type Toolchain interface {
-	ObjectFile(out core.OutPath, depfile core.OutPath, flags []string, includes []core.Path, src core.Path) string
-	StaticLibrary(out core.Path, objs []core.Path) string
-	SharedLibrary(out core.Path, objs []core.Path) string
-	Binary(out core.Path, objs []core.Path, alwaysLinkLibs []core.Path, libs []core.Path, flags []string, script core.Path) string
-	EmbeddedBlob(out core.OutPath, src core.Path) string
+	Name() string
+	Compile(out, depfile core.OutPath, flags []string, includes []core.Path, src core.Path) string
+	LinkStaticLibrary(out core.OutPath, objs []core.Path) string
+	LinkSharedLibrary(out core.OutPath, objs []core.Path) string
+	LinkBinary(out core.OutPath, objs []core.Path, alwaysLinkLibs []core.Path, libs []core.Path, flags []string) string
+	EmbedBlob(out core.OutPath, src core.Path) string
 }
+
+var ToolchainParam = core.RegisterBuildParam((*Toolchain)(nil), "C++ Toolchain")
+
+var SystemToolchain = GccToolchain{
+	name: "system",
+
+	Ar:      core.NewGlobalPath("ar"),
+	As:      core.NewGlobalPath("as"),
+	Cc:      core.NewGlobalPath("gcc"),
+	Cpp:     core.NewGlobalPath("gcc -E"),
+	Cxx:     core.NewGlobalPath("g++"),
+	Objcopy: core.NewGlobalPath("objcopy"),
+
+	CompilerFlags: []string{"-std=c++14", "-O3", "-fdiagnostics-color=always"},
+	LinkerFlags:   []string{"-fdiagnostics-color=always"},
+}
+
+var TestToolchainA = GccToolchain{
+	name: "A",
+
+	Ar:      core.NewGlobalPath("ar"),
+	As:      core.NewGlobalPath("as"),
+	Cc:      core.NewGlobalPath("gcc"),
+	Cpp:     core.NewGlobalPath("gcc -E"),
+	Cxx:     core.NewGlobalPath("g++"),
+	Objcopy: core.NewGlobalPath("objcopy"),
+
+	CompilerFlags: []string{"-std=c++11", "-O3", "-fdiagnostics-color=always"},
+	LinkerFlags:   []string{"-fdiagnostics-color=always"},
+}
+
+var TestToolchainB = GccToolchain{
+	name: "B",
+
+	Ar:      core.NewGlobalPath("ar"),
+	As:      core.NewGlobalPath("as"),
+	Cc:      core.NewGlobalPath("gcc"),
+	Cpp:     core.NewGlobalPath("gcc -E"),
+	Cxx:     core.NewGlobalPath("g++"),
+	Objcopy: core.NewGlobalPath("objcopy"),
+
+	CompilerFlags: []string{"-std=c++17", "-O3", "-fdiagnostics-color=always"},
+	LinkerFlags:   []string{"-fdiagnostics-color=always"},
+}
+
+var _ = ToolchainParam.AddOption(SystemToolchain)
+var _ = ToolchainParam.AddDefaultOption(TestToolchainA)
+var _ = ToolchainParam.AddOption(TestToolchainB)
 
 // Toolchain represents a C++ toolchain.
 type GccToolchain struct {
+	name string
+
 	Ar      core.GlobalPath
 	As      core.GlobalPath
 	Cc      core.GlobalPath
@@ -33,8 +83,12 @@ type GccToolchain struct {
 	TargetName string
 }
 
-// ObjectFile generates a compile command.
-func (gcc GccToolchain) ObjectFile(out core.OutPath, depfile core.OutPath, flags []string, includes []core.Path, src core.Path) string {
+func (gcc GccToolchain) Name() string {
+	return gcc.name
+}
+
+// Compile generates a compile command.
+func (gcc GccToolchain) Compile(out, depfile core.OutPath, flags []string, includes []core.Path, src core.Path) string {
 	includesStr := strings.Builder{}
 	for _, include := range includes {
 		includesStr.WriteString(fmt.Sprintf("-I%q ", include))
@@ -53,8 +107,8 @@ func (gcc GccToolchain) ObjectFile(out core.OutPath, depfile core.OutPath, flags
 		src)
 }
 
-// StaticLibrary generates the command to build a static library.
-func (gcc GccToolchain) StaticLibrary(out core.Path, objs []core.Path) string {
+// LinkStaticLibrary generates the command to build a static library.
+func (gcc GccToolchain) LinkStaticLibrary(out core.OutPath, objs []core.Path) string {
 	return fmt.Sprintf(
 		"%q rv %q %s >/dev/null 2>/dev/null",
 		gcc.Ar,
@@ -62,8 +116,8 @@ func (gcc GccToolchain) StaticLibrary(out core.Path, objs []core.Path) string {
 		joinQuoted(objs))
 }
 
-// SharedLibrary generates the command to build a shared library.
-func (gcc GccToolchain) SharedLibrary(out core.Path, objs []core.Path) string {
+// LinkSharedLibrary generates the command to build a shared library.
+func (gcc GccToolchain) LinkSharedLibrary(out core.OutPath, objs []core.Path) string {
 	return fmt.Sprintf(
 		"%q -pipe -shared -o %q %s",
 		gcc.Cxx,
@@ -71,13 +125,9 @@ func (gcc GccToolchain) SharedLibrary(out core.Path, objs []core.Path) string {
 		joinQuoted(objs))
 }
 
-// Binary generates the command to build an executable.
-func (gcc GccToolchain) Binary(out core.Path, objs []core.Path, alwaysLinkLibs []core.Path, libs []core.Path, flags []string, script core.Path) string {
+// LinkBinary generates the command to build an executable.
+func (gcc GccToolchain) LinkBinary(out core.OutPath, objs []core.Path, alwaysLinkLibs []core.Path, libs []core.Path, flags []string) string {
 	flags = append(gcc.LinkerFlags, flags...)
-	if script != nil {
-		flags = append(flags, "-T", fmt.Sprintf("%q", script))
-	}
-
 	return fmt.Sprintf(
 		"%q -pipe -o %q %s -Wl,-whole-archive %s -Wl,-no-whole-archive %s %s",
 		gcc.Cxx,
@@ -88,7 +138,7 @@ func (gcc GccToolchain) Binary(out core.Path, objs []core.Path, alwaysLinkLibs [
 		strings.Join(flags, " "))
 }
 
-func (gcc GccToolchain) EmbeddedBlob(out core.OutPath, src core.Path) string {
+func (gcc GccToolchain) EmbedBlob(out core.OutPath, src core.Path) string {
 	return fmt.Sprintf(
 		"%q -I binary -O %s -B %s %q %q",
 		gcc.Objcopy,
@@ -104,16 +154,4 @@ func joinQuoted(paths []core.Path) string {
 		fmt.Fprintf(&b, "%q ", p)
 	}
 	return b.String()
-}
-
-var defaultToolchain = GccToolchain{
-	Ar:      core.NewGlobalPath("ar"),
-	As:      core.NewGlobalPath("as"),
-	Cc:      core.NewGlobalPath("gcc"),
-	Cpp:     core.NewGlobalPath("gcc -E"),
-	Cxx:     core.NewGlobalPath("g++"),
-	Objcopy: core.NewGlobalPath("objcopy"),
-
-	CompilerFlags: []string{"-std=c++14", "-O3", "-fdiagnostics-color=always"},
-	LinkerFlags:   []string{"-fdiagnostics-color=always"},
 }

@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"os"
 	"path"
 	"reflect"
 	"strings"
@@ -12,9 +13,8 @@ type Path interface {
 	Absolute() string
 	Relative() string
 	String() string
-	WithExt(ext string) OutPath
-	WithPrefix(prefix string) OutPath
-	WithSuffix(suffix string) OutPath
+
+	relative() string
 }
 
 // inPath is a path relative to the workspace source directory.
@@ -32,61 +32,40 @@ func (p inPath) Relative() string {
 	return p.rel
 }
 
-// WithExt creates an OutPath with the same relative path and the given extension.
-func (p inPath) WithExt(ext string) OutPath {
-	return outPath{p.rel}.WithExt(ext)
-}
-
-// WithPrefix creates an OutPath with the same relative path and the given prefix.
-func (p inPath) WithPrefix(prefix string) OutPath {
-	return outPath{p.rel}.WithPrefix(prefix)
-}
-
-// WithSuffix creates an OutPath with the same relative path and the given suffix.
-func (p inPath) WithSuffix(suffix string) OutPath {
-	return outPath{p.rel}.WithSuffix(suffix)
-}
-
 // String representation of an inPath is its quoted absolute path.
 func (p inPath) String() string {
 	return p.Absolute()
 }
 
+func (p inPath) relative() string {
+	return p.rel
+}
+
 // OutPath is a path relative to the workspace build directory.
 type OutPath interface {
 	Path
-	forceOutPath()
+	BuildOutput
+
+	WithExt(ext string) OutPath
+	WithFilename(filename string) OutPath
+	WithSuffix(suffix string) OutPath
+
+	isOutPath()
 }
 
 type outPath struct {
-	rel string
+	hash string
+	rel  string
 }
 
 // Absolute returns the absolute path.
 func (p outPath) Absolute() string {
-	return path.Join(buildDir(), p.rel)
+	return path.Join(buildDir(), p.Relative())
 }
 
 // Relative returns the path relative to the workspace build directory.
 func (p outPath) Relative() string {
-	return p.rel
-}
-
-// WithExt creates an OutPath with the same relative path and the given extension.
-func (p outPath) WithExt(ext string) OutPath {
-	oldExt := path.Ext(p.rel)
-	newRel := fmt.Sprintf("%s.%s", strings.TrimSuffix(p.rel, oldExt), ext)
-	return outPath{newRel}
-}
-
-// WithPrefix creates an OutPath with the same relative path and the given prefix.
-func (p outPath) WithPrefix(prefix string) OutPath {
-	return outPath{path.Join(path.Dir(p.rel), prefix+path.Base(p.rel))}
-}
-
-// WithSuffix creates an OutPath with the same relative path and the given suffix.
-func (p outPath) WithSuffix(suffix string) OutPath {
-	return outPath{p.rel + suffix}
+	return path.Join(p.hash, p.relative())
 }
 
 // String representation of an OutPath is its quoted absolute path.
@@ -94,8 +73,20 @@ func (p outPath) String() string {
 	return p.Absolute()
 }
 
-// forceOutPath makes sure that inPath or Path cannot be used as OutPath.
-func (p outPath) forceOutPath() {}
+func (p outPath) relative() string {
+	return p.rel
+}
+
+// isOutPath makes sure that inPath or Path cannot be used as OutPath.
+func (p outPath) isOutPath() {}
+
+func (p outPath) Output() OutPath {
+	return p
+}
+
+func (p outPath) Outputs() []OutPath {
+	return []OutPath{p}
+}
 
 // GlobalPath is a global path.
 type GlobalPath interface {
@@ -116,6 +107,23 @@ func (p globalPath) String() string {
 	return p.Absolute()
 }
 
+// WithExt creates an OutPath with the same relative path and the given extension.
+func (p outPath) WithExt(ext string) OutPath {
+	oldExt := path.Ext(p.rel)
+	newRel := fmt.Sprintf("%s.%s", strings.TrimSuffix(p.rel, oldExt), ext)
+	return outPath{p.hash, newRel}
+}
+
+// WithFilename creates an OutPath with the same relative path and the given filename.
+func (p outPath) WithFilename(filename string) OutPath {
+	return outPath{p.hash, path.Join(path.Dir(p.rel), filename)}
+}
+
+// WithSuffix creates an OutPath with the same relative path and the given suffix.
+func (p outPath) WithSuffix(suffix string) OutPath {
+	return outPath{p.hash, p.rel + suffix}
+}
+
 // NewInPath creates an inPath for a path relativ to the source directory.
 func NewInPath(pkg interface{}, p string) Path {
 	return inPath{path.Join(reflect.TypeOf(pkg).PkgPath(), p)}
@@ -123,7 +131,9 @@ func NewInPath(pkg interface{}, p string) Path {
 
 // NewOutPath creates an OutPath for a path relativ to the build directory.
 func NewOutPath(pkg interface{}, p string) OutPath {
-	return outPath{path.Join(reflect.TypeOf(pkg).PkgPath(), p)}
+	fmt.Println("NewOutPath should never be called")
+	os.Exit(1)
+	return outPath{"", ""}
 }
 
 // NewGlobalPath creates a globalPath.
@@ -131,10 +141,6 @@ func NewGlobalPath(p string) GlobalPath {
 	return globalPath{p}
 }
 
-// BuildPath returns a path relative to the build directory.
-func BuildPath(p string) OutPath {
-	return outPath{p}
-}
 // SourcePath returns a path relative to the source directory.
 func SourcePath(p string) Path {
 	return inPath{p}
