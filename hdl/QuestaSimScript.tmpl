@@ -50,7 +50,7 @@ cat > {{ .OutScript }} <<EOF
 set -eu -o pipefail
 
 vlib work
-{{ range .Srcs }}vlog +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} {{ . }}
+{{ range .Srcs }}vlog -svinputport=net +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} {{ . }}
 {{ end }}
 EOF
 
@@ -60,10 +60,10 @@ EOF
     SRCS=`find {{ $outDir }}/$NAME/source -type f`
 
     for SRC in $SIM; do
-        echo "vlog +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} $SRC" >> {{ $outScript }}
+        echo "vlog -svinputport=net +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} $SRC" >> {{ $outScript }}
     done
     for SRC in $SRCS; do
-        echo "vlog +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} $SRC" $SRC" >> {{ $outScript }}
+        echo "vlog -svinputport=net +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} $SRC" $SRC" >> {{ $outScript }}
     done
 {{end}}
 
@@ -72,7 +72,7 @@ EOF
     GLBL=`dirname $XSIMDIR`/../data/verilog/src/glbl.v
 
     cat >> {{ .OutScript }} << EOF
-vlog +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} $GLBL
+vlog -svinputport=net +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} $GLBL
 
 if [ \$# -ge 1 ]; then
     vsim -modelsimini {{ .LibDir }}/modelsim.ini {{range .Libs}}-L {{ . }} {{end}} work.board work.glbl "\$@"
