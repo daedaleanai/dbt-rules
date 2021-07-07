@@ -23,6 +23,7 @@ type GccToolchain struct {
 	Cpp     core.GlobalPath
 	Cxx     core.GlobalPath
 	Objcopy core.GlobalPath
+	Ld      core.GlobalPath
 
 	Includes []core.Path
 
@@ -90,12 +91,10 @@ func (gcc GccToolchain) Binary(out core.Path, objs []core.Path, alwaysLinkLibs [
 
 func (gcc GccToolchain) EmbeddedBlob(out core.OutPath, src core.Path) string {
 	return fmt.Sprintf(
-		"%q -I binary -O %s -B %s %q %q",
-		gcc.Objcopy,
-		gcc.TargetName,
-		gcc.ArchName,
-		src,
-		out)
+		"%q -r -b binary -o %q %q",
+		gcc.Ld,
+		out,
+		src)
 }
 
 func joinQuoted(paths []core.Path) string {
@@ -106,13 +105,14 @@ func joinQuoted(paths []core.Path) string {
 	return b.String()
 }
 
-var defaultToolchain = GccToolchain{
+var DefaultToolchain = GccToolchain{
 	Ar:      core.NewGlobalPath("ar"),
 	As:      core.NewGlobalPath("as"),
 	Cc:      core.NewGlobalPath("gcc"),
 	Cpp:     core.NewGlobalPath("gcc -E"),
 	Cxx:     core.NewGlobalPath("g++"),
 	Objcopy: core.NewGlobalPath("objcopy"),
+	Ld:      core.NewGlobalPath("ld"),
 
 	CompilerFlags: []string{"-std=c++14", "-O3", "-fdiagnostics-color=always"},
 	LinkerFlags:   []string{"-fdiagnostics-color=always"},
