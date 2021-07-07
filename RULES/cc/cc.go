@@ -21,7 +21,7 @@ type ObjectFile struct {
 func (obj ObjectFile) Build(ctx core.Context) {
 	toolchain := obj.Toolchain
 	if toolchain == nil {
-		toolchain = &defaultToolchain
+		toolchain = &DefaultToolchain
 	}
 
 	depfile := obj.out().WithExt("d")
@@ -105,7 +105,7 @@ type Library struct {
 func (lib Library) Build(ctx core.Context) {
 	toolchain := lib.Toolchain
 	if toolchain == nil {
-		toolchain = &defaultToolchain
+		toolchain = &DefaultToolchain
 	}
 
 	objsDir := lib.Out.WithSuffix(objsDirSuffix)
@@ -149,7 +149,7 @@ type Binary struct {
 func (bin Binary) Build(ctx core.Context) {
 	toolchain := bin.Toolchain
 	if toolchain == nil {
-		toolchain = defaultToolchain
+		toolchain = DefaultToolchain
 	}
 
 	deps := flattenDeps(bin.Deps)
