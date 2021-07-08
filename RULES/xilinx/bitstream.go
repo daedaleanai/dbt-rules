@@ -44,7 +44,7 @@ synth_ip [get_files \$ip]
 report_ip_status
 
 {{ range .Rtls }}
-read_verilog "{{ . }}"
+read_verilog -sv "{{ . }}"
 {{ end }}
 
 {{ range .Constrs }}
@@ -58,12 +58,14 @@ phys_opt_design
 route_design
 report_timing_summary -file {{ .Timing }}
 write_bitstream -force bitstream.bit
+write_debug_probes -force bitstream.ltx
 EOF
 `
 
 type RunSynthesisScriptParams struct {
 	BuildScript core.Path
 	Bitstream   core.Path
+	DebugProbes core.Path
 	Verbose     bool
 	Postprocess string
 }
@@ -90,6 +92,7 @@ TMPDIR=$(mktemp -d -t ci-XXXXXXXXXX)
     {{ else }}
     cp bitstream.bit {{ .Bitstream }}
     {{ end }}
+    cp bitstream.ltx {{ .DebugProbes }}
 )
 
 rm -rf ${TMPDIR}
@@ -124,7 +127,8 @@ func (rule Bitstream) Build(ctx core.Context) {
 		}
 	}
 
-	out := rule.Src.WithExt("bit")
+	outBitstream := rule.Src.WithExt("bit")
+	outDebugProbes := rule.Src.WithExt("ltx")
 	outTiming := rule.Src.WithExt("rpt")
 	outBf := rule.Src.WithExt("tcl")
 
@@ -155,16 +159,17 @@ func (rule Bitstream) Build(ctx core.Context) {
 
 	rsData := RunSynthesisScriptParams{
 		BuildScript: outBf,
-		Bitstream:   out,
+		Bitstream:   outBitstream,
+		DebugProbes: outDebugProbes,
 		Verbose:     rule.Verbose,
 		Postprocess: rule.Postprocess,
 	}
 
-	outs := []core.OutPath{out, outTiming}
+	outs := []core.OutPath{outBitstream, outTiming, outDebugProbes}
 	ctx.AddBuildStep(core.BuildStep{
 		Outs:   outs,
 		In:     outBf,
 		Script: core.CompileTemplate(runSynthesisScript, "run-synthesis-script", rsData),
-		Descr:  fmt.Sprintf("Generating bitstream %s", out.Relative()),
+		Descr:  fmt.Sprintf("Generating bitstream %s", outBitstream.Relative()),
 	})
 }
