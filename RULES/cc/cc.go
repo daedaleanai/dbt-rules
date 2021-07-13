@@ -11,7 +11,6 @@ const objsDirSuffix = "-OBJS"
 // ObjectFile compiles a single C++ source file.
 type ObjectFile struct {
 	Src       core.Path
-	OutDir    core.OutPath
 	Includes  []core.Path
 	Flags     []string
 	Toolchain Toolchain
@@ -21,7 +20,7 @@ type ObjectFile struct {
 func (obj ObjectFile) Build(ctx core.Context) {
 	toolchain := obj.Toolchain
 	if toolchain == nil {
-		toolchain = &DefaultToolchain
+		toolchain = defaultToolchain()
 	}
 
 	depfile := obj.out().WithExt("d")
@@ -31,16 +30,16 @@ func (obj ObjectFile) Build(ctx core.Context) {
 		Depfile: depfile,
 		In:      obj.Src,
 		Cmd:     cmd,
-		Descr:   fmt.Sprintf("CC %s", obj.out().Relative()),
+		Descr:   fmt.Sprintf("CC (toolchain: %s) %s", toolchain.Name(), obj.out().Relative()),
 	})
 }
 
 func (obj ObjectFile) out() core.OutPath {
-	defaultOut := obj.Src.WithExt("o")
-	if obj.OutDir == nil {
-		return defaultOut
+	toolchain := obj.Toolchain
+	if toolchain == nil {
+		toolchain = defaultToolchain()
 	}
-	return obj.OutDir.WithSuffix("/"+defaultOut.Relative())
+	return obj.Src.WithPrefix(toolchain.Name() + "/").WithExt("o")
 }
 
 func flattenDepsRec(deps []Dep, visited map[string]bool) []Library {
@@ -60,7 +59,7 @@ func flattenDeps(deps []Dep) []Library {
 	return flattenDepsRec(deps, map[string]bool{})
 }
 
-func compileSources(ctx core.Context, outDir core.OutPath, srcs []core.Path, flags []string, deps []Library, toolchain Toolchain) []core.Path {
+func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []Library, toolchain Toolchain) []core.Path {
 	includes := []core.Path{core.SourcePath("")}
 	for _, dep := range deps {
 		includes = append(includes, dep.Includes...)
@@ -71,7 +70,6 @@ func compileSources(ctx core.Context, outDir core.OutPath, srcs []core.Path, fla
 	for _, src := range srcs {
 		obj := ObjectFile{
 			Src:       src,
-			OutDir:    outDir,
 			Includes:  includes,
 			Flags:     flags,
 			Toolchain: toolchain,
@@ -99,26 +97,56 @@ type Library struct {
 	Shared        bool
 	AlwaysLink    bool
 	Toolchain     Toolchain
+
+	multipleToolchains bool
+	toolchainMap       map[string]Library
+	baseOut            core.OutPath
+}
+
+func (lib Library) MultipleToolchains() Library {
+	lib.multipleToolchains = true
+	lib.toolchainMap = make(map[string]Library)
+	lib.baseOut = lib.Out
+	return lib
 }
 
 // Build a Library.
 func (lib Library) Build(ctx core.Context) {
 	toolchain := lib.Toolchain
 	if toolchain == nil {
-		toolchain = &DefaultToolchain
+		toolchain = defaultToolchain()
 	}
 
-	objsDir := lib.Out.WithSuffix(objsDirSuffix)
-	objs := compileSources(ctx, objsDir, lib.Srcs, lib.CompilerFlags, flattenDeps([]Dep{lib}), toolchain)
+	if lib.multipleToolchains {
+		if lib.Toolchain == nil {
+			var defaultLib = lib.WithToolchain(ctx, defaultToolchain())
+			ctx.AddBuildStep(core.BuildStep{
+				Out: lib.Out,
+				Ins: []core.Path{defaultLib.Out},
+				Cmd: fmt.Sprintf("cp %s %s", defaultLib.Out, lib.Out),
+			})
+			return
+		}
+		if _, found := lib.toolchainMap[toolchain.Name()]; found {
+			return
+		}
+		lib.toolchainMap[toolchain.Name()] = lib
+	}
+
+	deps := flattenDeps(append(toolchain.StdDeps(), lib))
+	for i, _ := range deps {
+		deps[i] = deps[i].WithToolchain(ctx, toolchain)
+	}
+	objs := compileSources(ctx, lib.Srcs, lib.CompilerFlags, deps, toolchain)
 	objs = append(objs, lib.Objs...)
 
 	var cmd, descr string
 	if lib.Shared {
 		cmd = toolchain.SharedLibrary(lib.Out, objs)
-		descr = fmt.Sprintf("LD %s", lib.Out.Relative())
+		descr = fmt.Sprintf("LD (toolchain: %s) %s", toolchain.Name(), lib.Out.Relative())
 	} else {
 		cmd = toolchain.StaticLibrary(lib.Out, objs)
-		descr = fmt.Sprintf("AR %s", lib.Out.Relative())
+		descr = fmt.Sprintf("AR (totoolchain: %s) %s", toolchain.Name(), lib.Out.Relative())
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
@@ -127,6 +155,20 @@ func (lib Library) Build(ctx core.Context) {
 		Cmd:   cmd,
 		Descr: descr,
 	})
+}
+
+func (lib Library) WithToolchain(ctx core.Context, toolchain Toolchain) Library {
+	if !lib.multipleToolchains {
+		return lib
+	}
+	if otherLib, found := lib.toolchainMap[toolchain.Name()]; found {
+		return otherLib
+	}
+	otherLib := lib
+	otherLib.Out = lib.baseOut.WithPrefix(toolchain.Name() + "/")
+	otherLib.Toolchain = toolchain
+	otherLib.Build(ctx)
+	return otherLib
 }
 
 // CcLibrary for Library is just the identity.
@@ -149,12 +191,14 @@ type Binary struct {
 func (bin Binary) Build(ctx core.Context) {
 	toolchain := bin.Toolchain
 	if toolchain == nil {
-		toolchain = DefaultToolchain
+		toolchain = defaultToolchain()
 	}
 
-	deps := flattenDeps(bin.Deps)
-	objsDir := bin.Out.WithSuffix(objsDirSuffix)
-	objs := compileSources(ctx, objsDir, bin.Srcs, bin.CompilerFlags, deps, toolchain)
+	deps := flattenDeps(append(bin.Deps, toolchain.StdDeps()...))
+	for i, _ := range deps {
+		deps[i] = deps[i].WithToolchain(ctx, toolchain)
+	}
+	objs := compileSources(ctx, bin.Srcs, bin.CompilerFlags, deps, toolchain)
 
 	ins := objs
 	alwaysLinkLibs := []core.Path{}
@@ -177,6 +221,6 @@ func (bin Binary) Build(ctx core.Context) {
 		Out:   bin.Out,
 		Ins:   ins,
 		Cmd:   cmd,
-		Descr: fmt.Sprintf("LD %s", bin.Out.Relative()),
+		Descr: fmt.Sprintf("LD (toolchain: %s) %s", toolchain.Name(), bin.Out.Relative()),
 	})
 }

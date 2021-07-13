@@ -8,11 +8,14 @@ import (
 )
 
 type Toolchain interface {
+	Name() string
 	ObjectFile(out core.OutPath, depfile core.OutPath, flags []string, includes []core.Path, src core.Path) string
 	StaticLibrary(out core.Path, objs []core.Path) string
 	SharedLibrary(out core.Path, objs []core.Path) string
 	Binary(out core.Path, objs []core.Path, alwaysLinkLibs []core.Path, libs []core.Path, flags []string, script core.Path) string
 	EmbeddedBlob(out core.OutPath, src core.Path) string
+	RawBinary(out core.Path, elfSrc core.Path) string
+	StdDeps() []Dep
 }
 
 // Toolchain represents a C++ toolchain.
@@ -25,13 +28,24 @@ type GccToolchain struct {
 	Objcopy core.GlobalPath
 	Ld      core.GlobalPath
 
-	Includes []core.Path
+	Includes     []core.Path
+	Deps         []Dep
+	LinkerScript core.Path
 
 	CompilerFlags []string
 	LinkerFlags   []string
 
-	ArchName   string
-	TargetName string
+	ToolchainName string
+	ArchName      string
+	TargetName    string
+}
+
+func (gcc GccToolchain) NewWithStdLib(includes []core.Path, deps []Dep, linkerScript core.Path, toolchainName string) GccToolchain {
+	gcc.Includes = includes
+	gcc.Deps = deps
+	gcc.LinkerScript = linkerScript
+	gcc.ToolchainName = toolchainName
+	return gcc
 }
 
 // ObjectFile generates a compile command.
@@ -77,6 +91,8 @@ func (gcc GccToolchain) Binary(out core.Path, objs []core.Path, alwaysLinkLibs [
 	flags = append(gcc.LinkerFlags, flags...)
 	if script != nil {
 		flags = append(flags, "-T", fmt.Sprintf("%q", script))
+	} else if gcc.LinkerScript != nil {
+		flags = append(flags, "-T", fmt.Sprintf("%q", gcc.LinkerScript))
 	}
 
 	return fmt.Sprintf(
@@ -89,12 +105,30 @@ func (gcc GccToolchain) Binary(out core.Path, objs []core.Path, alwaysLinkLibs [
 		strings.Join(flags, " "))
 }
 
+// EmbeddedBlob creates an object file from any binary blob of data
 func (gcc GccToolchain) EmbeddedBlob(out core.OutPath, src core.Path) string {
 	return fmt.Sprintf(
 		"%q -r -b binary -o %q %q",
 		gcc.Ld,
 		out,
 		src)
+}
+
+// RawBinary strips ELF metadata to create a raw binary image
+func (gcc GccToolchain) RawBinary(out core.Path, elfSrc core.Path) string {
+	return fmt.Sprintf(
+		"%q -O binary %q %q",
+		gcc.Objcopy,
+		elfSrc,
+		out)
+}
+
+func (gcc GccToolchain) StdDeps() []Dep {
+	return gcc.Deps
+}
+
+func (gcc GccToolchain) Name() string {
+	return gcc.ToolchainName
 }
 
 func joinQuoted(paths []core.Path) string {
@@ -105,7 +139,17 @@ func joinQuoted(paths []core.Path) string {
 	return b.String()
 }
 
-var DefaultToolchain = GccToolchain{
+var toolchains = make(map[string]Toolchain)
+
+func (gcc GccToolchain) Register() Toolchain {
+	if _, found := toolchains[gcc.Name()]; found {
+		core.Fatal("A toolchain with name %s has already been registered", gcc.Name())
+	}
+	toolchains[gcc.Name()] = gcc
+	return gcc
+}
+
+var NativeGcc = GccToolchain{
 	Ar:      core.NewGlobalPath("ar"),
 	As:      core.NewGlobalPath("as"),
 	Cc:      core.NewGlobalPath("gcc"),
@@ -116,4 +160,20 @@ var DefaultToolchain = GccToolchain{
 
 	CompilerFlags: []string{"-std=c++14", "-O3", "-fdiagnostics-color=always"},
 	LinkerFlags:   []string{"-fdiagnostics-color=always"},
+
+	ToolchainName: "native-gcc",
+}.Register()
+
+var defaultToolchainFlag = core.StringFlag{
+	Name:        "cc-toolchain",
+	Description: "Default toolchain to compile generic C/C++ targets",
+	DefaultFn:   func() string { return NativeGcc.Name() },
+}.Register()
+
+func defaultToolchain() Toolchain {
+	if toolchain, ok := toolchains[defaultToolchainFlag.Value()]; ok {
+		return toolchain
+	}
+	core.Fatal("No toolchain has been registered with the name %s", defaultToolchainFlag.Value())
+	return nil
 }
