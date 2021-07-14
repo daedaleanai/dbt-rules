@@ -118,7 +118,7 @@ func (lib Library) Build(ctx core.Context) {
 	}
 
 	if lib.multipleToolchains {
-		if lib.Toolchain == nil {
+		if lib.Out == lib.baseOut {
 			var defaultLib = lib.WithToolchain(ctx, defaultToolchain())
 			ctx.AddBuildStep(core.BuildStep{
 				Out: lib.Out,
