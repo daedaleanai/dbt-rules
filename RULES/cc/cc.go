@@ -119,12 +119,11 @@ func (lib Library) Build(ctx core.Context) {
 
 	if lib.multipleToolchains {
 		if lib.Out == lib.baseOut {
-			var defaultLib = lib.WithToolchain(ctx, defaultToolchain())
-			ctx.AddBuildStep(core.BuildStep{
-				Out: lib.Out,
-				Ins: []core.Path{defaultLib.Out},
-				Cmd: fmt.Sprintf("cp %s %s", defaultLib.Out, lib.Out),
-			})
+			var defaultLib = core.CopyFile{
+				From: lib.WithToolchain(ctx, defaultToolchain()).Out,
+				To: lib.Out,
+			}
+			defaultLib.Build(ctx)
 			return
 		}
 		if _, found := lib.toolchainMap[toolchain.Name()]; found {
