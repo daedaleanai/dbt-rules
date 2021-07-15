@@ -42,6 +42,35 @@ func (obj ObjectFile) out() core.OutPath {
 	return obj.Src.WithPrefix(toolchain.Name() + "/").WithExt("o")
 }
 
+// BlobObject creates a relocatable object file from any blob of data.
+type BlobObject struct {
+	In        core.Path
+	Toolchain Toolchain
+}
+
+// Build a BlobObject.
+func (blob BlobObject) Build(ctx core.Context) {
+	toolchain := blob.Toolchain
+	if toolchain == nil {
+		toolchain = defaultToolchain()
+	}
+
+	ctx.AddBuildStep(core.BuildStep{
+		Out:   blob.out(),
+		In:    blob.In,
+		Cmd:   blob.Toolchain.BlobObject(blob.out(), blob.In),
+		Descr: fmt.Sprintf("BLOB (toolchain: %s) %s", toolchain.Name(), blob.out().Relative()),
+	})
+}
+
+func (blob BlobObject) out() core.OutPath {
+	toolchain := blob.Toolchain
+	if toolchain == nil {
+		toolchain = defaultToolchain()
+	}
+	return blob.In.WithPrefix(toolchain.Name() + "/").WithExt("blob.o")
+}
+
 func flattenDepsRec(deps []Dep, visited map[string]bool) []Library {
 	flatDeps := []Library{}
 	for _, dep := range deps {
@@ -90,6 +119,7 @@ type Dep interface {
 type Library struct {
 	Out           core.OutPath
 	Srcs          []core.Path
+	Blobs         []core.Path
 	Objs          []core.Path
 	Includes      []core.Path
 	CompilerFlags []string
@@ -133,8 +163,15 @@ func (lib Library) Build(ctx core.Context) {
 	for i, _ := range deps {
 		deps[i] = deps[i].WithToolchain(ctx, toolchain)
 	}
+
 	objs := compileSources(ctx, lib.Srcs, lib.CompilerFlags, deps, toolchain)
 	objs = append(objs, lib.Objs...)
+
+	for _, blob := range lib.Blobs {
+		blobObject := BlobObject{In: blob, Toolchain: toolchain}
+		blobObject.Build(ctx)
+		objs = append(objs, blobObject.out())
+	}
 
 	var cmd, descr string
 	if lib.Shared {
@@ -220,6 +257,8 @@ func (bin Binary) Build(ctx core.Context) {
 
 	if bin.Script != nil {
 		ins = append(ins, bin.Script)
+	} else if toolchain.Script() != nil {
+		ins = append(ins, toolchain.Script())
 	}
 
 	cmd := toolchain.Binary(bin.Out, objs, alwaysLinkLibs, otherLibs, bin.LinkerFlags, bin.Script)

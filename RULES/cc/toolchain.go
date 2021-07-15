@@ -13,9 +13,10 @@ type Toolchain interface {
 	StaticLibrary(out core.Path, objs []core.Path) string
 	SharedLibrary(out core.Path, objs []core.Path) string
 	Binary(out core.Path, objs []core.Path, alwaysLinkLibs []core.Path, libs []core.Path, flags []string, script core.Path) string
-	EmbeddedBlob(out core.OutPath, src core.Path) string
+	BlobObject(out core.OutPath, src core.Path) string
 	RawBinary(out core.OutPath, elfSrc core.Path) string
 	StdDeps() []Dep
+	Script() core.Path
 }
 
 // Toolchain represents a C++ toolchain.
@@ -105,8 +106,8 @@ func (gcc GccToolchain) Binary(out core.Path, objs []core.Path, alwaysLinkLibs [
 		strings.Join(flags, " "))
 }
 
-// EmbeddedBlob creates an object file from any binary blob of data
-func (gcc GccToolchain) EmbeddedBlob(out core.OutPath, src core.Path) string {
+// BlobObject creates an object file from any binary blob of data
+func (gcc GccToolchain) BlobObject(out core.OutPath, src core.Path) string {
 	return fmt.Sprintf(
 		"%q -r -b binary -o %q %q",
 		gcc.Ld,
@@ -127,6 +128,9 @@ func (gcc GccToolchain) StdDeps() []Dep {
 	return gcc.Deps
 }
 
+func (gcc GccToolchain) Script() core.Path {
+	return gcc.LinkerScript
+}
 func (gcc GccToolchain) Name() string {
 	return gcc.ToolchainName
 }
