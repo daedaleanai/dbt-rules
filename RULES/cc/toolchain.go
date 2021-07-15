@@ -14,7 +14,7 @@ type Toolchain interface {
 	SharedLibrary(out core.Path, objs []core.Path) string
 	Binary(out core.Path, objs []core.Path, alwaysLinkLibs []core.Path, libs []core.Path, flags []string, script core.Path) string
 	EmbeddedBlob(out core.OutPath, src core.Path) string
-	RawBinary(out core.Path, elfSrc core.Path) string
+	RawBinary(out core.OutPath, elfSrc core.Path) string
 	StdDeps() []Dep
 }
 
@@ -115,7 +115,7 @@ func (gcc GccToolchain) EmbeddedBlob(out core.OutPath, src core.Path) string {
 }
 
 // RawBinary strips ELF metadata to create a raw binary image
-func (gcc GccToolchain) RawBinary(out core.Path, elfSrc core.Path) string {
+func (gcc GccToolchain) RawBinary(out core.OutPath, elfSrc core.Path) string {
 	return fmt.Sprintf(
 		"%q -O binary %q %q",
 		gcc.Objcopy,

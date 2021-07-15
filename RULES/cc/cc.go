@@ -112,16 +112,13 @@ func (lib Library) MultipleToolchains() Library {
 
 // Build a Library.
 func (lib Library) Build(ctx core.Context) {
-	toolchain := lib.Toolchain
-	if toolchain == nil {
-		toolchain = defaultToolchain()
-	}
+	toolchain := lib.toolchain()
 
 	if lib.multipleToolchains {
 		if lib.Out == lib.baseOut {
 			var defaultLib = core.CopyFile{
 				From: lib.WithToolchain(ctx, defaultToolchain()).Out,
-				To: lib.Out,
+				To:   lib.Out,
 			}
 			defaultLib.Build(ctx)
 			return
@@ -158,6 +155,9 @@ func (lib Library) Build(ctx core.Context) {
 
 func (lib Library) WithToolchain(ctx core.Context, toolchain Toolchain) Library {
 	if !lib.multipleToolchains {
+		if lib.toolchain().Name() != toolchain.Name() {
+			core.Fatal("Library %s does not support toolchain %s", lib.Out.Relative(), toolchain.Name())
+		}
 		return lib
 	}
 	if otherLib, found := lib.toolchainMap[toolchain.Name()]; found {
@@ -173,6 +173,13 @@ func (lib Library) WithToolchain(ctx core.Context, toolchain Toolchain) Library 
 // CcLibrary for Library is just the identity.
 func (lib Library) CcLibrary() Library {
 	return lib
+}
+
+func (lib Library) toolchain() Toolchain {
+	if lib.Toolchain == nil {
+		return defaultToolchain()
+	}
+	return lib.Toolchain
 }
 
 // Binary builds and links an executable.
