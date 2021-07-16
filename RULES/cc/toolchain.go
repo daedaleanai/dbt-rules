@@ -145,15 +145,15 @@ func joinQuoted(paths []core.Path) string {
 
 var toolchains = make(map[string]Toolchain)
 
-func (gcc GccToolchain) Register() Toolchain {
-	if _, found := toolchains[gcc.Name()]; found {
-		core.Fatal("A toolchain with name %s has already been registered", gcc.Name())
+func RegisterToolchain(toolchain Toolchain) Toolchain {
+	if _, found := toolchains[toolchain.Name()]; found {
+		core.Fatal("A toolchain with name %s has already been registered", toolchain.Name())
 	}
-	toolchains[gcc.Name()] = gcc
-	return gcc
+	toolchains[toolchain.Name()] = toolchain
+	return toolchain
 }
 
-var NativeGcc = GccToolchain{
+var NativeGcc = RegisterToolchain(GccToolchain{
 	Ar:      core.NewGlobalPath("ar"),
 	As:      core.NewGlobalPath("as"),
 	Cc:      core.NewGlobalPath("gcc"),
@@ -166,7 +166,7 @@ var NativeGcc = GccToolchain{
 	LinkerFlags:   []string{"-fdiagnostics-color=always"},
 
 	ToolchainName: "native-gcc",
-}.Register()
+})
 
 var defaultToolchainFlag = core.StringFlag{
 	Name:        "cc-toolchain",
