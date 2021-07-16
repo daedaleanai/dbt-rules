@@ -16,11 +16,7 @@ type ObjectFile struct {
 
 // Build an ObjectFile.
 func (obj ObjectFile) Build(ctx core.Context) {
-	toolchain := obj.Toolchain
-	if toolchain == nil {
-		toolchain = defaultToolchain()
-	}
-
+	toolchain := toolchainOrDefault(obj.Toolchain)
 	depfile := obj.out().WithExt("d")
 	cmd := toolchain.ObjectFile(obj.out(), depfile, obj.Flags, obj.Includes, obj.Src)
 	ctx.AddBuildStep(core.BuildStep{
@@ -48,11 +44,7 @@ type BlobObject struct {
 
 // Build a BlobObject.
 func (blob BlobObject) Build(ctx core.Context) {
-	toolchain := blob.Toolchain
-	if toolchain == nil {
-		toolchain = defaultToolchain()
-	}
-
+	toolchain := toolchainOrDefault(blob.Toolchain)
 	ctx.AddBuildStep(core.BuildStep{
 		Out:   blob.out(),
 		In:    blob.In,
@@ -62,10 +54,7 @@ func (blob BlobObject) Build(ctx core.Context) {
 }
 
 func (blob BlobObject) out() core.OutPath {
-	toolchain := blob.Toolchain
-	if toolchain == nil {
-		toolchain = defaultToolchain()
-	}
+	toolchain := toolchainOrDefault(blob.Toolchain)
 	return blob.In.WithPrefix(toolchain.Name() + "/").WithExt("blob.o")
 }
 
@@ -135,6 +124,7 @@ func (lib Library) MultipleToolchains() Library {
 	if lib.Out == nil {
 		core.Fatal("Out field is required for cc.Library")
 	}
+
 	lib.multipleToolchains = true
 	lib.toolchainMap = make(map[string]Library)
 	lib.baseOut = lib.Out
@@ -147,7 +137,7 @@ func (lib Library) Build(ctx core.Context) {
 		core.Fatal("Out field is required for cc.Library")
 	}
 
-	toolchain := lib.toolchain()
+	toolchain := toolchainOrDefault(lib.Toolchain)
 
 	if lib.multipleToolchains {
 		if lib.Out == lib.baseOut {
@@ -197,7 +187,7 @@ func (lib Library) Build(ctx core.Context) {
 
 func (lib Library) WithToolchain(ctx core.Context, toolchain Toolchain) Library {
 	if !lib.multipleToolchains {
-		if lib.toolchain().Name() != toolchain.Name() {
+		if toolchainOrDefault(lib.Toolchain).Name() != toolchain.Name() {
 			core.Fatal("Library %s does not support toolchain %s", lib.Out.Relative(), toolchain.Name())
 		}
 		return lib
@@ -217,13 +207,6 @@ func (lib Library) CcLibrary() Library {
 	return lib
 }
 
-func (lib Library) toolchain() Toolchain {
-	if lib.Toolchain == nil {
-		return defaultToolchain()
-	}
-	return lib.Toolchain
-}
-
 // Binary builds and links an executable.
 type Binary struct {
 	Out           core.OutPath
@@ -241,10 +224,7 @@ func (bin Binary) Build(ctx core.Context) {
 		core.Fatal("Out field is required for cc.Binary")
 	}
 
-	toolchain := bin.Toolchain
-	if toolchain == nil {
-		toolchain = defaultToolchain()
-	}
+	toolchain := toolchainOrDefault(bin.Toolchain)
 
 	deps := flattenDeps(append(bin.Deps, toolchain.StdDeps()...))
 	for i, _ := range deps {

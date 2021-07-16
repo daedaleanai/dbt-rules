@@ -181,3 +181,10 @@ func defaultToolchain() Toolchain {
 	core.Fatal("No toolchain has been registered with the name %s", defaultToolchainFlag.Value())
 	return nil
 }
+
+func toolchainOrDefault(toolchain Toolchain) Toolchain {
+	if toolchain == nil {
+		return defaultToolchain()
+	}
+	return toolchain
+}
