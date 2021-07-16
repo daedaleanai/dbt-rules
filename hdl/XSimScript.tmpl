@@ -63,7 +63,10 @@ EOF
 {{range .Ips}}
     NAME=`basename {{ . }} .xci`
     SIM=`find {{ $outDir }}/$NAME/sim -type f`
-    SRCS=`find {{ $outDir }}/$NAME/source -type f`
+    SRCS=""
+    if [ -d "{{ $outDir }}/$NAME/source" ]; then
+        SRCS=`find {{ $outDir }}/$NAME/source -type f`
+    fi
 
     for SRC in $SIM; do
         echo "    xvlog -work {{ $name }} --include {{ $incDir }} --sv $SRC" >> {{ $outScript }}
