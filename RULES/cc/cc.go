@@ -6,8 +6,6 @@ import (
 	"dbt-rules/RULES/core"
 )
 
-const objsDirSuffix = "-OBJS"
-
 // ObjectFile compiles a single C++ source file.
 type ObjectFile struct {
 	Src       core.Path
@@ -134,6 +132,9 @@ type Library struct {
 }
 
 func (lib Library) MultipleToolchains() Library {
+	if lib.Out == nil {
+		core.Fatal("Out field is required for cc.Library")
+	}
 	lib.multipleToolchains = true
 	lib.toolchainMap = make(map[string]Library)
 	lib.baseOut = lib.Out
@@ -142,6 +143,10 @@ func (lib Library) MultipleToolchains() Library {
 
 // Build a Library.
 func (lib Library) Build(ctx core.Context) {
+	if lib.Out == nil {
+		core.Fatal("Out field is required for cc.Library")
+	}
+
 	toolchain := lib.toolchain()
 
 	if lib.multipleToolchains {
@@ -232,6 +237,10 @@ type Binary struct {
 
 // Build a Binary.
 func (bin Binary) Build(ctx core.Context) {
+	if bin.Out == nil {
+		core.Fatal("Out field is required for cc.Binary")
+	}
+
 	toolchain := bin.Toolchain
 	if toolchain == nil {
 		toolchain = defaultToolchain()
