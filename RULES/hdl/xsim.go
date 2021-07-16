@@ -42,7 +42,7 @@ func (rule SimulationXsim) Build(ctx core.Context) {
 
 	srcs = append(srcs, rule.Srcs...)
 	ins = append(ins, rule.Srcs...)
-	for _, ip := range rule.Ips {
+	for _, ip := range FlattenIpGraph(rule.Ips) {
 		for _, src := range ip.Sources() {
 			if strings.HasSuffix(src.String(), ".xci") {
 				ips = append(ips, src)

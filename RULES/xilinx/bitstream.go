@@ -113,7 +113,7 @@ func (rule Bitstream) Build(ctx core.Context) {
 	constrs := []core.Path{}
 
 	ins := []core.Path{}
-	for _, ip := range rule.Ips {
+	for _, ip := range hdl.FlattenIpGraph(rule.Ips) {
 		for _, src := range ip.Sources() {
 			if strings.HasSuffix(src.String(), ".v") || strings.HasSuffix(src.String(), ".sv") {
 				rtls = append(rtls, src)

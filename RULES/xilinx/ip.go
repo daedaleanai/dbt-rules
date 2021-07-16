@@ -127,3 +127,7 @@ func (rule Ip) Data() []core.Path {
 	}
 	return others
 }
+
+func (rule Ip) Ips() []hdl.Ip {
+	return []hdl.Ip{}
+}

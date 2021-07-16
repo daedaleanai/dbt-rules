@@ -21,11 +21,13 @@ var PartName = core.StringFlag{
 type Ip interface {
 	Sources() []core.Path
 	Data() []core.Path
+	Ips() []Ip
 }
 
 type Library struct {
 	Srcs      []core.Path
 	DataFiles []core.Path
+	IpDeps    []Ip
 }
 
 func (lib Library) Sources() []core.Path {
@@ -34,4 +36,8 @@ func (lib Library) Sources() []core.Path {
 
 func (lib Library) Data() []core.Path {
 	return lib.DataFiles
+}
+
+func (lib Library) Ips() []Ip {
+	return lib.IpDeps
 }
