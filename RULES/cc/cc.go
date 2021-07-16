@@ -29,10 +29,7 @@ func (obj ObjectFile) Build(ctx core.Context) {
 }
 
 func (obj ObjectFile) out() core.OutPath {
-	toolchain := obj.Toolchain
-	if toolchain == nil {
-		toolchain = defaultToolchain()
-	}
+	toolchain := toolchainOrDefault(obj.Toolchain)
 	return obj.Src.WithPrefix(toolchain.Name() + "/").WithExt("o")
 }
 
