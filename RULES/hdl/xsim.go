@@ -37,7 +37,6 @@ func (rule SimulationXsim) Build(ctx core.Context) {
 
 	ins := []core.Path{}
 	srcs := []core.Path{}
-	src_pkgs := []core.Path{}
 	ips := []core.Path{}
 
 	srcs = append(srcs, rule.Srcs...)
@@ -47,18 +46,11 @@ func (rule SimulationXsim) Build(ctx core.Context) {
 			if strings.HasSuffix(src.String(), ".xci") {
 				ips = append(ips, src)
 			} else {
-				if strings.HasSuffix(src.String(), "_pkg.sv") ||
-					strings.HasSuffix(src.String(), "_pkg.v") {
-					src_pkgs = append(src_pkgs, src)
-				} else {
-					srcs = append(srcs, src)
-				}
+				srcs = append(srcs, src)
 			}
 			ins = append(ins, src)
 		}
 	}
-
-	srcs = append(src_pkgs, srcs...)
 
 	data := XSimScriptParams{
 		PartName:     PartName.Value(),
