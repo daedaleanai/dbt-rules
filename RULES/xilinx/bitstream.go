@@ -13,6 +13,7 @@ type BuildFileScriptParams struct {
 	PartName  string
 	BoardName string
 	Name      string
+	IncDir    core.Path
 	Timing    core.Path
 	Ips       []core.Path
 	Constrs   []core.Path
@@ -51,7 +52,7 @@ read_verilog -sv "{{ . }}"
 read_xdc "{{ . }}"
 {{ end }}
 
-synth_design -top {{ .Name }}
+synth_design -top {{ .Name }} -include_dirs {{ .IncDir }}
 opt_design
 place_design
 phys_opt_design
@@ -144,6 +145,7 @@ func (rule Bitstream) Build(ctx core.Context) {
 		Name:      rule.Name,
 		PartName:  hdl.PartName.Value(),
 		BoardName: hdl.BoardName.Value(),
+		IncDir:    core.SourcePath(""),
 		Timing:    outTiming,
 		Ips:       ips,
 		Rtls:      rtls,
