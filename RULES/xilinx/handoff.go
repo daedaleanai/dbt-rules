@@ -51,10 +51,18 @@ EOF
 rm -rf ${TMPDIR}
 `
 
+// Create the software handoff: the First Stage Bootloader and the Platform Management firmware
 type Handoff struct {
-	Fsbl    core.OutPath
-	PmuFw   core.OutPath
-	Ip      Ip
+	// The First Stage Bootloader
+	Fsbl core.OutPath
+
+	// The Platform Management Firmware
+	PmuFw core.OutPath
+
+	// The ZynqMP IP for which the handoff binaries are to be created
+	Ip Ip
+
+	// Platform-specific patches to be applied, if any. Go-style regexps are accepted.
 	Patches map[string]core.Path
 }
 

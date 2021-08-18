@@ -43,10 +43,19 @@ EOF
 rm -rf ${TMPDIR}
 `
 
+// The system device tree description for the Linux kernel
 type DeviceTree struct {
-	Out      core.OutPath
-	In       core.Path
-	Ip       Ip
+	// Final binary device tree
+	Out core.OutPath
+
+	// Top level device tree source to be compiled. I should include `system-top.dts`, the board specific source device
+	// tree if any, and whatever definitions or overrides are specific for the given system.
+	In core.Path
+
+	// The ZynqMP IP block this device tree is intended for
+	Ip Ip
+
+	// A map of board specific source tree overrides. Go-style regexp are accepted, including `.*`.
 	BoardDts map[string]core.Path
 }
 

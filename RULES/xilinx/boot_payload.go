@@ -33,6 +33,8 @@ bootgen -arch zynqmp -image ${TMPFILE} -o {{ .Out }} -w | ( grep -E "^(ERROR|WAR
 rm -f ${TMPFILE}
 `
 
+// Build the bootloader payload file for ZynqMP, combining the platform management firmware and various stages of the
+// bootleader
 type BootPayload struct {
 	Out                core.OutPath
 	Handoff            Handoff

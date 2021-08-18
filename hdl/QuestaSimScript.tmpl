@@ -1,86 +1,82 @@
 #!/bin/bash
 
-set -eu -o pipefail
-
-{{ $name := .Name }}
 {{ $outDir := .OutDir }}
 {{ $outScript := .OutScript }}
-{{ $partName := .PartName }}
-{{ $boardName := .BoardName }}
-{{ $verbose := .Verbose }}
-{{ $incDir := .IncDir }}
+
+set -eu -o pipefail
+
+{{ if .Verbose }}
+set -x
+{{ end }}
 
 rm -rf {{ .OutDir }}
 mkdir -p {{ .OutDir }}
-TMPDIR=$(mktemp -d -t ci-XXXXXXXXXX)
-
-(
-    cd ${TMPDIR}
-
-    {{ range .Ips }}
-    NAME=`basename {{ . }} .xci`
-    mkdir $NAME
-    cd $NAME
-    cp {{ . }} .
-
-    cat > generate.tcl << EOF
-set_part "{{ $partName }}"
-set_property "board_part"         "{{ $boardName}}" [current_project]
-set_property "target_language"    "Verilog"         [current_project]
-
-set ip $NAME.xci
-read_ip \$ip
-generate_target simulation [get_files \$ip]
-EOF
-
-    {{ if $verbose }}
-    vivado -mode batch -nolog -nojournal  -notrace -source generate.tcl
-    find -type f
-    {{ else }}
-    vivado -mode batch -nolog -nojournal  -notrace -source generate.tcl | ( grep -E "^(ERROR|WARNING|CRITICAL)" || true )
-    {{ end }}
-    cd ..
-    {{ end }}
-
-    cp -af . {{ .OutDir }}
-)
 
 cat > {{ .OutScript }} <<EOF
 #!/bin/bash
 set -eu -o pipefail
 
-vlib work
-{{ range .Srcs }}vlog -svinputport=net +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} {{ . }}
+NEEDS_XSIM_GLBL=false
+EXTRA_MOD=
+SIMULATOR=questa
+SIM_FLAGS="-modelsimini {{ .OutDir }}/../modelsim.ini"
+SIM_SV_FLAGS="\${SIM_FLAGS} -svinputport=net +acc=rn -sv -nologo -quiet +incdir+{{ .IncDir }}"
+SIM_SV_COMPILER=vlog
+SIM_VHDL_FLAGS="\${SIM_FLAGS} -93"
+SIM_VHDL_COMPILER=vcom
+SIM_IP_DIR={{ .OutDir }}
+PROJECT_NAME={{ .Name }}
+
+{{ if ne .LibDir "" }}
+cp {{ .LibDir }}/modelsim.ini {{ .OutDir }}/..
+{{ end }}
+
+vlib {{ .Name }}
+vlib {{ .Name }}/work
+vmap work {{ .Name }}/work
+
+{{ range .Srcs }}
+    {{ if hasSuffix .String ".vhd" }}
+        \${SIM_VHDL_COMPILER} \${SIM_VHDL_FLAGS} {{ . }}
+    {{ else }}
+        \${SIM_SV_COMPILER} \${SIM_SV_FLAGS} {{ . }}
+    {{ end }}
 {{ end }}
 EOF
 
-{{range .Ips}}
-    NAME=`basename {{ . }} .xci`
-    SIM=`find {{ $outDir }}/$NAME/sim -type f`
-    SRCS=""
-    if [ -d "{{ $outDir }}/$NAME/source" ]; then
-        SRCS=`find {{ $outDir }}/$NAME/source -type f`
+{{ range .Ips }}
+(
+    cd {{ $outDir }}
+    tar zxf {{ . }}
+    SIM_SCRIPT={{ $outDir }}/`basename {{ . }} .tar.gz`/questa.sh
+    if [ ! -r ${SIM_SCRIPT} ]; then
+        SIM_SCRIPT={{ $outDir }}/`basename {{ . }} .tar.gz`/generic-sim.sh
+        if [ ! -r ${SIM_SCRIPT} ]; then
+            echo "[!] No simulation script for Questa exists"
+            exit 1
+        fi
     fi
+    cat >> {{ $outScript }} << EOF
+source ${SIM_SCRIPT}
+EOF
 
-    for SRC in $SIM; do
-        echo "vlog -svinputport=net +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} $SRC" >> {{ $outScript }}
-    done
-    for SRC in $SRCS; do
-        echo "vlog -svinputport=net +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} $SRC" >> {{ $outScript }}
-    done
-{{end}}
+)
+{{ end }}
 
     XSIMDIR=`which xsim`
-    XSIMIP=`dirname $XSIMDIR`/../data/xsim/ip/xsim_ip.ini
     GLBL=`dirname $XSIMDIR`/../data/verilog/src/glbl.v
 
     cat >> {{ .OutScript }} << EOF
-vlog -svinputport=net +acc=rn -sv -nologo -quiet +incdir+{{ $incDir }} $GLBL
+
+if [ x"\${NEEDS_XSIM_GLBL}" == xtrue ]; then
+    vlog \${SIM_SV_FLAGS} $GLBL
+    EXTRA_MOD=work.glbl
+fi
 
 if [ \$# -ge 1 ]; then
-    vsim -modelsimini {{ .LibDir }}/modelsim.ini {{range .Libs}}-L {{ . }} {{end}} work.board work.glbl "\$@"
+    vsim \${SIM_FLAGS} {{range .Libs}}-L {{ . }} {{end}} work.board \${EXTRA_MOD} "\$@"
 else
-    vsim -c -modelsimini {{ .LibDir }}/modelsim.ini {{range .Libs}}-L {{ . }} {{end}} work.board work.glbl -do {{ .OutSimScript }}
+    vsim -c \${SIM_FLAGS} {{range .Libs}}-L {{ . }} {{end}} work.board \${EXTRA_MOD} -do {{ .OutSimScript }}
 fi
 
 EOF
