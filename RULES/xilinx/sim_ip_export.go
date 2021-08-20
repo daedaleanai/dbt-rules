@@ -36,10 +36,18 @@ EOF
 )
 `
 
+// Export the Xilinx IP blocks to the an external simulator. The target simulator selection is based on the
+// `hdl-simulator` flag, currently only works for 'questa'.
 type ExportSimulatorIp struct {
-	Family   string
+	// Device Family, the following choices are valid: all, kintex7, virtex7, artix7, spartan7, zynq, kintexu,
+	// kintexuplus, virtexu, virtexuplus, zynquplus, zynquplusrfsoc, versal
+	Family string
+
+	// Valid choices are: verilog, vhdl, all
 	Language string
-	Library  string
+
+	// The simulation library to compile; one of: all, unisim, simprim
+	Library string
 }
 
 func (rule ExportSimulatorIp) Build(ctx core.Context) {

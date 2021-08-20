@@ -1,0 +1,49 @@
+#!/bin/bash
+set -eu -o pipefail
+
+cat > {{ .Out }} <<EOF
+{{range .BoardFiles}}
+set_param board.repoPaths [lappend board.repoPaths "{{ . }}"]
+{{end}}
+
+set_part "{{ .PartName }}"
+set_property "board_part"         "{{ .BoardName}}"       [current_project]
+set_property "target_language"    "Verilog"        [current_project]
+
+{{ range .Ips }}
+set path "{{ . }}"
+set normalized [file normalize [string range \$path 1 [string length \$path]]]
+set dir [file join [pwd] [file dirname \$normalized]]
+set filename [file tail \$normalized]
+file mkdir \$dir
+file copy "{{ . }}" \$dir
+set ip [file join \$dir \$filename]
+read_ip \$ip
+generate_target all [get_files \$ip]
+set_property GENERATE_SYNTH_CHECKPOINT true [get_files \$ip]
+synth_ip [get_files \$ip]
+{{ end }}
+
+report_ip_status
+
+{{ range .Rtls }}
+    {{ if hasSuffix .String ".vhd" }}
+        read_vhdl "{{ . }}"
+    {{ else }}
+        read_verilog -sv "{{ . }}"
+    {{ end }}
+{{ end }}
+
+{{ range .Constrs }}
+read_xdc "{{ . }}"
+{{ end }}
+
+synth_design -top {{ .Name }} -include_dirs {{ .IncDir }}
+opt_design
+place_design
+phys_opt_design
+route_design
+report_timing_summary -file {{ .Timing }}
+write_bitstream -force bitstream.bit
+write_debug_probes -force bitstream.ltx
+EOF

@@ -41,9 +41,9 @@ func (rule SimulationXsim) Build(ctx core.Context) {
 
 	for _, ip := range FlattenIpGraph(rule.Ips) {
 		for _, src := range ip.Sources() {
-			if strings.HasSuffix(src.String(), ".xci") {
+			if IsSimulationArchive(src.String()) {
 				ips = append(ips, src)
-			} else {
+			} else if IsRtl(src.String()) {
 				srcs = append(srcs, src)
 			}
 			ins = append(ins, src)

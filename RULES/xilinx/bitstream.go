@@ -2,65 +2,24 @@ package xilinx
 
 import (
 	"fmt"
-	"strings"
 
 	"dbt-rules/RULES/core"
 	"dbt-rules/RULES/hdl"
+	h "dbt-rules/hdl"
 )
 
 type BuildFileScriptParams struct {
-	Out       core.Path
-	PartName  string
-	BoardName string
-	Name      string
-	Timing    core.Path
-	Ips       []core.Path
-	Constrs   []core.Path
-	Rtls      []core.Path
+	Out        core.Path
+	PartName   string
+	BoardName  string
+	Name       string
+	IncDir     core.Path
+	Timing     core.Path
+	BoardFiles []core.Path
+	Ips        []core.Path
+	Constrs    []core.Path
+	Rtls       []core.Path
 }
-
-var buildFileScript = `#!/bin/bash
-set -eu -o pipefail
-
-cat > {{ .Out }} <<EOF
-set_part "{{ .PartName }}"
-set_property "board_part"         "{{ .BoardName}}"       [current_project]
-set_property "target_language"    "Verilog"        [current_project]
-
-{{ range .Ips }}
-set path "{{ . }}"
-set normalized [file normalize [string range \$path 1 [string length \$path]]]
-set dir [file join [pwd] [file dirname \$normalized]]
-set filename [file tail \$normalized]
-file mkdir \$dir
-file copy "{{ . }}" \$dir
-set ip [file join \$dir \$filename]
-read_ip \$ip
-generate_target all [get_files \$ip]
-set_property GENERATE_SYNTH_CHECKPOINT true [get_files \$ip]
-synth_ip [get_files \$ip]
-{{ end }}
-
-report_ip_status
-
-{{ range .Rtls }}
-read_verilog -sv "{{ . }}"
-{{ end }}
-
-{{ range .Constrs }}
-read_xdc "{{ . }}"
-{{ end }}
-
-synth_design -top {{ .Name }}
-opt_design
-place_design
-phys_opt_design
-route_design
-report_timing_summary -file {{ .Timing }}
-write_bitstream -force bitstream.bit
-write_debug_probes -force bitstream.ltx
-EOF
-`
 
 type RunSynthesisScriptParams struct {
 	BuildScript core.Path
@@ -70,41 +29,26 @@ type RunSynthesisScriptParams struct {
 	Postprocess string
 }
 
-var runSynthesisScript = `#!/bin/bash
-set -eu -o pipefail
-
-TMPDIR=$(mktemp -d -t ci-XXXXXXXXXX)
-(
-    cd $TMPDIR
-    {{ if .Verbose }}
-    vivado -mode batch -nolog -nojournal  -notrace -source {{ .BuildScript }}
-    {{ else }}
-    vivado -mode batch -nolog -nojournal  -notrace -source {{ .BuildScript }} | ( grep -E "^(ERROR|WARNING|CRITICAL)" || true )
-    {{ end }}
-    echo "all: { bitstream.bit }" > bitstream.bif
-    {{ if ne .Postprocess "" }}
-    {{ if .Verbose }}
-    bootgen -image bitstream.bif -arch zynqmp -process_bitstream {{ .Postprocess }} -w
-    {{ else }}
-    bootgen -image bitstream.bif -arch zynqmp -process_bitstream {{ .Postprocess }} -w | ( grep -E "^\[ERROR\]" || true )
-    {{ end }}
-    cp bitstream.bit.bin {{ .Bitstream }}
-    {{ else }}
-    cp bitstream.bit {{ .Bitstream }}
-    {{ end }}
-    cp bitstream.ltx {{ .DebugProbes }}
-)
-
-rm -rf ${TMPDIR}
-`
-
+// Build a bitstream to program the FPGA
 type Bitstream struct {
-	Name        string
-	Src         core.Path
+	// Name of the top-level module to implement
+	Name string
+
+	// Source file defining the top-level module
+	Src core.Path
+
+	// Constraint definitions file for the design
 	Constraints core.Path
-	Ips         []hdl.Ip
+
+	// List of IP blocks to be included
+	Ips []hdl.Ip
+
+	// Postprocessing algorithm; either "bin" (for loading with U-Boot) or ""
 	Postprocess string
-	Verbose     bool
+
+	// List of directories with board definitions
+	BoardFiles []core.Path
+	Verbose    bool
 }
 
 func (rule Bitstream) Build(ctx core.Context) {
@@ -115,11 +59,11 @@ func (rule Bitstream) Build(ctx core.Context) {
 	ins := []core.Path{}
 	for _, ip := range hdl.FlattenIpGraph(rule.Ips) {
 		for _, src := range ip.Sources() {
-			if strings.HasSuffix(src.String(), ".v") || strings.HasSuffix(src.String(), ".sv") {
+			if hdl.IsRtl(src.String()) {
 				rtls = append(rtls, src)
-			} else if strings.HasSuffix(src.String(), ".xdc") {
+			} else if hdl.IsConstraint(src.String()) {
 				constrs = append(constrs, src)
-			} else if strings.HasSuffix(src.String(), ".xci") {
+			} else if hdl.IsXilinxIpCheckpoint(src.String()) {
 				ips = append(ips, src)
 			}
 			ins = append(ins, src)
@@ -140,20 +84,22 @@ func (rule Bitstream) Build(ctx core.Context) {
 	}
 
 	bfData := BuildFileScriptParams{
-		Out:       outBf,
-		Name:      rule.Name,
-		PartName:  hdl.PartName.Value(),
-		BoardName: hdl.BoardName.Value(),
-		Timing:    outTiming,
-		Ips:       ips,
-		Rtls:      rtls,
-		Constrs:   constrs,
+		Out:        outBf,
+		Name:       rule.Name,
+		PartName:   hdl.PartName.Value(),
+		BoardName:  hdl.BoardName.Value(),
+		BoardFiles: rule.BoardFiles,
+		IncDir:     core.SourcePath(""),
+		Timing:     outTiming,
+		Ips:        ips,
+		Rtls:       rtls,
+		Constrs:    constrs,
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
 		Out:    outBf,
 		Ins:    ins,
-		Script: core.CompileTemplate(buildFileScript, "build-file-script", bfData),
+		Script: core.CompileTemplateFile(h.XilinxBuildScriptTmpl.String(), bfData),
 		Descr:  fmt.Sprintf("Generating a bitstream build file %s", outBf.Relative()),
 	})
 
@@ -169,7 +115,7 @@ func (rule Bitstream) Build(ctx core.Context) {
 	ctx.AddBuildStep(core.BuildStep{
 		Outs:   outs,
 		In:     outBf,
-		Script: core.CompileTemplate(runSynthesisScript, "run-synthesis-script", rsData),
+		Script: core.CompileTemplateFile(h.XilinxRunSynthesisScriptTmpl.String(), rsData),
 		Descr:  fmt.Sprintf("Generating bitstream %s", outBitstream.Relative()),
 	})
 }

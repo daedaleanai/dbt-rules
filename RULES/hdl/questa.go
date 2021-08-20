@@ -2,7 +2,6 @@ package hdl
 
 import (
 	"fmt"
-	"strings"
 
 	"dbt-rules/RULES/core"
 	"dbt-rules/hdl"
@@ -42,9 +41,9 @@ func (rule SimulationQuesta) Build(ctx core.Context) {
 
 	for _, ip := range FlattenIpGraph(rule.Ips) {
 		for _, src := range ip.Sources() {
-			if strings.HasSuffix(src.String(), ".xci") {
+			if IsSimulationArchive(src.String()) {
 				ips = append(ips, src)
-			} else {
+			} else if IsRtl(src.String()) {
 				srcs = append(srcs, src)
 			}
 			ins = append(ins, src)
@@ -56,7 +55,7 @@ func (rule SimulationQuesta) Build(ctx core.Context) {
 	data := QuestaSimScriptParams{
 		PartName:     PartName.Value(),
 		BoardName:    BoardName.Value(),
-		Name:         strings.ToLower(rule.Name),
+		Name:         rule.Name,
 		OutDir:       outDir,
 		OutScript:    outScript,
 		OutSimScript: outSimScript,

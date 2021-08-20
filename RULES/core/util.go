@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path"
+	"sort"
+	"strings"
 	"text/template"
 )
 
@@ -56,10 +59,14 @@ func Fatal(format string, a ...interface{}) {
 
 // Compile a go text template, execute it, and return the result as a string
 func CompileTemplate(tmpl, name string, data interface{}) string {
-	t, err := template.New(name).Parse(tmpl)
+	t, err := template.New(name).Funcs(template.FuncMap{
+		"hasSuffix": strings.HasSuffix,
+	}).Parse(tmpl)
+
 	if err != nil {
 		Fatal("Cannot parse the IP generator template: %s", err)
 	}
+
 	var buff bytes.Buffer
 	err = t.Execute(&buff, data)
 	if err != nil {
@@ -70,14 +77,48 @@ func CompileTemplate(tmpl, name string, data interface{}) string {
 
 // Compile a go text template from a file, execute it, and return the result as a string
 func CompileTemplateFile(tmplFile string, data interface{}) string {
-	t, err := template.ParseFiles(tmplFile)
+	t, err := template.New(path.Base(tmplFile)).Funcs(template.FuncMap{
+		"hasSuffix": strings.HasSuffix,
+	}).ParseFiles(tmplFile)
+
 	if err != nil {
 		Fatal("Cannot parse the IP generator template: %s", err)
 	}
+
 	var buff bytes.Buffer
 	err = t.Execute(&buff, data)
 	if err != nil {
 		Fatal("Cannot execute the IP generator template: %s", err)
 	}
 	return buff.String()
+}
+
+// Get paths from a path map sorted by key
+func GetSortedPaths(pathMap map[string]Path) []Path {
+	keys := []string{}
+	for k, _ := range pathMap {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	paths := []Path{}
+	for _, k := range keys {
+		path := pathMap[k]
+		paths = append(paths, path)
+	}
+	return paths
+}
+
+// Get paths from a path map sorted by key
+func GetSortedOutPaths(pathMap map[string]OutPath) []OutPath {
+	keys := []string{}
+	for k, _ := range pathMap {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	paths := []OutPath{}
+	for _, k := range keys {
+		path := pathMap[k]
+		paths = append(paths, path)
+	}
+	return paths
 }

@@ -29,8 +29,11 @@ rsync --exclude=.git -az {{ .Repo }} ${TMPDIR}
 rm -rf ${TMPDIR}
 `
 
+// Build the U-Boot bootloader binary for the given board
 type UBoot struct {
-	Out     core.OutPath
+	Out core.OutPath
+
+	// Map of board names to U-Boot configurations. Go-style regexps accepted.
 	Configs map[string]string
 }
 
