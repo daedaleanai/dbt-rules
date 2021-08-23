@@ -17,5 +17,5 @@ func IsXilinxIpCheckpoint(path string) bool {
 }
 
 func IsSimulationArchive(path string) bool {
-	return strings.HasSuffix(path, ".xci")
+	return strings.HasSuffix(path, ".sim.tar.gz")
 }
