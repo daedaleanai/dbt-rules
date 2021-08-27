@@ -4,14 +4,13 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io/ioutil"
+	"os"
 	"path"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
 )
-
-const scriptFileMode = 0755
 
 type Context interface {
 	AddBuildStep(BuildStep)
@@ -23,14 +22,16 @@ type Context interface {
 // BuildStep represents one build step (i.e., one build command).
 // Each BuildStep produces `Out` and `Outs` from `Ins` and `In` by running `Cmd`.
 type BuildStep struct {
-	Out     OutPath
-	Outs    []OutPath
-	In      Path
-	Ins     []Path
-	Depfile OutPath
-	Cmd     string
-	Script  string
-	Descr   string
+	Out          OutPath
+	Outs         []OutPath
+	In           Path
+	Ins          []Path
+	Depfile      OutPath
+	Cmd          string
+	Script       string
+	Data         string
+	DataFileMode os.FileMode
+	Descr        string
 }
 
 func (step *BuildStep) outs() []OutPath {
@@ -111,20 +112,44 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 		delete(ctx.leafOutputs, in)
 	}
 
+	data := ""
+	dataFileMode := os.FileMode(0644)
+	dataFilePath := ""
+
 	if step.Script != "" {
 		if step.Cmd != "" {
 			Fatal("cannot specify both Cmd and Script in a build step")
 		}
+		data = step.Script
+		dataFileMode = 0755
+	} else if step.Data != "" {
+		if step.Cmd != "" {
+			Fatal("cannot specify both Cmd and Data in a build step")
+		}
+		if step.Out == nil || step.Outs != nil {
+			Fatal("a single Out is required for Data in a build step")
+		}
+		data = step.Data
+		if step.DataFileMode != 0 {
+			dataFileMode = step.DataFileMode
+		}
+	}
 
-		script := []byte(step.Script)
-		hash := crc32.ChecksumIEEE([]byte(script))
-		scriptFileName := fmt.Sprintf("%08X.sh", hash)
-		scriptFilePath := path.Join(buildDir(), "..", scriptFileName)
-		err := ioutil.WriteFile(scriptFilePath, script, scriptFileMode)
+	if data != "" {
+		buffer := []byte(data)
+		hash := crc32.ChecksumIEEE([]byte(buffer))
+		dataFileName := fmt.Sprintf("%08X", hash)
+		dataFilePath = path.Join(buildDir(), "..", dataFileName)
+		err := ioutil.WriteFile(dataFilePath, buffer, dataFileMode)
 		if err != nil {
 			Fatal("%s", err)
 		}
-		step.Cmd = scriptFilePath
+	}
+
+	if step.Script != "" {
+		step.Cmd = dataFilePath
+	} else if step.Data != "" {
+		step.Cmd = fmt.Sprintf("cp %q %q", dataFilePath, step.Out)
 	}
 
 	fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
