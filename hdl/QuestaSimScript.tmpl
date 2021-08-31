@@ -31,6 +31,8 @@ PROJECT_NAME={{ .Name }}
 cp {{ .LibDir }}/modelsim.ini {{ .OutDir }}/..
 {{ end }}
 
+cd {{ .OutDir }}/..
+
 vlib {{ .Name }}
 vlib {{ .Name }}/work
 vmap work {{ .Name }}/work
