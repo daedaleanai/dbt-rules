@@ -34,6 +34,8 @@ if [ \$# -ge 1 ] && [ \$1 == "simonly" ]; then
     shift
 fi
 
+cd {{ .OutDir }}/..
+
 if [ \$COMPILE -eq 1 ]; then
 {{ range .Srcs }}
     {{ if hasSuffix .String ".vhd" }}

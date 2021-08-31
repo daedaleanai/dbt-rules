@@ -31,6 +31,8 @@ PROJECT_NAME={{ .Name }}
 cp {{ .LibDir }}/modelsim.ini {{ .OutDir }}/..
 {{ end }}
 
+cd {{ .OutDir }}/..
+
 vlib {{ .Name }}
 vlib {{ .Name }}/work
 vmap work {{ .Name }}/work
@@ -84,5 +86,6 @@ chmod 755 {{ .OutScript }}
 
 cat > {{ .OutSimScript }} << EOF
 onfinish exit
+onerror exit
 run -all
 EOF
