@@ -74,12 +74,17 @@ EOF
     vivado -mode batch -nolog -nojournal -notrace -source generate_sim.tcl | ( grep -E "^(ERROR|WARNING|CRITICAL)" || true )
     {{ end }}
 
-    if [ -e ./.srcs/sources_1/ip/{{ .Name }} ]; then
-        cp -a ./.srcs/sources_1/ip/{{ .Name }}/* ${OUTDIR}
+    ROOT=./.gen
+    if [ ! -e ${ROOT} ]; then
+        ROOT=./.srcs
     fi
 
-    if [ -e ./.srcs/sources_1/bd/{{ .Name }} ]; then
-        cp -a ./.srcs/sources_1/bd/{{ .Name }}/* ${OUTDIR}
+    if [ -e ${ROOT}/sources_1/ip/{{ .Name }} ]; then
+        cp -a ${ROOT}/sources_1/ip/{{ .Name }}/* ${OUTDIR}
+    fi
+
+    if [ -e ${ROOT}/sources_1/bd/{{ .Name }} ]; then
+        cp -a ${ROOT}/sources_1/bd/{{ .Name }}/* ${OUTDIR}
     fi
 
     #---------------------------------------------------------------------------
