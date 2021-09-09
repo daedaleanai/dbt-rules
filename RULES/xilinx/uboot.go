@@ -41,11 +41,20 @@ func (rule UBoot) Build(ctx core.Context) {
 	var config string
 	board := hdl.BoardName.Value()
 	for pattern, cfg := range rule.Configs {
+		if pattern == ".*" {
+			continue
+		}
 		matched, err := regexp.MatchString(pattern, board)
 		if err != nil {
 			core.Fatal("UBoot config: %s", err)
 		}
 		if matched {
+			config = cfg
+		}
+	}
+
+	if config == "" {
+		if cfg, ok := rule.Configs[".*"]; ok {
 			config = cfg
 		}
 	}
