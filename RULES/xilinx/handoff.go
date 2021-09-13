@@ -82,12 +82,21 @@ func (rule Handoff) Build(ctx core.Context) {
 	var patch core.Path
 	board := hdl.BoardName.Value()
 	for pattern, patchPath := range rule.Patches {
+		if pattern == ".*" {
+			continue
+		}	
 		matched, err := regexp.MatchString(pattern, board)
 		if err != nil {
 			core.Fatal("Handoff patch: %s", err)
 		}
 		if matched {
 			patch = patchPath
+		}
+	}
+
+	if patch == nil {
+		if p, ok := rule.Patches[".*"]; ok {
+			patch = p
 		}
 	}
 

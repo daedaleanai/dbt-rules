@@ -75,12 +75,21 @@ func (rule DeviceTree) Build(ctx core.Context) {
 	var boardDts core.Path
 	board := hdl.BoardName.Value()
 	for pattern, dtsPath := range rule.BoardDts {
+		if pattern == ".*" {
+			continue
+		}	
 		matched, err := regexp.MatchString(pattern, board)
 		if err != nil {
 			core.Fatal("Board DTS: %s", err)
 		}
 		if matched {
 			boardDts = dtsPath
+		}
+	}
+
+	if boardDts == nil {
+		if dts, ok := rule.BoardDts[".*"]; ok {
+			boardDts = dts
 		}
 	}
 
