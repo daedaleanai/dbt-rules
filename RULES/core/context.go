@@ -139,10 +139,12 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 		buffer := []byte(data)
 		hash := crc32.ChecksumIEEE([]byte(buffer))
 		dataFileName := fmt.Sprintf("%08X", hash)
-		dataFilePath = path.Join(buildDir(), "..", dataFileName)
-		err := ioutil.WriteFile(dataFilePath, buffer, dataFileMode)
-		if err != nil {
-			Fatal("%s", err)
+		dataFilePath = path.Join(filepath.Dir(buildDir()), "DATA", dataFileName)
+		if err := os.MkdirAll(filepath.Dir(dataFilePath), os.ModePerm); err != nil {
+			Fatal("Failed to create directory for data files: %s", err)
+		}
+		if err := ioutil.WriteFile(dataFilePath, buffer, dataFileMode); err != nil {
+			Fatal("Failed to write data file: %s", err)
 		}
 	}
 
