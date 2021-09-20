@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 )
 
+const buildProtocolVersion = 2
+const inputFileName = "input.json"
 const outputFileName = "output.json"
 
 type targetInfo struct {
@@ -12,7 +14,17 @@ type targetInfo struct {
 	build       buildInterface
 }
 
+type generatorInput struct {
+	Version         uint
+	SourceDir       string
+	WorkingDir      string
+	BuildDirPrefix  string
+	BuildFlags      map[string]string
+	CompletionsOnly bool
+}
+
 type generatorOutput struct {
+	Version   uint
 	NinjaFile string
 	BashFile  string
 	Targets   map[string]targetInfo
@@ -20,11 +32,15 @@ type generatorOutput struct {
 	BuildDir  string
 }
 
-func GeneratorMain(vars map[string]interface{}) {
-	output := generatorOutput{"", "", map[string]targetInfo{}, map[string]flagInfo{}, ""}
+var input generatorInput
 
-	output.Flags = lockAndGetFlags()
-	output.BuildDir = buildDir()
+func GeneratorMain(vars map[string]interface{}) {
+	output := generatorOutput{
+		Version:  buildProtocolVersion,
+		Targets:  map[string]targetInfo{},
+		Flags:    lockAndGetFlags(),
+		BuildDir: buildDir(),
+	}
 
 	for name, variable := range vars {
 		if buildIface, ok := variable.(buildInterface); ok {
@@ -37,7 +53,7 @@ func GeneratorMain(vars map[string]interface{}) {
 	}
 
 	// Create build files.
-	if mode() == "buildFiles" {
+	if !completionsOnly() {
 		ctx := newContext(vars)
 		for name, target := range output.Targets {
 			ctx.handleTarget(name, target.build)

@@ -2,6 +2,7 @@ package util
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"dbt-rules/RULES/core"
@@ -20,6 +21,7 @@ func (tmpl ExpandTemplate) Build(ctx core.Context) {
 	for old, new := range tmpl.Substitutions {
 		substitutions = append(substitutions, fmt.Sprintf("-e 's/%s/%s/g'", old, new))
 	}
+	sort.Strings(substitutions)
 	cmd := fmt.Sprintf("sed %s %q > %q", strings.Join(substitutions, " "), tmpl.Template, tmpl.Out)
 	ctx.AddBuildStep(core.BuildStep{
 		Out:   tmpl.Out,

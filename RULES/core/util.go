@@ -2,7 +2,9 @@ package core
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path"
 	"sort"
@@ -12,29 +14,30 @@ import (
 
 const fileMode = 0755
 
-var currentTarget = ""
+var (
+	currentTarget  = ""
+	buildDirSuffix = ""
+)
 
-func mode() string {
-	return os.Args[1]
+func completionsOnly() bool {
+	loadInput()
+	return input.CompletionsOnly
 }
 
 func sourceDir() string {
-	return os.Args[2]
+	loadInput()
+	return input.SourceDir
 }
 
 func buildDirPrefix() string {
-	return os.Args[3]
+	loadInput()
+	return input.BuildDirPrefix
 }
 
 func workingDir() string {
-	return os.Args[4]
+	loadInput()
+	return input.WorkingDir
 }
-
-func otherArgs() []string {
-	return os.Args[5:]
-}
-
-var buildDirSuffix = ""
 
 func buildDir() string {
 	if !flagsLocked {
@@ -43,8 +46,28 @@ func buildDir() string {
 	return buildDirPrefix() + buildDirSuffix
 }
 
+func loadInput() {
+	if input.Version > 0 {
+		return
+	}
+
+	data, err := ioutil.ReadFile(inputFileName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: Could not read input file: %s.\n", err)
+		os.Exit(1)
+	}
+	if err := json.Unmarshal(data, &input); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: Could not parse input: %s.\n", err)
+		os.Exit(1)
+	}
+	if input.Version != buildProtocolVersion {
+		fmt.Fprintf(os.Stderr, "Error: Unexpected version of input: %d. Expected %d.\n", input.Version, buildProtocolVersion)
+		os.Exit(1)
+	}
+}
+
 func Fatal(format string, a ...interface{}) {
-	if mode() == "completion" {
+	if completionsOnly() {
 		return
 	}
 
