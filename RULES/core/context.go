@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 type Context interface {
@@ -175,13 +176,17 @@ func (ctx *context) Cwd() OutPath {
 	return ctx.cwd
 }
 
-func (ctx *context) handleTarget(name string, target buildInterface) {
-	currentTarget = name
-	ctx.cwd = outPath{path.Dir(name)}
+func (ctx *context) handleTarget(targetPath string, target buildInterface) {
+	currentTarget = targetPath
+	ctx.cwd = outPath{path.Dir(targetPath)}
 	ctx.leafOutputs = map[Path]bool{}
 	ctx.targetDependencies = []string{}
 
 	target.Build(ctx)
+
+	if !unicode.IsUpper([]rune(path.Base(targetPath))[0]) {
+		return
+	}
 
 	ninjaOuts := []string{}
 	for out := range ctx.leafOutputs {
@@ -209,9 +214,9 @@ func (ctx *context) handleTarget(name string, target buildInterface) {
 
 	fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
 	fmt.Fprintf(&ctx.ninjaFile, "  command = echo \"%s\"\n", strings.Join(printOuts, "\\n"))
-	fmt.Fprintf(&ctx.ninjaFile, "  description = Created %s:", name)
+	fmt.Fprintf(&ctx.ninjaFile, "  description = Created %s:", targetPath)
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
-	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s %s __phony__\n", name, ctx.nextRuleID, strings.Join(ninjaOuts, " "), strings.Join(ctx.targetDependencies, " "))
+	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s %s __phony__\n", targetPath, ctx.nextRuleID, strings.Join(ninjaOuts, " "), strings.Join(ctx.targetDependencies, " "))
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
 

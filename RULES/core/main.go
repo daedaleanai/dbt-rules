@@ -3,6 +3,8 @@ package core
 import (
 	"encoding/json"
 	"io/ioutil"
+	"path"
+	"unicode"
 )
 
 const buildProtocolVersion = 2
@@ -11,7 +13,6 @@ const outputFileName = "output.json"
 
 type targetInfo struct {
 	Description string
-	build       buildInterface
 }
 
 type generatorInput struct {
@@ -42,21 +43,28 @@ func GeneratorMain(vars map[string]interface{}) {
 		BuildDir: buildDir(),
 	}
 
-	for name, variable := range vars {
-		if buildIface, ok := variable.(buildInterface); ok {
-			description := ""
-			if descriptionIface, ok := variable.(descriptionInterface); ok {
-				description = descriptionIface.Description()
-			}
-			output.Targets[name] = targetInfo{description, buildIface}
+	for targetPath, variable := range vars {
+		targetName := path.Base(targetPath)
+		if !unicode.IsUpper([]rune(targetName)[0]) {
+			continue
 		}
+		if _, ok := variable.(buildInterface); !ok {
+			continue
+		}
+		info := targetInfo{}
+		if descriptionIface, ok := variable.(descriptionInterface); ok {
+			info.Description = descriptionIface.Description()
+		}
+		output.Targets[targetPath] = info
 	}
 
 	// Create build files.
 	if !completionsOnly() {
 		ctx := newContext(vars)
-		for name, target := range output.Targets {
-			ctx.handleTarget(name, target.build)
+		for targetPath, variable := range vars {
+			if build, ok := variable.(buildInterface); ok {
+				ctx.handleTarget(targetPath, build)
+			}
 		}
 		ctx.finish()
 		output.NinjaFile = ctx.ninjaFile.String()
