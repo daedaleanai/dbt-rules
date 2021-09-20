@@ -27,7 +27,6 @@ type generatorInput struct {
 type generatorOutput struct {
 	Version   uint
 	NinjaFile string
-	BashFile  string
 	Targets   map[string]targetInfo
 	Flags     map[string]flagInfo
 	BuildDir  string
@@ -66,9 +65,7 @@ func GeneratorMain(vars map[string]interface{}) {
 				ctx.handleTarget(targetPath, build)
 			}
 		}
-		ctx.finish()
 		output.NinjaFile = ctx.ninjaFile.String()
-		output.BashFile = ctx.bashFile.String()
 	}
 
 	// Serialize generator output.

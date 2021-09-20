@@ -223,39 +223,6 @@ func (ctx *context) handleTarget(targetPath string, target buildInterface) {
 	ctx.nextRuleID++
 }
 
-func (ctx *context) finish() {
-	currentTarget = ""
-
-	// Generate the bash script
-	fmt.Fprintf(&ctx.bashFile, "#!/bin/bash\n\nset -e\n\n")
-	for out := range ctx.buildOutputs {
-		ctx.addOutputToBashScript(out)
-	}
-}
-
-func (ctx *context) addOutputToBashScript(output string) {
-	step, exists := ctx.buildOutputs[output]
-	if !exists {
-		return
-	}
-
-	for _, in := range step.ins() {
-		ctx.addOutputToBashScript(in.Absolute())
-	}
-
-	for _, out := range step.outs() {
-		delete(ctx.buildOutputs, out.Absolute())
-		fmt.Fprintf(&ctx.bashFile, "mkdir -p %q\n", path.Dir(out.Absolute()))
-	}
-
-	fmt.Fprintf(&ctx.bashFile, "echo %q\n", step.Cmd)
-	if step.Script != "" {
-		fmt.Fprintf(&ctx.bashFile, "%s\n", step.Script)
-	} else {
-		fmt.Fprintf(&ctx.bashFile, "%s\n", step.Cmd)
-	}
-}
-
 func (ctx *context) addTargetDependency(target interface{}) {
 	if reflect.TypeOf(target).Kind() != reflect.Ptr {
 		Fatal("adding target dependency to non-pointer target")
