@@ -19,55 +19,33 @@ var (
 	buildDirSuffix = ""
 )
 
-func completionsOnly() bool {
-	loadInput()
-	return input.CompletionsOnly
-}
-
-func sourceDir() string {
-	loadInput()
-	return input.SourceDir
-}
-
-func buildDirPrefix() string {
-	loadInput()
-	return input.BuildDirPrefix
-}
-
-func workingDir() string {
-	loadInput()
-	return input.WorkingDir
-}
-
 func buildDir() string {
 	if !flagsLocked {
 		Fatal("cannot use build directory before all flag values are known")
 	}
-	return buildDirPrefix() + buildDirSuffix
+	return input.BuildDirPrefix + buildDirSuffix
 }
 
-func loadInput() {
-	if input.Version > 0 {
-		return
-	}
-
+func loadInput() generatorInput {
 	data, err := ioutil.ReadFile(inputFileName)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: Could not read input file: %s.\n", err)
+		fmt.Fprintf(os.Stderr, "Error: Could not read DBT input file: %s.\n", err)
 		os.Exit(1)
 	}
+	var input generatorInput
 	if err := json.Unmarshal(data, &input); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: Could not parse input: %s.\n", err)
+		fmt.Fprintf(os.Stderr, "Error: Could not parse DBT input: %s.\n", err)
 		os.Exit(1)
 	}
 	if input.Version != buildProtocolVersion {
-		fmt.Fprintf(os.Stderr, "Error: Unexpected version of input: %d. Expected %d.\n", input.Version, buildProtocolVersion)
+		fmt.Fprintf(os.Stderr, "Error: Unexpected version of DBT input: %d. Expected %d.\n", input.Version, buildProtocolVersion)
 		os.Exit(1)
 	}
+	return input
 }
 
 func Fatal(format string, a ...interface{}) {
-	if completionsOnly() {
+	if input.CompletionsOnly {
 		return
 	}
 

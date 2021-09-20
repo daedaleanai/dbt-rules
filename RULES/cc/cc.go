@@ -2,6 +2,7 @@ package cc
 
 import (
 	"fmt"
+	"strings"
 
 	"dbt-rules/RULES/core"
 )
@@ -254,4 +255,12 @@ func (bin Binary) Build(ctx core.Context) {
 		Cmd:   cmd,
 		Descr: fmt.Sprintf("LD (toolchain: %s) %s", toolchain.Name(), bin.Out.Relative()),
 	})
+}
+
+func (bin Binary) Run(args []string) string {
+	quotedArgs := []string{}
+	for _, arg := range args {
+		quotedArgs = append(quotedArgs, fmt.Sprintf("%q", arg))
+	}
+	return fmt.Sprintf("%q %s", bin.Out, strings.Join(quotedArgs, " "))
 }

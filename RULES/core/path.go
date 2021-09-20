@@ -24,7 +24,7 @@ type inPath struct {
 
 // Absolute returns the absolute path.
 func (p inPath) Absolute() string {
-	return path.Join(sourceDir(), p.rel)
+	return path.Join(input.SourceDir, p.rel)
 }
 
 // Relative returns the path relative to the workspace source directory.
@@ -135,6 +135,7 @@ func NewGlobalPath(p string) GlobalPath {
 func BuildPath(p string) OutPath {
 	return outPath{p}
 }
+
 // SourcePath returns a path relative to the source directory.
 func SourcePath(p string) Path {
 	return inPath{p}

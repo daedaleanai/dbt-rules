@@ -61,6 +61,10 @@ type descriptionInterface interface {
 	Description() string
 }
 
+type runInterface interface {
+	Run(args []string) string
+}
+
 type context struct {
 	cwd                OutPath
 	targetDependencies []string
@@ -197,12 +201,12 @@ func (ctx *context) handleTarget(targetPath string, target buildInterface) {
 	printOuts := []string{}
 	if iface, ok := target.(outputsInterface); ok {
 		for _, out := range iface.Outputs() {
-			relPath, _ := filepath.Rel(workingDir(), out.Absolute())
+			relPath, _ := filepath.Rel(input.WorkingDir, out.Absolute())
 			printOuts = append(printOuts, relPath)
 		}
 	} else {
 		for out := range ctx.leafOutputs {
-			relPath, _ := filepath.Rel(workingDir(), out.Absolute())
+			relPath, _ := filepath.Rel(input.WorkingDir, out.Absolute())
 			printOuts = append(printOuts, relPath)
 		}
 	}
@@ -219,8 +223,19 @@ func (ctx *context) handleTarget(targetPath string, target buildInterface) {
 	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s %s __phony__\n", targetPath, ctx.nextRuleID, strings.Join(ninjaOuts, " "), strings.Join(ctx.targetDependencies, " "))
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
-
 	ctx.nextRuleID++
+
+	if runIface, ok := target.(runInterface); ok {
+		runCmd := runIface.Run(input.RunArgs)
+		fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
+		fmt.Fprintf(&ctx.ninjaFile, "  command = %s\n", runCmd)
+		fmt.Fprintf(&ctx.ninjaFile, "  description = Running %s:", targetPath)
+		fmt.Fprintf(&ctx.ninjaFile, "\n")
+		fmt.Fprintf(&ctx.ninjaFile, "build %s#run: r%d %s __phony__\n", targetPath, ctx.nextRuleID, targetPath)
+		fmt.Fprintf(&ctx.ninjaFile, "\n")
+		fmt.Fprintf(&ctx.ninjaFile, "\n")
+		ctx.nextRuleID++
+	}
 }
 
 func (ctx *context) addTargetDependency(target interface{}) {

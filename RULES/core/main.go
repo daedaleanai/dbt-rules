@@ -13,6 +13,7 @@ const outputFileName = "output.json"
 
 type targetInfo struct {
 	Description string
+	Runnable    bool
 }
 
 type generatorInput struct {
@@ -22,6 +23,7 @@ type generatorInput struct {
 	BuildDirPrefix  string
 	BuildFlags      map[string]string
 	CompletionsOnly bool
+	RunArgs         []string
 }
 
 type generatorOutput struct {
@@ -32,7 +34,7 @@ type generatorOutput struct {
 	BuildDir  string
 }
 
-var input generatorInput
+var input = loadInput()
 
 func GeneratorMain(vars map[string]interface{}) {
 	output := generatorOutput{
@@ -54,11 +56,14 @@ func GeneratorMain(vars map[string]interface{}) {
 		if descriptionIface, ok := variable.(descriptionInterface); ok {
 			info.Description = descriptionIface.Description()
 		}
+		if _, ok := variable.(runInterface); ok {
+			info.Runnable = true
+		}
 		output.Targets[targetPath] = info
 	}
 
 	// Create build files.
-	if !completionsOnly() {
+	if !input.CompletionsOnly {
 		ctx := newContext(vars)
 		for targetPath, variable := range vars {
 			if build, ok := variable.(buildInterface); ok {
