@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 type Context interface {
@@ -58,6 +59,10 @@ type outputsInterface interface {
 
 type descriptionInterface interface {
 	Description() string
+}
+
+type runInterface interface {
+	Run(args []string) string
 }
 
 type context struct {
@@ -139,10 +144,12 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 		buffer := []byte(data)
 		hash := crc32.ChecksumIEEE([]byte(buffer))
 		dataFileName := fmt.Sprintf("%08X", hash)
-		dataFilePath = path.Join(buildDir(), "..", dataFileName)
-		err := ioutil.WriteFile(dataFilePath, buffer, dataFileMode)
-		if err != nil {
-			Fatal("%s", err)
+		dataFilePath = path.Join(filepath.Dir(buildDir()), "DATA", dataFileName)
+		if err := os.MkdirAll(filepath.Dir(dataFilePath), os.ModePerm); err != nil {
+			Fatal("Failed to create directory for data files: %s", err)
+		}
+		if err := ioutil.WriteFile(dataFilePath, buffer, dataFileMode); err != nil {
+			Fatal("Failed to write data file: %s", err)
 		}
 	}
 
@@ -173,13 +180,17 @@ func (ctx *context) Cwd() OutPath {
 	return ctx.cwd
 }
 
-func (ctx *context) handleTarget(name string, target buildInterface) {
-	currentTarget = name
-	ctx.cwd = outPath{path.Dir(name)}
+func (ctx *context) handleTarget(targetPath string, target buildInterface) {
+	currentTarget = targetPath
+	ctx.cwd = outPath{path.Dir(targetPath)}
 	ctx.leafOutputs = map[Path]bool{}
 	ctx.targetDependencies = []string{}
 
 	target.Build(ctx)
+
+	if !unicode.IsUpper([]rune(path.Base(targetPath))[0]) {
+		return
+	}
 
 	ninjaOuts := []string{}
 	for out := range ctx.leafOutputs {
@@ -190,12 +201,12 @@ func (ctx *context) handleTarget(name string, target buildInterface) {
 	printOuts := []string{}
 	if iface, ok := target.(outputsInterface); ok {
 		for _, out := range iface.Outputs() {
-			relPath, _ := filepath.Rel(workingDir(), out.Absolute())
+			relPath, _ := filepath.Rel(input.WorkingDir, out.Absolute())
 			printOuts = append(printOuts, relPath)
 		}
 	} else {
 		for out := range ctx.leafOutputs {
-			relPath, _ := filepath.Rel(workingDir(), out.Absolute())
+			relPath, _ := filepath.Rel(input.WorkingDir, out.Absolute())
 			printOuts = append(printOuts, relPath)
 		}
 	}
@@ -207,45 +218,23 @@ func (ctx *context) handleTarget(name string, target buildInterface) {
 
 	fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
 	fmt.Fprintf(&ctx.ninjaFile, "  command = echo \"%s\"\n", strings.Join(printOuts, "\\n"))
-	fmt.Fprintf(&ctx.ninjaFile, "  description = Created %s:", name)
+	fmt.Fprintf(&ctx.ninjaFile, "  description = Created %s:", targetPath)
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
-	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s %s __phony__\n", name, ctx.nextRuleID, strings.Join(ninjaOuts, " "), strings.Join(ctx.targetDependencies, " "))
+	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s %s __phony__\n", targetPath, ctx.nextRuleID, strings.Join(ninjaOuts, " "), strings.Join(ctx.targetDependencies, " "))
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
 	fmt.Fprintf(&ctx.ninjaFile, "\n")
-
 	ctx.nextRuleID++
-}
 
-func (ctx *context) finish() {
-	currentTarget = ""
-
-	// Generate the bash script
-	fmt.Fprintf(&ctx.bashFile, "#!/bin/bash\n\nset -e\n\n")
-	for out := range ctx.buildOutputs {
-		ctx.addOutputToBashScript(out)
-	}
-}
-
-func (ctx *context) addOutputToBashScript(output string) {
-	step, exists := ctx.buildOutputs[output]
-	if !exists {
-		return
-	}
-
-	for _, in := range step.ins() {
-		ctx.addOutputToBashScript(in.Absolute())
-	}
-
-	for _, out := range step.outs() {
-		delete(ctx.buildOutputs, out.Absolute())
-		fmt.Fprintf(&ctx.bashFile, "mkdir -p %q\n", path.Dir(out.Absolute()))
-	}
-
-	fmt.Fprintf(&ctx.bashFile, "echo %q\n", step.Cmd)
-	if step.Script != "" {
-		fmt.Fprintf(&ctx.bashFile, "%s\n", step.Script)
-	} else {
-		fmt.Fprintf(&ctx.bashFile, "%s\n", step.Cmd)
+	if runIface, ok := target.(runInterface); ok {
+		runCmd := runIface.Run(input.RunArgs)
+		fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
+		fmt.Fprintf(&ctx.ninjaFile, "  command = %s\n", runCmd)
+		fmt.Fprintf(&ctx.ninjaFile, "  description = Running %s:", targetPath)
+		fmt.Fprintf(&ctx.ninjaFile, "\n")
+		fmt.Fprintf(&ctx.ninjaFile, "build %s#run: r%d %s __phony__\n", targetPath, ctx.nextRuleID, targetPath)
+		fmt.Fprintf(&ctx.ninjaFile, "\n")
+		fmt.Fprintf(&ctx.ninjaFile, "\n")
+		ctx.nextRuleID++
 	}
 }
 

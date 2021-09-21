@@ -3,48 +3,74 @@ package core
 import (
 	"encoding/json"
 	"io/ioutil"
+	"path"
+	"unicode"
 )
 
+const buildProtocolVersion = 2
+const inputFileName = "input.json"
 const outputFileName = "output.json"
 
 type targetInfo struct {
 	Description string
-	build       buildInterface
+	Runnable    bool
+}
+
+type generatorInput struct {
+	Version         uint
+	SourceDir       string
+	WorkingDir      string
+	BuildDirPrefix  string
+	BuildFlags      map[string]string
+	CompletionsOnly bool
+	RunArgs         []string
 }
 
 type generatorOutput struct {
+	Version   uint
 	NinjaFile string
-	BashFile  string
 	Targets   map[string]targetInfo
 	Flags     map[string]flagInfo
 	BuildDir  string
 }
 
+var input = loadInput()
+
 func GeneratorMain(vars map[string]interface{}) {
-	output := generatorOutput{"", "", map[string]targetInfo{}, map[string]flagInfo{}, ""}
+	output := generatorOutput{
+		Version:  buildProtocolVersion,
+		Targets:  map[string]targetInfo{},
+		Flags:    lockAndGetFlags(),
+		BuildDir: buildDir(),
+	}
 
-	output.Flags = lockAndGetFlags()
-	output.BuildDir = buildDir()
-
-	for name, variable := range vars {
-		if buildIface, ok := variable.(buildInterface); ok {
-			description := ""
-			if descriptionIface, ok := variable.(descriptionInterface); ok {
-				description = descriptionIface.Description()
-			}
-			output.Targets[name] = targetInfo{description, buildIface}
+	for targetPath, variable := range vars {
+		targetName := path.Base(targetPath)
+		if !unicode.IsUpper([]rune(targetName)[0]) {
+			continue
 		}
+		if _, ok := variable.(buildInterface); !ok {
+			continue
+		}
+		info := targetInfo{}
+		if descriptionIface, ok := variable.(descriptionInterface); ok {
+			info.Description = descriptionIface.Description()
+		}
+		if _, ok := variable.(runInterface); ok {
+			info.Runnable = true
+		}
+		output.Targets[targetPath] = info
 	}
 
 	// Create build files.
-	if mode() == "buildFiles" {
+	if !input.CompletionsOnly {
 		ctx := newContext(vars)
-		for name, target := range output.Targets {
-			ctx.handleTarget(name, target.build)
+		for targetPath, variable := range vars {
+			if build, ok := variable.(buildInterface); ok {
+				ctx.handleTarget(targetPath, build)
+			}
 		}
-		ctx.finish()
 		output.NinjaFile = ctx.ninjaFile.String()
-		output.BashFile = ctx.bashFile.String()
 	}
 
 	// Serialize generator output.

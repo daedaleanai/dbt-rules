@@ -2,7 +2,9 @@ package core
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path"
 	"sort"
@@ -12,39 +14,38 @@ import (
 
 const fileMode = 0755
 
-var currentTarget = ""
-
-func mode() string {
-	return os.Args[1]
-}
-
-func sourceDir() string {
-	return os.Args[2]
-}
-
-func buildDirPrefix() string {
-	return os.Args[3]
-}
-
-func workingDir() string {
-	return os.Args[4]
-}
-
-func otherArgs() []string {
-	return os.Args[5:]
-}
-
-var buildDirSuffix = ""
+var (
+	currentTarget  = ""
+	buildDirSuffix = ""
+)
 
 func buildDir() string {
 	if !flagsLocked {
 		Fatal("cannot use build directory before all flag values are known")
 	}
-	return buildDirPrefix() + buildDirSuffix
+	return input.BuildDirPrefix + buildDirSuffix
+}
+
+func loadInput() generatorInput {
+	data, err := ioutil.ReadFile(inputFileName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: Could not read DBT input file: %s.\n", err)
+		os.Exit(1)
+	}
+	var input generatorInput
+	if err := json.Unmarshal(data, &input); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: Could not parse DBT input: %s.\n", err)
+		os.Exit(1)
+	}
+	if input.Version != buildProtocolVersion {
+		fmt.Fprintf(os.Stderr, "Error: Unexpected version of DBT input: %d. Expected %d.\n", input.Version, buildProtocolVersion)
+		os.Exit(1)
+	}
+	return input
 }
 
 func Fatal(format string, a ...interface{}) {
-	if mode() == "completion" {
+	if input.CompletionsOnly {
 		return
 	}
 

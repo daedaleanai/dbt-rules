@@ -262,16 +262,8 @@ func lockAndGetFlags() map[string]flagInfo {
 }
 
 func getCmdlineFlags() map[string]string {
-	flags := map[string]string{}
-	for _, arg := range otherArgs() {
-		parts := strings.SplitN(arg, "=", 2)
-		if len(parts) > 1 {
-			flags[parts[0]] = parts[1]
-		} else {
-			flags[parts[0]] = "true"
-		}
-	}
-	return flags
+	loadInput()
+	return input.BuildFlags
 }
 
 func getConfigFileFlags() map[string]string {
