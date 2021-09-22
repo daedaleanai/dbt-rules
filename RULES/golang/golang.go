@@ -78,7 +78,7 @@ func (bin Binary) getInputs() []core.Path {
 	// Get all GoFiles and OtherFiles for all used packages.
 	inputs := []core.Path{}
 	for _, usedPackage := range usedPackages {
-		p := pkgs[importPath]
+		p := pkgs[usedPackage]
 		relPackagePath, _ := filepath.Rel(core.SourcePath("").Absolute(), p.Dir)
 		for _, file := range append(p.GoFiles, p.OtherFiles...) {
 			inputs = append(inputs, core.SourcePath(path.Join(relPackagePath, file)))
