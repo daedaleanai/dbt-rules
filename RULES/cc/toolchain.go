@@ -71,8 +71,16 @@ func (gcc GccToolchain) ObjectFile(out core.OutPath, depfile core.OutPath, flags
 
 // StaticLibrary generates the command to build a static library.
 func (gcc GccToolchain) StaticLibrary(out core.Path, objs []core.Path) string {
+	// ar updates an existing archive. This can cause faulty builds in the case
+	// where a symbol is defined in one file, that file is removed, and the
+	// symbol is subsequently defined in a new file. That's because the old object file
+	// can persist in the archive. See https://github.com/daedaleanai/dbt/issues/91
+	// There is no option to ar to always force creation of a new archive; the "c"
+	// modifier simply suppresses a warning if the archive doesn't already
+	// exist. So instead we delete the target (out) if it already exists.
 	return fmt.Sprintf(
-		"%q rv %q %s >/dev/null 2>/dev/null",
+		"rm %q 2>/dev/null ; %q rcs %q %s",
+		out,
 		gcc.Ar,
 		out,
 		joinQuoted(objs))
