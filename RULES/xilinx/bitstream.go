@@ -14,7 +14,6 @@ type BuildFileScriptParams struct {
 	BoardName  string
 	Name       string
 	IncDir     core.Path
-	Timing     core.Path
 	BoardFiles []core.Path
 	Ips        []core.Path
 	Constrs    []core.Path
@@ -73,7 +72,6 @@ func (rule Bitstream) Build(ctx core.Context) {
 
 	outBitstream := rule.Src.WithExt("bit")
 	outDebugProbes := rule.Src.WithExt("ltx")
-	outTiming := rule.Src.WithExt("rpt")
 	outBf := rule.Src.WithExt("tcl")
 
 	ins = append(ins, rule.Src)
@@ -90,7 +88,6 @@ func (rule Bitstream) Build(ctx core.Context) {
 		BoardName:  hdl.BoardName.Value(),
 		BoardFiles: rule.BoardFiles,
 		IncDir:     core.SourcePath(""),
-		Timing:     outTiming,
 		Ips:        ips,
 		Rtls:       rtls,
 		Constrs:    constrs,
@@ -111,7 +108,7 @@ func (rule Bitstream) Build(ctx core.Context) {
 		Postprocess: rule.Postprocess,
 	}
 
-	outs := []core.OutPath{outBitstream, outTiming, outDebugProbes}
+	outs := []core.OutPath{outBitstream, outDebugProbes}
 	ctx.AddBuildStep(core.BuildStep{
 		Outs:   outs,
 		In:     outBf,
