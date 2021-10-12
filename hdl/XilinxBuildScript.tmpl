@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eu -o pipefail
 
-WORK=`dirname {{ .Out }}`
+{{ $outOfContext := .OutOfContext }}
 
 cat > {{ .Out }} <<EOF
 {{range .BoardFiles}}
@@ -9,8 +9,11 @@ set_param board.repoPaths [lappend board.repoPaths "{{ . }}"]
 {{end}}
 
 set_part "{{ .PartName }}"
-set_property "board_part"         "{{ .BoardName}}"       [current_project]
 set_property "target_language"    "Verilog"        [current_project]
+
+{{ if not .OutOfContext }}
+	set_property "board_part"         "{{ .BoardName}}"       [current_project]
+{{ end }}
 
 proc generate_reports {report_dir} {
 	# Timing
@@ -29,7 +32,12 @@ proc generate_reports {report_dir} {
 	report_utilization > \$report_dir/util_summary.rpt
 }
 
+# Set Results folder
 
+set OUT_CHECKPOINTS "{{ .ReportDir }}/checkpoints"
+
+exec mkdir -p {{ .ReportDir }}
+exec mkdir -p \$OUT_CHECKPOINTS
 
 {{ range .Ips }}
 set path "{{ . }}"
@@ -56,34 +64,36 @@ report_ip_status
 {{ end }}
 
 {{ range .Constrs }}
-read_xdc "{{ . }}"
+	read_xdc {{ if $outOfContext }} -mode out_of_context {{ end }} "{{ . }}"
 {{ end }}
 
-synth_design -top {{ .Name }} -include_dirs {{ .IncDir }} -flatten_hierarchy rebuilt > $WORK/synth.log
-exec mkdir -p $WORK/post_synth
-write_checkpoint -force $WORK/post_synth/checkpoint
-generate_reports $WORK/post_synth
+synth_design -top {{ .Name }} -include_dirs {{ .IncDir }} {{ if .OutOfContext }} -mode out_of_context {{ end }} -flatten_hierarchy rebuilt > {{ .ReportDir }}/synth.log
+write_checkpoint -force \$OUT_CHECKPOINTS/post_synth
+exec mkdir -p {{ .ReportDir }}/post_synth
+generate_reports {{ .ReportDir }}/post_synth
 
-opt_design > $WORK/opt.log
-exec mkdir -p $WORK/post_opt
-write_checkpoint -force $WORK/post_opt/checkpoint
-generate_reports $WORK/post_opt
+opt_design > {{ .ReportDir }}/opt.log
+write_checkpoint -force \$OUT_CHECKPOINTS/post_opt
+exec mkdir -p {{ .ReportDir }}/post_opt
+generate_reports {{ .ReportDir }}/post_opt
 
-place_design > $WORK/place.log
-exec mkdir -p $WORK/post_place
-write_checkpoint -force $WORK/post_place/checkpoint
-generate_reports $WORK/post_place
+place_design > {{ .ReportDir }}/place.log
+write_checkpoint -force \$OUT_CHECKPOINTS/post_place
+exec mkdir -p {{ .ReportDir }}/post_place
+generate_reports {{ .ReportDir }}/post_place
 
-phys_opt_design > $WORK/phys_opt.log
-exec mkdir -p $WORK/post_phys_opt
-write_checkpoint -force $WORK/post_phys_opt/checkpoint
-generate_reports $WORK/post_phys_opt
+phys_opt_design > {{ .ReportDir }}/phys_opt.log
+write_checkpoint -force \$OUT_CHECKPOINTS/post_phys_opt
+exec mkdir -p {{ .ReportDir }}/post_phys_opt
+generate_reports {{ .ReportDir }}/post_phys_opt
 
-route_design > $WORK/route.log
-exec mkdir -p $WORK/post_route
-write_checkpoint -force $WORK/post_route/checkpoint
-generate_reports $WORK/post_route
+route_design > {{ .ReportDir }}/route.log
+write_checkpoint -force \$OUT_CHECKPOINTS/post_route
+exec mkdir -p {{ .ReportDir }}/post_route
+generate_reports {{ .ReportDir }}/post_route
 
-write_bitstream -force bitstream.bit
-write_debug_probes -force bitstream.ltx
+{{ if not .OutOfContext }}
+	write_bitstream -force bitstream.bit
+	write_debug_probes -force bitstream.ltx
+{{ end }}
 EOF
