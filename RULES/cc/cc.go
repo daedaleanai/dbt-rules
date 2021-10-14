@@ -56,21 +56,23 @@ func (blob BlobObject) out() core.OutPath {
 	return blob.In.WithPrefix(toolchain.Name() + "/").WithExt("blob.o")
 }
 
-func flattenDepsRec(deps []Dep, visited map[string]bool) []Library {
+func collectDepsWithToolchain(toolchain Toolchain, deps []Dep, visited map[string]bool) []Library {
 	flatDeps := []Library{}
 	for _, dep := range deps {
-		lib := dep.CcLibrary()
+		lib := dep.CcLibrary(toolchain)
+
 		libPath := lib.Out.Absolute()
-		if _, exists := visited[libPath]; !exists {
+		if !visited[libPath] {
 			visited[libPath] = true
-			flatDeps = append([]Library{lib}, append(flattenDepsRec(lib.Deps, visited), flatDeps...)...)
+			flatDeps = append(flatDeps, lib)
+			flatDeps = append(flatDeps, collectDepsWithToolchain(toolchain, lib.Deps, visited)...)
 		}
 	}
 	return flatDeps
 }
 
-func flattenDeps(deps []Dep) []Library {
-	return flattenDepsRec(deps, map[string]bool{})
+func collectDepsWithToolchain(toolchain Toolchain, deps []Dep) []Library {
+	return collectDepsWithToolchainRec(toolchain, deps, map[string]bool{})
 }
 
 func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []Library, toolchain Toolchain) []core.Path {
@@ -97,7 +99,7 @@ func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []L
 
 // Dep is an interface implemented by dependencies that can be linked into a library.
 type Dep interface {
-	CcLibrary() Library
+	CcLibrary(toolchain Toolchain) Library
 }
 
 // Library builds and links a static C++ library.
@@ -115,14 +117,13 @@ type Library struct {
 
 	multipleToolchains bool
 	toolchainMap       map[string]Library
-	baseOut            core.OutPath
+	baseOut            string
 }
 
 func (lib Library) MultipleToolchains() Library {
 	if lib.Out == nil {
 		core.Fatal("Out field is required for cc.Library")
 	}
-
 	lib.multipleToolchains = true
 	lib.toolchainMap = make(map[string]Library)
 	lib.baseOut = lib.Out
@@ -139,8 +140,10 @@ func (lib Library) Build(ctx core.Context) {
 
 	if lib.multipleToolchains {
 		if lib.Out == lib.baseOut {
+			tclib := lib.Cclibrary(defaultToolchain())
+			tclib.Build()
 			var defaultLib = core.CopyFile{
-				From: lib.WithToolchain(ctx, defaultToolchain()).Out,
+				From: tclib.Out,
 				To:   lib.Out,
 			}
 			defaultLib.Build(ctx)
@@ -152,9 +155,9 @@ func (lib Library) Build(ctx core.Context) {
 		lib.toolchainMap[toolchain.Name()] = lib
 	}
 
-	deps := flattenDeps(append(toolchain.StdDeps(), lib))
-	for i, _ := range deps {
-		deps[i] = deps[i].WithToolchain(ctx, toolchain)
+	deps := collectDepsWithToolchain(toolchain, append(toolchain.StdDeps(), lib))
+	for _, d := range deps {
+		d.Build(ctx)
 	}
 
 	objs := compileSources(ctx, lib.Srcs, lib.CompilerFlags, deps, toolchain)
@@ -183,7 +186,8 @@ func (lib Library) Build(ctx core.Context) {
 	})
 }
 
-func (lib Library) WithToolchain(ctx core.Context, toolchain Toolchain) Library {
+// CcLibrary for Library returns the library itself, or a toolchain-specific variant
+func (lib Library) CcLibrary(toolchain Toolchain) Library {
 	if !lib.multipleToolchains {
 		if toolchainOrDefault(lib.Toolchain).Name() != toolchain.Name() {
 			core.Fatal("Library %s does not support toolchain %s", lib.Out.Relative(), toolchain.Name())
@@ -196,13 +200,7 @@ func (lib Library) WithToolchain(ctx core.Context, toolchain Toolchain) Library 
 	otherLib := lib
 	otherLib.Out = lib.baseOut.WithPrefix(toolchain.Name() + "/")
 	otherLib.Toolchain = toolchain
-	otherLib.Build(ctx)
 	return otherLib
-}
-
-// CcLibrary for Library is just the identity.
-func (lib Library) CcLibrary() Library {
-	return lib
 }
 
 // Binary builds and links an executable.
@@ -224,9 +222,9 @@ func (bin Binary) Build(ctx core.Context) {
 
 	toolchain := toolchainOrDefault(bin.Toolchain)
 
-	deps := flattenDeps(append(bin.Deps, toolchain.StdDeps()...))
-	for i, _ := range deps {
-		deps[i] = deps[i].WithToolchain(ctx, toolchain)
+	deps := collectDepsWithToolchain(toolchain, append(bin.Deps, toolchain.StdDeps()...))
+	for _, d := range deps {
+		d.Build(ctx)
 	}
 	objs := compileSources(ctx, bin.Srcs, bin.CompilerFlags, deps, toolchain)
 
