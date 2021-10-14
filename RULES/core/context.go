@@ -16,9 +16,6 @@ import (
 type Context interface {
 	AddBuildStep(BuildStep)
 	Cwd() OutPath
-	// Value(k) returns the value associated with the value k in the context,
-	// otherwise nil. k must be nil or be of a comparable type.
-	Value(key interface{}) interface{}
 
 	addTargetDependency(interface{})
 }
@@ -68,35 +65,6 @@ type runInterface interface {
 	Run(args []string) string
 }
 
-// kvContext is a context that acts like parent, but has
-// a key/value pair associated with it.
-type kvContext struct {
-	parent     Context
-	key, value interface{}
-}
-
-// ContextWithValue returns a new context which works like the parent context,
-// except that ctx.Value(key) will return value.
-// key must be nil or a comparable type.
-func ContextWithValue(parent Context, key, value interface{}) Context {
-	return &kvContext{parent, key, value}
-}
-
-func (kvc *kvContext) AddBuildStep(b BuildStep) {
-	kvc.parent.AddBuildStep(b)
-}
-
-func (kvc *kvContext) Cwd() OutPath {
-	return kvc.parent.Cwd()
-}
-
-func (kvc *kvContext) Value(key interface{}) {
-	if key == kvc.key {
-		return kvc.value
-	}
-	return kvc.parent.Value(key)
-}
-
 type context struct {
 	cwd                OutPath
 	targetDependencies []string
@@ -129,11 +97,6 @@ func newContext(vars map[string]interface{}) *context {
 	fmt.Fprintf(&ctx.ninjaFile, "build __phony__: phony\n\n")
 
 	return ctx
-}
-
-// There are no k/v pairs associated with a top-level context.
-func (*context) Value(k interface{}) interface{} {
-	return nil
 }
 
 // AddBuildStep adds a build step for the current target.
@@ -266,8 +229,8 @@ func (ctx *context) handleTarget(targetPath string, target buildInterface) {
 		runCmd := runIface.Run(input.RunArgs)
 		fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
 		fmt.Fprintf(&ctx.ninjaFile, "  command = %s\n", runCmd)
-		fmt.Fprintf(&ctx.ninjaFile, "  description = Running %s:\n", targetPath)
-		fmt.Fprintf(&ctx.ninjaFile, "  pool = console\n")
+                fmt.Fprintf(&ctx.ninjaFile, "  description = Running %s:\n", targetPath)
+                fmt.Fprintf(&ctx.ninjaFile, "  pool = console\n")
 		fmt.Fprintf(&ctx.ninjaFile, "\n")
 		fmt.Fprintf(&ctx.ninjaFile, "build %s#run: r%d %s __phony__\n", targetPath, ctx.nextRuleID, targetPath)
 		fmt.Fprintf(&ctx.ninjaFile, "\n")
