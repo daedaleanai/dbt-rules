@@ -118,20 +118,39 @@ type Library struct {
 	Shared        bool
 	AlwaysLink    bool
 	Toolchain     Toolchain
-
-	multipleToolchains bool
-	toolchainMap       map[string]Library
-	baseOut            core.OutPath
 }
 
-func (lib Library) MultipleToolchains() Library {
+type MultipleToolchainLibrary struct {
+	baseOut core.OutPath
+	lib     Library
+}
+
+func (lib Library) MultipleToolchains() MultipleToolchainLibrary {
 	if lib.Out == nil {
 		core.Fatal("Out field is required for cc.Library")
 	}
-	lib.multipleToolchains = true
-	lib.toolchainMap = make(map[string]Library)
-	lib.baseOut = lib.Out
-	return lib
+	return MultipleToolchainLibrary{
+		baseOut: lib.Out,
+		lib:     lib,
+	}
+}
+
+// CcLibrary for a multi-toolchain-library returns a toolchain-specific
+// copy of the registered library.
+func (mtl MultipleToolchainLibrary) CcLibrary(toolchain Toolchain) Library {
+	toolchain = toolchainOrDefault(toolchain)
+	tcLib := mtl.lib
+	if toolchain.Name() != defaultToolchain().Name() {
+		tcLib.Out = mtl.baseOut.WithPrefix(toolchain.Name() + "/")
+	}
+	tcLib.Toolchain = toolchain
+	return tcLib
+}
+
+// Build for a multi-toolchain-library builds the library
+// with the default toolchain.
+func (mtl MultipleToolchainLibrary) Build(ctx core.Context) {
+	mtl.CcLibrary(defaultToolchain()).Build(ctx)
 }
 
 // Build a Library.
@@ -145,23 +164,6 @@ func (lib Library) build(ctx core.Context) {
 	}
 
 	toolchain := toolchainOrDefault(lib.Toolchain)
-
-	if lib.multipleToolchains {
-		if lib.Out == lib.baseOut {
-			tclib := lib.CcLibrary(defaultToolchain())
-			tclib.Build(ctx)
-			var defaultLib = core.CopyFile{
-				From: tclib.Out,
-				To:   lib.Out,
-			}
-			defaultLib.Build(ctx)
-			return
-		}
-		if _, found := lib.toolchainMap[toolchain.Name()]; found {
-			return
-		}
-		lib.toolchainMap[toolchain.Name()] = lib
-	}
 
 	deps := collectDepsWithToolchain(toolchain, append(toolchain.StdDeps(), lib))
 	for _, d := range deps {
@@ -202,19 +204,10 @@ func (lib Library) Build(ctx core.Context) {
 func (lib Library) CcLibrary(toolchain Toolchain) Library {
 	toolchain = toolchainOrDefault(toolchain)
 
-	if !lib.multipleToolchains {
-		if toolchainOrDefault(lib.Toolchain).Name() != toolchain.Name() {
-			core.Fatal("Library %s does not support toolchain %s", lib.Out.Relative(), toolchain.Name())
-		}
-		return lib
+	if toolchainOrDefault(lib.Toolchain).Name() != toolchain.Name() {
+		core.Fatal("Library %s does not support toolchain %s", lib.Out.Relative(), toolchain.Name())
 	}
-	if otherLib, found := lib.toolchainMap[toolchain.Name()]; found {
-		return otherLib
-	}
-	otherLib := lib
-	otherLib.Out = lib.baseOut.WithPrefix(toolchain.Name() + "/")
-	otherLib.Toolchain = toolchain
-	return otherLib
+	return lib
 }
 
 // Binary builds and links an executable.
