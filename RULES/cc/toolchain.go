@@ -20,6 +20,31 @@ type Toolchain interface {
 	Script() core.Path
 }
 
+type Architecture string
+
+const (
+	ArchitectureX86_64  Architecture = "x86_64"
+	ArchitectureAArch64 Architecture = "aarch64"
+	ArchitectureUnknown Architecture = "Unknown"
+)
+
+// ToolchainArchitecture returns the architecture for the toolchain if known.
+func ToolchainArchitecture(toolchain Toolchain) Architecture {
+	if tca, ok := toolchain.(interface{ Architecture() Architecture }); ok {
+		return tca.Architecture()
+	}
+	return ArchitectureUnknown
+}
+
+// ToolchainFreestanding reports whether the toolchain uses a
+// freestanding environment (rather than a hosted one).
+func ToolchainFreestanding(toolchain Toolchain) bool {
+	if tcf, ok := toolchain.(interface{ Freestanding() bool }); ok {
+		return tcf.Freestanding()
+	}
+	return false
+}
+
 // Toolchain represents a C++ toolchain.
 type GccToolchain struct {
 	Ar      core.GlobalPath
@@ -40,6 +65,26 @@ type GccToolchain struct {
 	ToolchainName string
 	ArchName      string
 	TargetName    string
+}
+
+func (gcc GccToolchain) Architecture() Architecture {
+	// TODO: remove i386, which appears to be a typo in libsupcxx
+	if gcc.ArchName == "i386" || gcc.ArchName == "x86_64" {
+		return ArchitectureX86_64
+	}
+	if gcc.ArchName == "aarch64" {
+		return ArchitectureAArch64
+	}
+	return ArchitectureUnknown
+}
+
+func (gcc GccToolchain) Freestanding() bool {
+	for _, lf := range gcc.LinkerFlags {
+		if lf == "-ffreestanding" {
+			return true
+		}
+	}
+	return false
 }
 
 func (gcc GccToolchain) NewWithStdLib(includes []core.Path, deps []Dep, linkerScript core.Path, toolchainName string) GccToolchain {
@@ -175,6 +220,7 @@ var NativeGcc = RegisterToolchain(GccToolchain{
 	LinkerFlags:   []string{"-fdiagnostics-color=always"},
 
 	ToolchainName: "native-gcc",
+	ArchName:      "x86_64", // TODO: don't hardcode this.
 })
 
 var defaultToolchainFlag = core.StringFlag{
@@ -183,7 +229,9 @@ var defaultToolchainFlag = core.StringFlag{
 	DefaultFn:   func() string { return NativeGcc.Name() },
 }.Register()
 
-func defaultToolchain() Toolchain {
+// DefaultToolchain returns the default toolchain: either the native gcc
+// toolchain, or the toolchain specified on the command-line with the cc-toolchain flag.
+func DefaultToolchain() Toolchain {
 	if toolchain, ok := toolchains[defaultToolchainFlag.Value()]; ok {
 		return toolchain
 	}
@@ -198,7 +246,7 @@ func defaultToolchain() Toolchain {
 
 func toolchainOrDefault(toolchain Toolchain) Toolchain {
 	if toolchain == nil {
-		return defaultToolchain()
+		return DefaultToolchain()
 	}
 	return toolchain
 }

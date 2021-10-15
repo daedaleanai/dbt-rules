@@ -120,16 +120,18 @@ type Library struct {
 	Toolchain     Toolchain
 }
 
-type MultipleToolchainLibrary struct {
+// multipleToolchainLibrary is a library that can be built
+// via multiple different toolchains from the same build.
+type multipleToolchainLibrary struct {
 	baseOut core.OutPath
 	lib     Library
 }
 
-func (lib Library) MultipleToolchains() MultipleToolchainLibrary {
+func (lib Library) MultipleToolchains() multipleToolchainLibrary {
 	if lib.Out == nil {
 		core.Fatal("Out field is required for cc.Library")
 	}
-	return MultipleToolchainLibrary{
+	return multipleToolchainLibrary{
 		baseOut: lib.Out,
 		lib:     lib,
 	}
@@ -137,10 +139,10 @@ func (lib Library) MultipleToolchains() MultipleToolchainLibrary {
 
 // CcLibrary for a multi-toolchain-library returns a toolchain-specific
 // copy of the registered library.
-func (mtl MultipleToolchainLibrary) CcLibrary(toolchain Toolchain) Library {
+func (mtl multipleToolchainLibrary) CcLibrary(toolchain Toolchain) Library {
 	toolchain = toolchainOrDefault(toolchain)
 	tcLib := mtl.lib
-	if toolchain.Name() != defaultToolchain().Name() {
+	if toolchain.Name() != DefaultToolchain().Name() {
 		tcLib.Out = mtl.baseOut.WithPrefix(toolchain.Name() + "/")
 	}
 	tcLib.Toolchain = toolchain
@@ -149,8 +151,8 @@ func (mtl MultipleToolchainLibrary) CcLibrary(toolchain Toolchain) Library {
 
 // Build for a multi-toolchain-library builds the library
 // with the default toolchain.
-func (mtl MultipleToolchainLibrary) Build(ctx core.Context) {
-	mtl.CcLibrary(defaultToolchain()).Build(ctx)
+func (mtl multipleToolchainLibrary) Build(ctx core.Context) {
+	mtl.CcLibrary(DefaultToolchain()).Build(ctx)
 }
 
 // Build a Library.
