@@ -200,12 +200,7 @@ func (lib Library) Build(ctx core.Context) {
 
 // CcLibrary for Library returns the library itself, or a toolchain-specific variant
 func (lib Library) CcLibrary(toolchain Toolchain) Library {
-	if toolchain == nil {
-		// This is pretty nasty, but there's no way to get the
-		// default toolchain outside of this package, so accept nil
-		// as the default toolchain.
-		toolchain = defaultToolchain()
-	}
+	toolchain = toolchainOrDefault(toolchain)
 
 	if !lib.multipleToolchains {
 		if toolchainOrDefault(lib.Toolchain).Name() != toolchain.Name() {
