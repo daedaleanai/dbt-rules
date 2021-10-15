@@ -121,7 +121,7 @@ type Library struct {
 
 	multipleToolchains bool
 	toolchainMap       map[string]Library
-	baseOut            core.Path
+	baseOut            core.OutPath
 }
 
 func (lib Library) MultipleToolchains() Library {
