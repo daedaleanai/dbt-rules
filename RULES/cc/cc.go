@@ -20,12 +20,14 @@ func (obj ObjectFile) Build(ctx core.Context) {
 	toolchain := toolchainOrDefault(obj.Toolchain)
 	depfile := obj.out().WithExt("d")
 	cmd := toolchain.ObjectFile(obj.out(), depfile, obj.Flags, obj.Includes, obj.Src)
-	ctx.AddBuildStep(core.BuildStep{
-		Out:     obj.out(),
-		Depfile: depfile,
-		In:      obj.Src,
-		Cmd:     cmd,
-		Descr:   fmt.Sprintf("CC (toolchain: %s) %s", toolchain.Name(), obj.out().Relative()),
+	ctx.WithTrace("obj:"+obj.out().Relative(), func(ctx core.Context) {
+		ctx.AddBuildStep(core.BuildStep{
+			Out:     obj.out(),
+			Depfile: depfile,
+			In:      obj.Src,
+			Cmd:     cmd,
+			Descr:   fmt.Sprintf("CC (toolchain: %s) %s", toolchain.Name(), obj.out().Relative()),
+		})
 	})
 }
 
@@ -42,12 +44,14 @@ type BlobObject struct {
 
 // Build a BlobObject.
 func (blob BlobObject) Build(ctx core.Context) {
-	toolchain := toolchainOrDefault(blob.Toolchain)
-	ctx.AddBuildStep(core.BuildStep{
-		Out:   blob.out(),
-		In:    blob.In,
-		Cmd:   blob.Toolchain.BlobObject(blob.out(), blob.In),
-		Descr: fmt.Sprintf("BLOB (toolchain: %s) %s", toolchain.Name(), blob.out().Relative()),
+	ctx.WithTrace("blob:"+blob.out().Relative(), func(ctx core.Context) {
+		toolchain := toolchainOrDefault(blob.Toolchain)
+		ctx.AddBuildStep(core.BuildStep{
+			Out:   blob.out(),
+			In:    blob.In,
+			Cmd:   blob.Toolchain.BlobObject(blob.out(), blob.In),
+			Descr: fmt.Sprintf("BLOB (toolchain: %s) %s", toolchain.Name(), blob.out().Relative()),
+		})
 	})
 }
 
@@ -56,21 +60,23 @@ func (blob BlobObject) out() core.OutPath {
 	return blob.In.WithPrefix(toolchain.Name() + "/").WithExt("blob.o")
 }
 
-func flattenDepsRec(deps []Dep, visited map[string]bool) []Library {
-	flatDeps := []Library{}
+func collectDepsWithToolchainRec(toolchain Toolchain, deps []Dep, visited map[string]bool) []Library {
+	var flatDeps []Library
 	for _, dep := range deps {
-		lib := dep.CcLibrary()
+		lib := dep.CcLibrary(toolchain)
+
 		libPath := lib.Out.Absolute()
-		if _, exists := visited[libPath]; !exists {
+		if !visited[libPath] {
 			visited[libPath] = true
-			flatDeps = append([]Library{lib}, append(flattenDepsRec(lib.Deps, visited), flatDeps...)...)
+			flatDeps = append(flatDeps, lib)
+			flatDeps = append(flatDeps, collectDepsWithToolchainRec(toolchain, lib.Deps, visited)...)
 		}
 	}
 	return flatDeps
 }
 
-func flattenDeps(deps []Dep) []Library {
-	return flattenDepsRec(deps, map[string]bool{})
+func collectDepsWithToolchain(toolchain Toolchain, deps []Dep) []Library {
+	return collectDepsWithToolchainRec(toolchain, deps, map[string]bool{})
 }
 
 func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []Library, toolchain Toolchain) []core.Path {
@@ -97,7 +103,7 @@ func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []L
 
 // Dep is an interface implemented by dependencies that can be linked into a library.
 type Dep interface {
-	CcLibrary() Library
+	CcLibrary(toolchain Toolchain) Library
 }
 
 // Library builds and links a static C++ library.
@@ -122,7 +128,6 @@ func (lib Library) MultipleToolchains() Library {
 	if lib.Out == nil {
 		core.Fatal("Out field is required for cc.Library")
 	}
-
 	lib.multipleToolchains = true
 	lib.toolchainMap = make(map[string]Library)
 	lib.baseOut = lib.Out
@@ -130,17 +135,23 @@ func (lib Library) MultipleToolchains() Library {
 }
 
 // Build a Library.
-func (lib Library) Build(ctx core.Context) {
+func (lib Library) build(ctx core.Context) {
 	if lib.Out == nil {
 		core.Fatal("Out field is required for cc.Library")
+	}
+
+	if ctx.Built(lib.Out.Absolute()) {
+		return
 	}
 
 	toolchain := toolchainOrDefault(lib.Toolchain)
 
 	if lib.multipleToolchains {
 		if lib.Out == lib.baseOut {
+			tclib := lib.CcLibrary(defaultToolchain())
+			tclib.Build(ctx)
 			var defaultLib = core.CopyFile{
-				From: lib.WithToolchain(ctx, defaultToolchain()).Out,
+				From: tclib.Out,
 				To:   lib.Out,
 			}
 			defaultLib.Build(ctx)
@@ -152,9 +163,9 @@ func (lib Library) Build(ctx core.Context) {
 		lib.toolchainMap[toolchain.Name()] = lib
 	}
 
-	deps := flattenDeps(append(toolchain.StdDeps(), lib))
-	for i, _ := range deps {
-		deps[i] = deps[i].WithToolchain(ctx, toolchain)
+	deps := collectDepsWithToolchain(toolchain, append(toolchain.StdDeps(), lib))
+	for _, d := range deps {
+		d.Build(ctx)
 	}
 
 	objs := compileSources(ctx, lib.Srcs, lib.CompilerFlags, deps, toolchain)
@@ -172,7 +183,7 @@ func (lib Library) Build(ctx core.Context) {
 		descr = fmt.Sprintf("LD (toolchain: %s) %s", toolchain.Name(), lib.Out.Relative())
 	} else {
 		cmd = toolchain.StaticLibrary(lib.Out, objs)
-		descr = fmt.Sprintf("AR (totoolchain: %s) %s", toolchain.Name(), lib.Out.Relative())
+		descr = fmt.Sprintf("AR (toolchain: %s) %s", toolchain.Name(), lib.Out.Relative())
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
@@ -183,7 +194,14 @@ func (lib Library) Build(ctx core.Context) {
 	})
 }
 
-func (lib Library) WithToolchain(ctx core.Context, toolchain Toolchain) Library {
+func (lib Library) Build(ctx core.Context) {
+	ctx.WithTrace("lib:"+lib.Out.Relative(), lib.build)
+}
+
+// CcLibrary for Library returns the library itself, or a toolchain-specific variant
+func (lib Library) CcLibrary(toolchain Toolchain) Library {
+	toolchain = toolchainOrDefault(toolchain)
+
 	if !lib.multipleToolchains {
 		if toolchainOrDefault(lib.Toolchain).Name() != toolchain.Name() {
 			core.Fatal("Library %s does not support toolchain %s", lib.Out.Relative(), toolchain.Name())
@@ -196,13 +214,7 @@ func (lib Library) WithToolchain(ctx core.Context, toolchain Toolchain) Library 
 	otherLib := lib
 	otherLib.Out = lib.baseOut.WithPrefix(toolchain.Name() + "/")
 	otherLib.Toolchain = toolchain
-	otherLib.Build(ctx)
 	return otherLib
-}
-
-// CcLibrary for Library is just the identity.
-func (lib Library) CcLibrary() Library {
-	return lib
 }
 
 // Binary builds and links an executable.
@@ -221,12 +233,15 @@ func (bin Binary) Build(ctx core.Context) {
 	if bin.Out == nil {
 		core.Fatal("Out field is required for cc.Binary")
 	}
+	ctx.WithTrace("bin:"+bin.Out.Relative(), bin.build)
+}
 
+func (bin Binary) build(ctx core.Context) {
 	toolchain := toolchainOrDefault(bin.Toolchain)
 
-	deps := flattenDeps(append(bin.Deps, toolchain.StdDeps()...))
-	for i, _ := range deps {
-		deps[i] = deps[i].WithToolchain(ctx, toolchain)
+	deps := collectDepsWithToolchain(toolchain, append(bin.Deps, toolchain.StdDeps()...))
+	for _, d := range deps {
+		d.Build(ctx)
 	}
 	objs := compileSources(ctx, bin.Srcs, bin.CompilerFlags, deps, toolchain)
 

@@ -17,6 +17,20 @@ type Context interface {
 	AddBuildStep(BuildStep)
 	Cwd() OutPath
 
+	// Built reports whether this is the first time Built has been
+	// called with the given id.
+	// It can be used to build a target at most once:
+	//   if ctx.Built(out) { return }
+	//   ... actually build out
+	Built(id string) bool
+
+	// WithTrace calls the given function, with the given value added
+	// to the trace.
+	WithTrace(id string, f func(Context))
+
+	// Trace returns the strings in the current trace (most recent last).
+	Trace() []string
+
 	addTargetDependency(interface{})
 }
 
@@ -75,19 +89,21 @@ type context struct {
 	ninjaFile    strings.Builder
 	bashFile     strings.Builder
 	nextRuleID   int
+
+	trace    []string
+	seenOnce map[string]bool
 }
 
 func newContext(vars map[string]interface{}) *context {
 	ctx := &context{
-		outPath{""},
-		[]string{},
-		map[Path]bool{},
+		cwd:         outPath{""},
+		leafOutputs: map[Path]bool{},
 
-		map[interface{}]string{},
-		map[string]BuildStep{},
-		strings.Builder{},
-		strings.Builder{},
-		0,
+		targetNames:  map[interface{}]string{},
+		buildOutputs: map[string]BuildStep{},
+		ninjaFile:    strings.Builder{},
+		bashFile:     strings.Builder{},
+		seenOnce:     map[string]bool{},
 	}
 
 	for name := range vars {
@@ -99,6 +115,27 @@ func newContext(vars map[string]interface{}) *context {
 	return ctx
 }
 
+func (ctx *context) Built(id string) bool {
+	if ctx.seenOnce[id] {
+		return true
+	}
+	ctx.seenOnce[id] = true
+	return false
+}
+
+func (ctx *context) WithTrace(id string, f func(Context)) {
+	ctx.trace = append(ctx.trace, id)
+	defer func() {
+		ctx.trace = ctx.trace[:len(ctx.trace)-1]
+	}()
+	f(ctx)
+}
+
+func (ctx *context) Trace() []string {
+	// We return a copy of the trace, to avoid mutations.
+	return append([]string{}, ctx.trace...)
+}
+
 // AddBuildStep adds a build step for the current target.
 func (ctx *context) AddBuildStep(step BuildStep) {
 	outs := []string{}
@@ -107,6 +144,7 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 		outs = append(outs, ninjaEscape(out.Absolute()))
 		ctx.leafOutputs[out] = true
 	}
+
 	if len(outs) == 0 {
 		return
 	}
@@ -159,6 +197,7 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 		step.Cmd = fmt.Sprintf("cp %q %q", dataFilePath, step.Out)
 	}
 
+	fmt.Fprintf(&ctx.ninjaFile, "# trace: %s\n", strings.Join(ctx.Trace(), " // "))
 	fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
 	if step.Depfile != nil {
 		depfile := ninjaEscape(step.Depfile.Absolute())
@@ -186,7 +225,7 @@ func (ctx *context) handleTarget(targetPath string, target buildInterface) {
 	ctx.leafOutputs = map[Path]bool{}
 	ctx.targetDependencies = []string{}
 
-	target.Build(ctx)
+	ctx.WithTrace("top:"+targetPath, target.Build)
 
 	if !unicode.IsUpper([]rune(path.Base(targetPath))[0]) {
 		return
@@ -229,8 +268,8 @@ func (ctx *context) handleTarget(targetPath string, target buildInterface) {
 		runCmd := runIface.Run(input.RunArgs)
 		fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
 		fmt.Fprintf(&ctx.ninjaFile, "  command = %s\n", runCmd)
-                fmt.Fprintf(&ctx.ninjaFile, "  description = Running %s:\n", targetPath)
-                fmt.Fprintf(&ctx.ninjaFile, "  pool = console\n")
+		fmt.Fprintf(&ctx.ninjaFile, "  description = Running %s:\n", targetPath)
+		fmt.Fprintf(&ctx.ninjaFile, "  pool = console\n")
 		fmt.Fprintf(&ctx.ninjaFile, "\n")
 		fmt.Fprintf(&ctx.ninjaFile, "build %s#run: r%d %s __phony__\n", targetPath, ctx.nextRuleID, targetPath)
 		fmt.Fprintf(&ctx.ninjaFile, "\n")
