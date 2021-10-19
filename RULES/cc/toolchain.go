@@ -2,6 +2,7 @@ package cc
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"dbt-rules/RULES/core"
@@ -186,7 +187,12 @@ func defaultToolchain() Toolchain {
 	if toolchain, ok := toolchains[defaultToolchainFlag.Value()]; ok {
 		return toolchain
 	}
-	core.Fatal("No toolchain has been registered with the name %s", defaultToolchainFlag.Value())
+	var all []string
+	for tc, _ := range toolchains {
+		all = append(all, fmt.Sprintf("%q", tc))
+	}
+	sort.Strings(all)
+	core.Fatal("No registered toolchain %q. Registered toolchains: %s", defaultToolchainFlag.Value(), strings.Join(all, ", "))
 	return nil
 }
 
