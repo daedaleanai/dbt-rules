@@ -45,6 +45,18 @@ func ToolchainFreestanding(toolchain Toolchain) bool {
 	return false
 }
 
+// ToolchainAccepts reports whether the parent toolchain accepts
+// libraries built with the child toolchain.
+func ToolchainAccepts(parent, child Toolchain) bool {
+	if parent.Name() == child.Name() {
+		return true
+	}
+	if tca, ok := parent.(interface{ Accepts(tc Toolchain) bool }); ok {
+		return tca.Accepts(child)
+	}
+	return false
+}
+
 // Toolchain represents a C++ toolchain.
 type GccToolchain struct {
 	Ar      core.GlobalPath
@@ -65,6 +77,22 @@ type GccToolchain struct {
 	ToolchainName string
 	ArchName      string
 	TargetName    string
+
+	// A list of toolchain names that libraries can be built with instead
+	// of our toolchain. (A toolchain is always compatible with
+	// itself -- there's no need to include oneself.)
+	// For example, a testing toolchain should be able to accept low-level libraries
+	// built with a non-test toolchain.
+	CompatibleWith []string
+}
+
+func (gcc GccToolchain) Accepts(tc Toolchain) bool {
+	for _, cw := range gcc.CompatibleWith {
+		if cw == tc.Name() {
+			return true
+		}
+	}
+	return false
 }
 
 func (gcc GccToolchain) Architecture() Architecture {

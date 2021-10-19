@@ -206,7 +206,7 @@ func (lib Library) Build(ctx core.Context) {
 func (lib Library) CcLibrary(toolchain Toolchain) Library {
 	toolchain = toolchainOrDefault(toolchain)
 
-	if toolchainOrDefault(lib.Toolchain).Name() != toolchain.Name() {
+	if !ToolchainAccepts(toolchain, toolchainOrDefault(lib.Toolchain)) {
 		core.Fatal("Library %s does not support toolchain %s", lib.Out.Relative(), toolchain.Name())
 	}
 	return lib
