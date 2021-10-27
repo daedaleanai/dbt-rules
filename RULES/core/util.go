@@ -123,3 +123,13 @@ func GetSortedOutPaths(pathMap map[string]OutPath) []OutPath {
 	}
 	return paths
 }
+
+type StringPath struct {
+	Key   string
+	Value Path
+}
+
+type StringString struct {
+	Key   string
+	Value string
+}

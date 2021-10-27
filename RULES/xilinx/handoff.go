@@ -63,7 +63,7 @@ type Handoff struct {
 	Ip Ip
 
 	// Platform-specific patches to be applied, if any. Go-style regexps are accepted.
-	Patches map[string]core.Path
+	Patches []core.StringPath
 }
 
 func (rule Handoff) Build(ctx core.Context) {
@@ -81,13 +81,13 @@ func (rule Handoff) Build(ctx core.Context) {
 
 	var patch core.Path
 	board := hdl.BoardName.Value()
-	for pattern, patchPath := range rule.Patches {
-		matched, err := regexp.MatchString(pattern, board)
+	for _, cfg := range rule.Patches {
+		matched, err := regexp.MatchString(cfg.Key, board)
 		if err != nil {
 			core.Fatal("Handoff patch: %s", err)
 		}
 		if matched {
-			patch = patchPath
+			patch = cfg.Value
 		}
 	}
 
