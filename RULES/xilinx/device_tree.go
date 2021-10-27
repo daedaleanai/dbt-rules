@@ -56,7 +56,7 @@ type DeviceTree struct {
 	Ip Ip
 
 	// A map of board specific source tree overrides. Go-style regexp are accepted, including `.*`.
-	BoardDts map[string]core.Path
+	BoardDts []core.StringPath
 }
 
 func (rule DeviceTree) Build(ctx core.Context) {
@@ -74,13 +74,13 @@ func (rule DeviceTree) Build(ctx core.Context) {
 
 	var boardDts core.Path
 	board := hdl.BoardName.Value()
-	for pattern, dtsPath := range rule.BoardDts {
-		matched, err := regexp.MatchString(pattern, board)
+	for _, cfg := range rule.BoardDts {
+		matched, err := regexp.MatchString(cfg.Key, board)
 		if err != nil {
 			core.Fatal("Board DTS: %s", err)
 		}
 		if matched {
-			boardDts = dtsPath
+			boardDts = cfg.Value
 		}
 	}
 

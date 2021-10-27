@@ -34,28 +34,19 @@ type UBoot struct {
 	Out core.OutPath
 
 	// Map of board names to U-Boot configurations. Go-style regexps accepted.
-	Configs map[string]string
+	Configs []core.StringString
 }
 
 func (rule UBoot) Build(ctx core.Context) {
 	var config string
 	board := hdl.BoardName.Value()
-	for pattern, cfg := range rule.Configs {
-		if pattern == ".*" {
-			continue
-		}
-		matched, err := regexp.MatchString(pattern, board)
+	for _, cfg := range rule.Configs {
+		matched, err := regexp.MatchString(cfg.Key, board)
 		if err != nil {
 			core.Fatal("UBoot config: %s", err)
 		}
 		if matched {
-			config = cfg
-		}
-	}
-
-	if config == "" {
-		if cfg, ok := rule.Configs[".*"]; ok {
-			config = cfg
+			config = cfg.Value
 		}
 	}
 
