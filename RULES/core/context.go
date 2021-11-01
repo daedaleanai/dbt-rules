@@ -79,6 +79,10 @@ type runInterface interface {
 	Run(args []string) string
 }
 
+type testInterface interface {
+	Test(args []string) string
+}
+
 type context struct {
 	cwd                OutPath
 	targetDependencies []string
@@ -272,6 +276,19 @@ func (ctx *context) handleTarget(targetPath string, target buildInterface) {
 		fmt.Fprintf(&ctx.ninjaFile, "  pool = console\n")
 		fmt.Fprintf(&ctx.ninjaFile, "\n")
 		fmt.Fprintf(&ctx.ninjaFile, "build %s#run: r%d %s __phony__\n", targetPath, ctx.nextRuleID, targetPath)
+		fmt.Fprintf(&ctx.ninjaFile, "\n")
+		fmt.Fprintf(&ctx.ninjaFile, "\n")
+		ctx.nextRuleID++
+	}
+
+	if testIface, ok := target.(testInterface); ok {
+		testCmd := testIface.Test(input.TestArgs)
+		fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
+		fmt.Fprintf(&ctx.ninjaFile, "  command = %s\n", testCmd)
+		fmt.Fprintf(&ctx.ninjaFile, "  description = Testing %s:\n", targetPath)
+		fmt.Fprintf(&ctx.ninjaFile, "  pool = console\n")
+		fmt.Fprintf(&ctx.ninjaFile, "\n")
+		fmt.Fprintf(&ctx.ninjaFile, "build %s#test: r%d %s __phony__\n", targetPath, ctx.nextRuleID, targetPath)
 		fmt.Fprintf(&ctx.ninjaFile, "\n")
 		fmt.Fprintf(&ctx.ninjaFile, "\n")
 		ctx.nextRuleID++

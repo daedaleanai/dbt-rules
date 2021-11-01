@@ -14,6 +14,7 @@ const outputFileName = "output.json"
 type targetInfo struct {
 	Description string
 	Runnable    bool
+	Testable    bool
 }
 
 type generatorInput struct {
@@ -24,6 +25,7 @@ type generatorInput struct {
 	BuildFlags      map[string]string
 	CompletionsOnly bool
 	RunArgs         []string
+	TestArgs        []string
 }
 
 type generatorOutput struct {
@@ -58,6 +60,9 @@ func GeneratorMain(vars map[string]interface{}) {
 		}
 		if _, ok := variable.(runInterface); ok {
 			info.Runnable = true
+		}
+		if _, ok := variable.(testInterface); ok {
+			info.Testable = true
 		}
 		output.Targets[targetPath] = info
 	}
