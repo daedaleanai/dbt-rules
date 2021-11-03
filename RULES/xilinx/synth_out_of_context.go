@@ -5,7 +5,6 @@ import (
 	"dbt-rules/RULES/hdl"
 	h "dbt-rules/hdl"
 	"fmt"
-	"time"
 )
 
 type ConstraintsFileScriptParams struct {
@@ -54,6 +53,7 @@ func (rule SynthOutOfContext) Build(ctx core.Context) {
 		}
 	}
 
+	// Default parameters
 	clockSignal := "clk_i"
 	clockPeriod := float32(1.550)
 
@@ -90,22 +90,22 @@ func (rule SynthOutOfContext) Build(ctx core.Context) {
 
 	outBf := ctx.Cwd().WithSuffix("/" + rule.Name + "_synth.tcl")
 
-	// Flow reports and checkpoints are saved in a timestamped directory in PROJECT_ROOT/synth_reports.
-	currentTime := time.Now().Format("2006-01-02--15-04")
-	outReportDir := core.SourcePath("../synth_reports/" + rule.Name + "/" + currentTime)
+	// Base directory for timestamped flow reports and checkpoints (PROJECT_ROOT/synth_reports/name)
+	outReportDir := core.SourcePath("../synth_reports/" + rule.Name)
 
 	bfData := BuildFileScriptParams{
-		Out:          outBf,
-		Name:         rule.Name,
-		OutOfContext: true,
-		PartName:     hdl.PartName.Value(),
-		BoardName:    hdl.BoardName.Value(),
-		BoardFiles:   rule.BoardFiles,
-		IncDir:       core.SourcePath(""),
-		Ips:          ips,
-		Rtls:         rtls,
-		Constrs:      constrs,
-		ReportDir:    outReportDir,
+		Out:             outBf,
+		Name:            rule.Name,
+		OutOfContext:    true,
+		PartName:        hdl.PartName.Value(),
+		BoardName:       hdl.BoardName.Value(),
+		BoardFiles:      rule.BoardFiles,
+		IncDir:          core.SourcePath(""),
+		Ips:             ips,
+		Rtls:            rtls,
+		Constrs:         constrs,
+		ReportDir:       outReportDir,
+		FlattenStrategy: SynthFlattenStrategy.Value(),
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
