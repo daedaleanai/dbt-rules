@@ -2,25 +2,34 @@ package xilinx
 
 import (
 	"fmt"
-	"time"
 
 	"dbt-rules/RULES/core"
 	"dbt-rules/RULES/hdl"
 	h "dbt-rules/hdl"
 )
 
+var SynthFlattenStrategy = core.StringFlag{
+	Name:        "xilinx-synth-flatten_strategy",
+	Description: "Choose synthesis-time hierarchy flattening strategy",
+	DefaultFn: func() string {
+		return "rebuilt"
+	},
+	AllowedValues: []string{"none", "rebuilt", "full"},
+}.Register()
+
 type BuildFileScriptParams struct {
-	Out          core.Path
-	PartName     string
-	BoardName    string
-	Name         string
-	IncDir       core.Path
-	BoardFiles   []core.Path
-	Ips          []core.Path
-	Constrs      []core.Path
-	Rtls         []core.Path
-	OutOfContext bool
-	ReportDir    core.Path
+	Out             core.Path
+	PartName        string
+	BoardName       string
+	Name            string
+	IncDir          core.Path
+	BoardFiles      []core.Path
+	Ips             []core.Path
+	Constrs         []core.Path
+	Rtls            []core.Path
+	OutOfContext    bool
+	ReportDir       core.Path
+	FlattenStrategy string
 }
 
 type RunSynthesisScriptParams struct {
@@ -77,9 +86,8 @@ func (rule Bitstream) Build(ctx core.Context) {
 	outDebugProbes := rule.Src.WithExt("ltx")
 	outBf := rule.Src.WithExt("tcl")
 
-	// Flow reports and checkpoints are saved in a timestamped directory in PROJECT_ROOT/synth_reports.
-	currentTime := time.Now().Format("2006-01-02--15-04")
-	outReportDir := core.SourcePath("../synth_reports/" + rule.Name + "/" + currentTime)
+	// Base directory for timestamped flow reports and checkpoints (PROJECT_ROOT/synth_reports/name)
+	outReportDir := core.SourcePath("../synth_reports/" + rule.Name)
 
 	ins = append(ins, rule.Src)
 	rtls = append(rtls, rule.Src)
@@ -89,17 +97,18 @@ func (rule Bitstream) Build(ctx core.Context) {
 	}
 
 	bfData := BuildFileScriptParams{
-		Out:          outBf,
-		Name:         rule.Name,
-		PartName:     hdl.PartName.Value(),
-		BoardName:    hdl.BoardName.Value(),
-		BoardFiles:   rule.BoardFiles,
-		IncDir:       core.SourcePath(""),
-		Ips:          ips,
-		Rtls:         rtls,
-		Constrs:      constrs,
-		OutOfContext: false,
-		ReportDir:    outReportDir,
+		Out:             outBf,
+		Name:            rule.Name,
+		PartName:        hdl.PartName.Value(),
+		BoardName:       hdl.BoardName.Value(),
+		BoardFiles:      rule.BoardFiles,
+		IncDir:          core.SourcePath(""),
+		Ips:             ips,
+		Rtls:            rtls,
+		Constrs:         constrs,
+		OutOfContext:    false,
+		ReportDir:       outReportDir,
+		FlattenStrategy: SynthFlattenStrategy.Value(),
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
