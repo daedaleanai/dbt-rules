@@ -75,10 +75,9 @@ func collectDepsWithToolchainRec(toolchain Toolchain, dep Dep, visited map[strin
 
 	visited[libPath] = 1
 
-	for _,ldep := range lib.Deps {
+	for _, ldep := range lib.Deps {
 		collectDepsWithToolchainRec(toolchain, ldep, visited, stack)
 	}
-
 
 	*stack = append([]Library{lib}, *stack...)
 	visited[libPath] = 2
@@ -87,7 +86,7 @@ func collectDepsWithToolchainRec(toolchain Toolchain, dep Dep, visited map[strin
 func collectDepsWithToolchain(toolchain Toolchain, deps []Dep) []Library {
 	stack := []Library{}
 	marks := map[string]int{}
-	for _, dep:= range deps {
+	for _, dep := range deps {
 		collectDepsWithToolchainRec(toolchain, dep, marks, &stack)
 	}
 	return stack
