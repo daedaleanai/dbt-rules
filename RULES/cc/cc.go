@@ -60,23 +60,37 @@ func (blob BlobObject) out() core.OutPath {
 	return blob.In.WithPrefix(toolchain.Name() + "/").WithExt("blob.o")
 }
 
-func collectDepsWithToolchainRec(toolchain Toolchain, deps []Dep, visited map[string]bool) []Library {
-	var flatDeps []Library
-	for _, dep := range deps {
-		lib := dep.CcLibrary(toolchain)
+func collectDepsWithToolchainRec(toolchain Toolchain, dep Dep, visited map[string]int, stack *[]Library) {
+	lib := dep.CcLibrary(toolchain)
 
-		libPath := lib.Out.Absolute()
-		if !visited[libPath] {
-			visited[libPath] = true
-			flatDeps = append(flatDeps, lib)
-			flatDeps = append(flatDeps, collectDepsWithToolchainRec(toolchain, lib.Deps, visited)...)
-		}
+	libPath := lib.Out.Absolute()
+
+	if visited[libPath] == 2 {
+		return
 	}
-	return flatDeps
+
+	if visited[libPath] == 1 {
+		core.Fatal("dependency loop detected")
+	}
+
+	visited[libPath] = 1
+
+	for _,ldep := range lib.Deps {
+		collectDepsWithToolchainRec(toolchain, ldep, visited, stack)
+	}
+
+
+	*stack = append([]Library{lib}, *stack...)
+	visited[libPath] = 2
 }
 
 func collectDepsWithToolchain(toolchain Toolchain, deps []Dep) []Library {
-	return collectDepsWithToolchainRec(toolchain, deps, map[string]bool{})
+	stack := []Library{}
+	marks := map[string]int{}
+	for _, dep:= range deps {
+		collectDepsWithToolchainRec(toolchain, dep, marks, &stack)
+	}
+	return stack
 }
 
 func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []Library, toolchain Toolchain) []core.Path {
