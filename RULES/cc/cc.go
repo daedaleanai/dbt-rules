@@ -60,28 +60,29 @@ func (blob BlobObject) out() core.OutPath {
 	return blob.In.WithPrefix(toolchain.Name() + "/").WithExt("blob.o")
 }
 
-func collectDepsWithToolchainRec(toolchain Toolchain, deps []Dep, visited map[string]bool) []Dep {
-	var flatDeps []Dep
+func collectDepsWithToolchainRec(toolchain Toolchain, deps []Dep, visited map[string]bool) []Library {
+	var flatDeps []Library
 	for _, dep := range deps {
-		dep = dep.WithToolchain(toolchain)
-		depPath := dep.GetBuildOut().Absolute()
-		if !visited[depPath] {
-			visited[depPath] = true
-			flatDeps = append(flatDeps, dep)
-			flatDeps = append(flatDeps, collectDepsWithToolchainRec(toolchain, dep.GetDirectDeps(), visited)...)
+		lib := dep.CcLibrary(toolchain)
+
+		libPath := lib.Out.Absolute()
+		if !visited[libPath] {
+			visited[libPath] = true
+			flatDeps = append(flatDeps, lib)
+			flatDeps = append(flatDeps, collectDepsWithToolchainRec(toolchain, lib.Deps, visited)...)
 		}
 	}
 	return flatDeps
 }
 
-func collectDepsWithToolchain(toolchain Toolchain, deps []Dep) []Dep {
+func collectDepsWithToolchain(toolchain Toolchain, deps []Dep) []Library {
 	return collectDepsWithToolchainRec(toolchain, deps, map[string]bool{})
 }
 
-func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []Dep, toolchain Toolchain) []core.Path {
+func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []Library, toolchain Toolchain) []core.Path {
 	includes := []core.Path{core.SourcePath("")}
 	for _, dep := range deps {
-		includes = append(includes, dep.GetIncludes()...)
+		includes = append(includes, dep.Includes...)
 	}
 
 	objs := []core.Path{}
@@ -100,23 +101,17 @@ func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []D
 	return objs
 }
 
-// Dep is an interface implemented by dependencies that can be linked into a binary/library.
+// Dep is an interface implemented by dependencies that can be linked into a library.
 type Dep interface {
-	// Returns a new instance of Dep which will be build using the specified toolchain.
-	WithToolchain(toolchain Toolchain) Dep
-
-	Build(ctx core.Context)
-	GetDirectDeps() []Dep
-
-	// Returns the build path of Dep, i.e., the exact path where DBT will emit the Dep.
-	// Note that this might differ from the user-specified "Out" path, for example if non-default toolchain is used.
-	GetBuildOut() core.OutPath
-
-	GetIncludes() []core.Path
-	IsAlwaysLink() bool
+	CcLibrary(toolchain Toolchain) Library
 }
 
 // Library builds and links a static C++ library.
+// The same library can be build with multiple toolchains. Each Toolchain might
+// emit different outputs, therefore DBT needs to create unique locations for
+// these outputs. The user-specified Out path is used either for user-specified
+// Toolchain or for the DefaultToolchain in case user didn't specify a Toolchain.
+// In all other cases, user-specified Out path is directory-prefixed with the Toolchain name.
 type Library struct {
 	Out           core.OutPath
 	Srcs          []core.Path
@@ -128,6 +123,10 @@ type Library struct {
 	Shared        bool
 	AlwaysLink    bool
 	Toolchain     Toolchain
+
+	// Extra fields for handling multi-toolchain logic.
+	userOut       core.OutPath
+	userToolchain Toolchain
 }
 
 // Build a Library.
@@ -136,8 +135,7 @@ func (lib Library) build(ctx core.Context) {
 		core.Fatal("Out field is required for cc.Library")
 	}
 
-	buildOut := lib.GetBuildOut()
-	if ctx.Built(buildOut.Absolute()) {
+	if ctx.Built(lib.Out.Absolute()) {
 		return
 	}
 
@@ -159,15 +157,15 @@ func (lib Library) build(ctx core.Context) {
 
 	var cmd, descr string
 	if lib.Shared {
-		cmd = toolchain.SharedLibrary(buildOut, objs)
-		descr = fmt.Sprintf("LD (toolchain: %s) %s", toolchain.Name(), buildOut.Relative())
+		cmd = toolchain.SharedLibrary(lib.Out, objs)
+		descr = fmt.Sprintf("LD (toolchain: %s) %s", toolchain.Name(), lib.Out.Relative())
 	} else {
-		cmd = toolchain.StaticLibrary(buildOut, objs)
-		descr = fmt.Sprintf("AR (toolchain: %s) %s", toolchain.Name(), buildOut.Relative())
+		cmd = toolchain.StaticLibrary(lib.Out, objs)
+		descr = fmt.Sprintf("AR (toolchain: %s) %s", toolchain.Name(), lib.Out.Relative())
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
-		Out:   buildOut,
+		Out:   lib.Out,
 		Ins:   objs,
 		Cmd:   cmd,
 		Descr: descr,
@@ -175,36 +173,39 @@ func (lib Library) build(ctx core.Context) {
 }
 
 func (lib Library) Build(ctx core.Context) {
-	ctx.WithTrace("lib:"+lib.GetBuildOut().Relative(), lib.build)
+	ctx.WithTrace("lib:"+lib.Out.Relative(), lib.build)
 }
 
-// Returns a toolchain-specific variant of the Library.
-func (lib Library) WithToolchain(toolchain Toolchain) Dep {
+// CcLibrary for Library returns the library itself, or a toolchain-specific variant
+func (lib Library) CcLibrary(toolchain Toolchain) Library {
 	if toolchain == nil {
-		core.Fatal("Using Library without toolchain is illegal (%s)", lib.GetBuildOut())
+		core.Fatal("CcLibrary() called with nil toolchain.")
 	}
+
+	if lib.Out == nil {
+		core.Fatal("Out field is required for cc.Library")
+	}
+
+	// Ensure userOut and userToolchain are set.
+	if lib.userOut == nil {
+		lib.userOut = lib.Out
+	}
+	if lib.userToolchain == nil {
+		if lib.Toolchain != nil {
+			lib.userToolchain = lib.Toolchain
+		} else {
+			lib.userToolchain = DefaultToolchain()
+		}
+	}
+
+	if toolchain.Name() == lib.userToolchain.Name() {
+		lib.Out = lib.userOut
+		return lib
+	}
+
+	lib.Out = lib.userOut.WithPrefix(toolchain.Name() + "/")
 	lib.Toolchain = toolchain
 	return lib
-}
-
-func (lib Library) GetDirectDeps() []Dep {
-	return lib.Deps
-}
-
-func (lib Library) GetBuildOut() core.OutPath {
-	if lib.Toolchain == nil || lib.Toolchain.Name() == DefaultToolchain().Name() {
-		return lib.Out
-	}
-
-	return lib.Out.WithPrefix(lib.Toolchain.Name() + "/")
-}
-
-func (lib Library) GetIncludes() []core.Path {
-	return lib.Includes
-}
-
-func (lib Library) IsAlwaysLink() bool {
-	return lib.AlwaysLink
 }
 
 // Binary builds and links an executable.
@@ -239,12 +240,11 @@ func (bin Binary) build(ctx core.Context) {
 	alwaysLinkLibs := []core.Path{}
 	otherLibs := []core.Path{}
 	for _, dep := range deps {
-		depBuildOut := dep.GetBuildOut()
-		ins = append(ins, depBuildOut)
-		if dep.IsAlwaysLink() {
-			alwaysLinkLibs = append(alwaysLinkLibs, depBuildOut)
+		ins = append(ins, dep.Out)
+		if dep.AlwaysLink {
+			alwaysLinkLibs = append(alwaysLinkLibs, dep.Out)
 		} else {
-			otherLibs = append(otherLibs, depBuildOut)
+			otherLibs = append(otherLibs, dep.Out)
 		}
 	}
 
