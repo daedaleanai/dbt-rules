@@ -120,6 +120,11 @@ type Dep interface {
 }
 
 // Library builds and links a static C++ library.
+// The same library can be build with multiple toolchains. Each Toolchain might
+// emit different outputs, therefore DBT needs to create unique locations for
+// these outputs. The user-specified Out path is used either for user-specified
+// Toolchain or for the DefaultToolchain in case user didn't specify a Toolchain.
+// In all other cases, user-specified Out path is directory-prefixed with the Toolchain name.
 type Library struct {
 	Out           core.OutPath
 	Srcs          []core.Path
@@ -131,41 +136,10 @@ type Library struct {
 	Shared        bool
 	AlwaysLink    bool
 	Toolchain     Toolchain
-}
 
-// multipleToolchainLibrary is a library that can be built
-// via multiple different toolchains from the same build.
-type multipleToolchainLibrary struct {
-	baseOut core.OutPath
-	lib     Library
-}
-
-func (lib Library) MultipleToolchains() multipleToolchainLibrary {
-	if lib.Out == nil {
-		core.Fatal("Out field is required for cc.Library")
-	}
-	return multipleToolchainLibrary{
-		baseOut: lib.Out,
-		lib:     lib,
-	}
-}
-
-// CcLibrary for a multi-toolchain-library returns a toolchain-specific
-// copy of the registered library.
-func (mtl multipleToolchainLibrary) CcLibrary(toolchain Toolchain) Library {
-	toolchain = toolchainOrDefault(toolchain)
-	tcLib := mtl.lib
-	if toolchain.Name() != DefaultToolchain().Name() {
-		tcLib.Out = mtl.baseOut.WithPrefix(toolchain.Name() + "/")
-	}
-	tcLib.Toolchain = toolchain
-	return tcLib
-}
-
-// Build for a multi-toolchain-library builds the library
-// with the default toolchain.
-func (mtl multipleToolchainLibrary) Build(ctx core.Context) {
-	mtl.CcLibrary(DefaultToolchain()).Build(ctx)
+	// Extra fields for handling multi-toolchain logic.
+	userOut       core.OutPath
+	userToolchain Toolchain
 }
 
 // Build a Library.
@@ -217,11 +191,33 @@ func (lib Library) Build(ctx core.Context) {
 
 // CcLibrary for Library returns the library itself, or a toolchain-specific variant
 func (lib Library) CcLibrary(toolchain Toolchain) Library {
-	toolchain = toolchainOrDefault(toolchain)
-
-	if !ToolchainAccepts(toolchain, toolchainOrDefault(lib.Toolchain)) {
-		core.Fatal("Library %s does not support toolchain %s", lib.Out.Relative(), toolchain.Name())
+	if toolchain == nil {
+		core.Fatal("CcLibrary() called with nil toolchain.")
 	}
+
+	if lib.Out == nil {
+		core.Fatal("Out field is required for cc.Library")
+	}
+
+	// Ensure userOut and userToolchain are set.
+	if lib.userOut == nil {
+		lib.userOut = lib.Out
+	}
+	if lib.userToolchain == nil {
+		if lib.Toolchain != nil {
+			lib.userToolchain = lib.Toolchain
+		} else {
+			lib.userToolchain = DefaultToolchain()
+		}
+	}
+
+	if toolchain.Name() == lib.userToolchain.Name() {
+		lib.Out = lib.userOut
+		return lib
+	}
+
+	lib.Out = lib.userOut.WithPrefix(toolchain.Name() + "/")
+	lib.Toolchain = toolchain
 	return lib
 }
 
