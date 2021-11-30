@@ -16,7 +16,7 @@ type objectFile struct {
 	Toolchain Toolchain
 }
 
-// Build an ObjectFile.
+// Build an objectFile.
 func (obj objectFile) Build(ctx core.Context) {
 	toolchain := toolchainOrDefault(obj.Toolchain)
 	depfile := obj.Out.WithExt("d")
