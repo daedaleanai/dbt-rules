@@ -20,8 +20,8 @@ var PartName = core.StringFlag{
 
 type Ip interface {
 	Sources() []core.Path
-	Data() []core.Path
-	Ips() []Ip
+	Data()    []core.Path
+	Ips()     []Ip
 }
 
 type Library struct {
