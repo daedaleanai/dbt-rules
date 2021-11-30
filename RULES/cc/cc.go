@@ -7,8 +7,9 @@ import (
 	"dbt-rules/RULES/core"
 )
 
-// ObjectFile compiles a single C++ source file.
-type ObjectFile struct {
+// objectFile compiles a single C++ source file.
+type objectFile struct {
+	Out       core.OutPath
 	Src       core.Path
 	Includes  []core.Path
 	Flags     []string
@@ -16,24 +17,19 @@ type ObjectFile struct {
 }
 
 // Build an ObjectFile.
-func (obj ObjectFile) Build(ctx core.Context) {
+func (obj objectFile) Build(ctx core.Context) {
 	toolchain := toolchainOrDefault(obj.Toolchain)
-	depfile := obj.out().WithExt("d")
-	cmd := toolchain.ObjectFile(obj.out(), depfile, obj.Flags, obj.Includes, obj.Src)
-	ctx.WithTrace("obj:"+obj.out().Relative(), func(ctx core.Context) {
+	depfile := obj.Out.WithExt("d")
+	cmd := toolchain.ObjectFile(obj.Out, depfile, obj.Flags, obj.Includes, obj.Src)
+	ctx.WithTrace("obj:"+obj.Out.Relative(), func(ctx core.Context) {
 		ctx.AddBuildStep(core.BuildStep{
-			Out:     obj.out(),
+			Out:     obj.Out,
 			Depfile: depfile,
 			In:      obj.Src,
 			Cmd:     cmd,
-			Descr:   fmt.Sprintf("CC (toolchain: %s) %s", toolchain.Name(), obj.out().Relative()),
+			Descr:   fmt.Sprintf("CC (toolchain: %s) %s", toolchain.Name(), obj.Out.Relative()),
 		})
 	})
-}
-
-func (obj ObjectFile) out() core.OutPath {
-	toolchain := toolchainOrDefault(obj.Toolchain)
-	return obj.Src.WithPrefix(toolchain.Name() + "/").WithExt("o")
 }
 
 // BlobObject creates a relocatable object file from any blob of data.
@@ -92,7 +88,7 @@ func collectDepsWithToolchain(toolchain Toolchain, deps []Dep) []Library {
 	return stack
 }
 
-func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []Library, toolchain Toolchain) []core.Path {
+func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, flags []string, deps []Library, toolchain Toolchain) []core.Path {
 	includes := []core.Path{core.SourcePath("")}
 	for _, dep := range deps {
 		includes = append(includes, dep.Includes...)
@@ -101,14 +97,15 @@ func compileSources(ctx core.Context, srcs []core.Path, flags []string, deps []L
 	objs := []core.Path{}
 
 	for _, src := range srcs {
-		obj := ObjectFile{
+		obj := objectFile{
+			Out:       out.WithSuffix("_o/" + src.Relative()).WithExt("o"),
 			Src:       src,
 			Includes:  includes,
 			Flags:     flags,
 			Toolchain: toolchain,
 		}
 		obj.Build(ctx)
-		objs = append(objs, obj.out())
+		objs = append(objs, obj.Out)
 	}
 
 	return objs
@@ -159,7 +156,7 @@ func (lib Library) build(ctx core.Context) {
 		d.Build(ctx)
 	}
 
-	objs := compileSources(ctx, lib.Srcs, lib.CompilerFlags, deps, toolchain)
+	objs := compileSources(lib.Out, ctx, lib.Srcs, lib.CompilerFlags, deps, toolchain)
 	objs = append(objs, lib.Objs...)
 
 	for _, blob := range lib.Blobs {
@@ -247,7 +244,7 @@ func (bin Binary) build(ctx core.Context) {
 	for _, d := range deps {
 		d.Build(ctx)
 	}
-	objs := compileSources(ctx, bin.Srcs, bin.CompilerFlags, deps, toolchain)
+	objs := compileSources(bin.Out, ctx, bin.Srcs, bin.CompilerFlags, deps, toolchain)
 
 	ins := objs
 	alwaysLinkLibs := []core.Path{}
