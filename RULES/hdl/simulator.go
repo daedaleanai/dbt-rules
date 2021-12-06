@@ -2,6 +2,8 @@ package hdl
 
 import (
 	"log"
+	"fmt"
+	"os"
 	"dbt-rules/RULES/core"
 )
 
@@ -22,13 +24,27 @@ var SimulatorLibDir = core.StringFlag{
 	},
 }.Register()
 
+var SimulatorParams = core.StringFlag{
+	Name:        "hdl-simulator-params",
+	Description: "Name of the parameter set to use",
+	DefaultFn: func() string {
+		return "default"
+	},
+}.Register()
+
+type ParamMap map[string]map[string]string
+
 type Simulation struct {
-	Name    string
-	Srcs    []core.Path
-	Ips     []Ip
-	Libs    []string
-	Params  []string
-	Top     string
+	Name              string
+	Srcs              []core.Path
+	Ips               []Ip
+	Libs              []string
+	Params            ParamMap
+	Top               string
+	Dut               string
+	TestCaseGenerator core.Path
+	TestCasesDir      core.Path
+	WaveformInit      core.Path
 }
 
 func (rule Simulation) Build(ctx core.Context) {
@@ -42,16 +58,9 @@ func (rule Simulation) Build(ctx core.Context) {
 			Verbose: false,
 		}.Build(ctx)
 	case "questa":
-		SimulationQuesta{
-			Name:    rule.Name,
-			Srcs:    rule.Srcs,
-			Ips:     rule.Ips,
-			Libs:    rule.Libs,
-			Params:  rule.Params,
-			Top:     rule.Top,
-		}.Build(ctx)
+		BuildQuesta(ctx, rule)
 	default:
-		log.Fatal("invalid value '%s' for hdl-simulator flag", Simulator.Value())
+		log.Fatal(fmt.Sprintf("invalid value '%s' for hdl-simulator flag", Simulator.Value()))
 	}
 }
 
@@ -60,16 +69,9 @@ func (rule Simulation) Run(args []string) string {
 
 	switch Simulator.Value() {
 	case "questa":
-		res = SimulationQuesta{
-			Name:    rule.Name,
-			Srcs:    rule.Srcs,
-			Ips:     rule.Ips,
-			Libs:    rule.Libs,
-			Params:  rule.Params,
-			Top:     rule.Top,
-		}.Run(args)
+		res = RunQuesta(rule, args)
 	default:
-		log.Fatal("'run' target not supported for hdl-simulator flag '%s'", Simulator.Value())
+		log.Fatal(fmt.Sprintf("'run' target not supported for hdl-simulator flag '%s'", Simulator.Value()))
 	}
 
 	return res
@@ -79,17 +81,53 @@ func (rule Simulation) Test(args []string) string {
 	res := ""
 	switch Simulator.Value() {
 	case "questa":
-		res = SimulationQuesta{
-			Name:    rule.Name,
-			Srcs:    rule.Srcs,
-			Ips:     rule.Ips,
-			Libs:    rule.Libs,
-			Params:  rule.Params,
-			Top:     rule.Top,
-		}.Test(args)
+		res = TestQuesta(rule, args)
 	default:
-		log.Fatal("'test' target not supported for hdl-simulator flag '%s'", Simulator.Value())
+		log.Fatal(fmt.Sprintf("'test' target not supported for hdl-simulator flag '%s'", Simulator.Value()))
 	}
 
 	return res
+}
+
+func (rule Simulation) Description() string {
+	description := " Name: " + rule.Name + " "
+	first := true
+	for param, _ := range(rule.Params) {
+		if first {
+			description = description + "Params: "
+			first = false
+		}
+		description = description + param + " "
+	}
+
+	if rule.TestCaseGenerator != nil && rule.TestCasesDir != nil {
+		description = description + "TestCases: "
+		// Loop through all defined testcases in directory
+		items, err := os.ReadDir(rule.TestCasesDir.String())
+		if err != nil {
+			log.Fatal(err)
+		}
+
+    for _, item := range items {
+			// Handle one level of subdirectories
+			if item.IsDir() {
+				subitems, err := os.ReadDir(item.Name())
+				if err != nil {
+					log.Fatal(err)
+				}
+				
+				for _, subitem := range subitems {
+						if !subitem.IsDir() {
+								// handle file there
+								description = description + item.Name() + "/" + subitem.Name() + " "
+						}
+				}
+			} else {
+        // handle file there
+        description = description + item.Name() + " "
+      }
+    }
+	}
+
+	return description
 }

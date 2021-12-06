@@ -5,6 +5,7 @@ import (
 	"path"
 	"strings"
 	"log"
+	"os"
 
 	"dbt-rules/RULES/core"
 )
@@ -42,22 +43,13 @@ var Coverage = core.BoolFlag{
 	},
 }.Register()
 
-type SimulationQuesta struct {
-	Name    string
-	Srcs    []core.Path
-	Ips     []Ip
-	Libs    []string
-	Params  []string
-	Top     string
-}
-
 // Lib returns the standard Questa library name defined for this rule.
-func (rule SimulationQuesta) Lib() string {
+func (rule Simulation) Lib() string {
 	return rule.Name + "Lib"
 }
 
 // Target returns the optimization target name defined for this rule.
-func (rule SimulationQuesta) Target() string {
+func (rule Simulation) Target() string {
 	if Coverage.Value() {
 		return rule.Name + "Cov"
 	} else {
@@ -66,8 +58,28 @@ func (rule SimulationQuesta) Target() string {
 }
 
 // Path returns the default root path for log files defined for this rule.
-func (rule SimulationQuesta) Path() core.Path {
+func (rule Simulation) Path() core.Path {
 	return core.BuildPath("/" + rule.Name)
+}
+
+// Instance returns the instance name of the rule based on the Top and the DUT
+// fields.
+func (rule Simulation) Instance() string {
+	// Defaults
+	top := "board"
+	dut := "u_dut"
+
+	// Pick top from rule
+	if rule.Top != "" {
+		top = rule.Top
+	} 
+
+	// Pick DUT from rule
+	if rule.Dut != "" {
+		dut = rule.Dut
+	} 
+
+	return "/" + top + "/" + dut
 }
 
 // rules holds a map of all defined rules to prevent defining the same rule
@@ -80,7 +92,7 @@ const common_flags = "-nologo -quiet"
 // CompileSrcs compiles a list of sources using the specified context ctx, rule,
 // dependencies and include paths. It returns the resulting dependencies and include paths
 // that result from compiling the source files.
-func CompileSrcs(ctx core.Context, rule SimulationQuesta, 
+func CompileSrcs(ctx core.Context, rule Simulation, 
 	               deps []core.Path, incs []core.Path, srcs []core.Path) ([]core.Path, []core.Path) {
 	for _, src := range srcs {
 		// We handle header files separately from other source files
@@ -136,7 +148,7 @@ func CompileSrcs(ctx core.Context, rule SimulationQuesta,
 }
 
 // CompileIp compiles the IP dependencies and the source files and an IP.
-func CompileIp(ctx core.Context, rule SimulationQuesta, ip Ip, 
+func CompileIp(ctx core.Context, rule Simulation, ip Ip, 
 	             deps []core.Path, incs []core.Path) ([]core.Path, []core.Path) {
 	for _, sub_ip := range ip.Ips() {
 		deps, incs = CompileIp(ctx, rule, sub_ip, deps, incs)
@@ -147,7 +159,7 @@ func CompileIp(ctx core.Context, rule SimulationQuesta, ip Ip,
 }
 
 // Compile compiles the IP dependencies and source files of a simulation rule.
-func Compile(ctx core.Context, rule SimulationQuesta) []core.Path {
+func Compile(ctx core.Context, rule Simulation) []core.Path {
 	incs := []core.Path{}
 	deps := []core.Path{}
 
@@ -162,50 +174,60 @@ func Compile(ctx core.Context, rule SimulationQuesta) []core.Path {
 // Optimize creates and optimized version of the design optionally including
 // coverage recording functionality. The optimized design unit can then conveniently
 // be simulated using 'vsim'.
-func Optimize(ctx core.Context, rule SimulationQuesta, deps []core.Path) {
+func Optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 	top := "board"
 	if rule.Top != "" {
 		top = rule.Top
 	}
 	
-	log := rule.Path().WithSuffix("/vopt.log")
+	log_file := rule.Path().WithSuffix("/vopt.log")
 	cover_flag := ""
 	if Coverage.Value() {
-		log = rule.Path().WithSuffix("/vopt_cover.log")
+		log_file = rule.Path().WithSuffix("/vopt_cover.log")
 		cover_flag = "+cover"
 	}
 
 	// Skip if we already have a rule
-	if rules[log.String()] {
+	if rules[log_file.String()] {
 		return
 	}
 
 	cmd := fmt.Sprintf("vopt %s %s +acc=%s -l %s -work %s %s -o %s", 
 	                   common_flags, cover_flag, Access.Value(),
-	                   log.String(), rule.Lib(), top, rule.Target())
+	                   log_file.String(), rule.Lib(), top, rule.Target())
 
-	// Add parameters for all generics
-	for _, param := range rule.Params {
-		cmd = cmd + " -G " + param
+	// Set up parameters
+	if SimulatorParams.Value() != "default" &&
+	   strings.HasPrefix(SimulatorParams.Value(), rule.Name + ":") {
+		param_set := strings.TrimPrefix(SimulatorParams.Value(), rule.Name + ":")
+		// Check that the parameters exist
+		if params, ok := rule.Params[param_set]; ok {
+			// Add parameters for all generics
+			for param, value := range params {
+				cmd = fmt.Sprintf("%s -G %s=%s", cmd, param, value)
+			}
+		} else {
+			log.Fatal(fmt.Sprintf("parameter set '%s' not defined for Simulation target '%s'!", SimulatorParams.Value(), rule.Name))
+		}
 	}
 	
 	// Add the rule to run 'vopt'.
 	ctx.AddBuildStep(core.BuildStep{
-		Out:   log,
+		Out:   log_file,
 		Ins:   deps,
 		Cmd:   cmd,
 		Descr: fmt.Sprintf("vopt: %s", rule.Lib() + "." + top),
 	})
 
 	// Note that we created this rule
-	rules[log.String()] = true
+	rules[log_file.String()] = true
 }
 
 // CreateLib creates a Questa simulation library named after the rule with the
 // suffix "Lib" added. It also adds the base name where source code will be
 // compiled to the global list of created rules after it has added the
 // build step for the library.
-func CreateLib(ctx core.Context, rule SimulationQuesta) {
+func CreateLib(ctx core.Context, rule Simulation) {
 	path := rule.Path()
 
 	// Skip if we already know this rule
@@ -226,7 +248,7 @@ func CreateLib(ctx core.Context, rule SimulationQuesta) {
 
 // Build will compile and optimize the source and IPs associated with the given
 // rule.
-func (rule SimulationQuesta) Build(ctx core.Context) {
+func BuildQuesta(ctx core.Context, rule Simulation) {
 	// Create the library
 	CreateLib(ctx, rule)
 
@@ -237,15 +259,84 @@ func (rule SimulationQuesta) Build(ctx core.Context) {
 	Optimize(ctx, rule, deps)
 }
 
+// VerbosityLevelToFlag takes a verbosity level of none, low, medium or high and
+// converts it to the corresponding DVM_ level.
+func VerbosityLevelToFlag(level string) (string, bool) {
+	var verbosity_flag string
+	var print_output bool
+	switch level {
+		case "none":   
+			verbosity_flag = " +verbosity=DVM_VERB_NONE"
+			print_output = false
+		case "low":    
+			verbosity_flag = " +verbosity=DVM_VERB_LOW"
+			print_output = true
+		case "medium":
+			verbosity_flag = " +verbosity=DVM_VERB_MED"
+			print_output = true
+		case "high":
+			verbosity_flag = " +verbosity=DVM_VERB_HIGH"
+			print_output = true
+		default:
+			log.Fatal(fmt.Sprintf("invalid verbosity flag '%s', only 'low', 'medium'," + 
+			                      " 'high' or 'none' allowed!", level))
+		}
+
+		return verbosity_flag, print_output
+}
+
 // Simulate will start 'vsim' on the compiled design with flags set in accordance
 // with what is specified on the command line.
-func Simulate(args []string, gui bool, rule SimulationQuesta) string {
-	vsim_flags := ""
-	seed_flag := " -sv_seed random"
+func SimulateQuesta(rule Simulation, args []string, gui bool) string {
+	// Prefix the vsim command with this
+	cmd_preamble := ""
+	
+	// Default log file
+	log_file := rule.Path().WithSuffix("/vsim.log")
+
+	// Default flag values
+	vsim_flags     := " -onfinish stop -l " + log_file.String()
+	seed_flag      := " -sv_seed random"
 	verbosity_flag := " +verbosity=DVM_VERB_NONE"
-	testcases_flag := " +testcases=__all__"
+	mode_flag      := " -batch -quiet"
+	plusargs_flag  := ""
+
+	// Enable coverage in simulator
+	coverage_flag := ""
+	if Coverage.Value() {
+		coverage_flag = " -coverage"
+	}
+
+	// Collect do-files here
+	var do_flags []string
+
+	// Turn off output unless verbosity is activated
+	print_output := false
+
+	// Create a testcase generation command if necessary
+	if rule.TestCaseGenerator != nil {
+		if rule.TestCasesDir != nil {
+			items, err := os.ReadDir(rule.TestCasesDir.String())
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			if len(items) == 0 {
+				log.Fatal("TestCasesDir empty!")
+			}
+
+			// Create path to testcase
+			testcase_file := rule.TestCasesDir.WithSuffix("/" + items[0].Name())
+			cmd_preamble = fmt.Sprintf("%s %s . ; ", rule.TestCaseGenerator.String(), testcase_file.String())
+		} else {
+			cmd_preamble = fmt.Sprintf("%s . ; ", rule.TestCaseGenerator.String())
+		}
+	}
+
+	// Parse additional arguments
 	for _, arg := range args {
 		if strings.HasPrefix(arg, "-seed=") {
+			// Define simulator seed
 			var seed int64
 			if _, err := fmt.Sscanf(arg, "-seed=%d", &seed); err == nil {
 				seed_flag = fmt.Sprintf(" -sv_seed %d", seed)
@@ -253,49 +344,72 @@ func Simulate(args []string, gui bool, rule SimulationQuesta) string {
 				log.Fatal("-seed expects an integer argument!")
 			}
 		} else if strings.HasPrefix(arg, "-verbosity=") {
+			// Define verbosity level
 			var level string
 			if _, err := fmt.Sscanf(arg, "-verbosity=%s", &level); err == nil {
-				switch level {
-				case "none":   verbosity_flag = " +verbosity=DVM_VERB_NONE"
-				case "low":    verbosity_flag = " +verbosity=DVM_VERB_LOW"
-				case "medium": verbosity_flag = " +verbosity=DVM_VERB_MED"
-				case "high":   verbosity_flag = " +verbosity=DVM_VERB_HIGH"
-				}
+				verbosity_flag, print_output = VerbosityLevelToFlag(level)
 			} else {
 				log.Fatal("-verbosity expects an argument of 'low', 'medium', 'high' or 'none'!")
 			}
-		}	else if strings.HasPrefix(arg, "-testcases=") {
-			var testcases string
-			if _, err := fmt.Sscanf(arg, "-testcases=%s", &testcases); err == nil {
-				testcases_flag = " +testcases=" + testcases		
-			} else {
-				log.Fatal("-testcases expects a string argument!")
+		}	else if strings.HasPrefix(arg, "-testcase=") {
+			var testcase string
+			if _, err := fmt.Sscanf(arg, "-testcase=%s", &testcase); err == nil {
+				// Create path to testcase
+				testcase_file := rule.TestCasesDir.WithSuffix("/" + testcase)
+
+				// Do we have a test generation script?
+				if rule.TestCaseGenerator != nil {
+					cmd_preamble = fmt.Sprintf("%s %s .;", rule.TestCaseGenerator.String(), testcase_file.String())
+				}
 			}
-		}
-	}
+		}	else if strings.HasPrefix(arg, "+") {
+			// All '+' arguments go directly to the simulator
+			plusargs_flag = plusargs_flag + " " + arg
+		} 
+	}				 
 
-	log := rule.Path().WithSuffix("/vsim.log")
-	vsim_flags = vsim_flags + seed_flag + verbosity_flag + testcases_flag + " -onfinish stop" +
-	             " -l " + log.String()
-
-	cmd_extra := "" 
+	cmd_postamble := "" 
 	if gui {
-		vsim_flags = vsim_flags + " -gui"
+		mode_flag = " -gui"
+		if rule.WaveformInit != nil {
+			do_flags = append(do_flags, rule.WaveformInit.String())
+		}
 	} else {
-		vsim_flags = vsim_flags + " -batch -nostdout -quiet -do \"run -all; quit -code [coverage attribute -name TESTSTATUS -concise]\""
-		cmd_extra = fmt.Sprintf("|| { cat %s; exit 1; }", log.String())
+		if !print_output {
+			mode_flag = mode_flag + " -nostdout"
+		}
+		do_flags = append(do_flags, "\"run -all\"")
+		if Coverage.Value() {
+			do_flags = append(do_flags, 
+				fmt.Sprintf("\"coverage report -html -output %s_covhtml -details -assert -directive -cvg -code bcefst -threshL 50 -threshH 90\"", rule.Name))
+			do_flags = append(do_flags, fmt.Sprintf("\"coverage save -onexit -assert -directive -cvg -codeAll -instance %s %s.ucdb\"", rule.Instance(), rule.Name))
+		}
+		do_flags = append(do_flags, "\"quit -code [coverage attribute -name TESTSTATUS -concise]\"")
+		cmd_postamble = fmt.Sprintf("|| { cat %s; exit 1; }", log_file.String())
 	}
 
-	return fmt.Sprintf("vsim %s -work %s %s %s", vsim_flags, rule.Lib(), 
-	                    rule.Target(), cmd_extra)
+	vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag + verbosity_flag + plusargs_flag
+
+	for _, do_flag := range do_flags {
+		vsim_flags = vsim_flags + " -do " + do_flag
+	}
+
+	cmd := fmt.Sprintf("{ vsim %s -work %s %s; }", vsim_flags, rule.Lib(), rule.Target())
+	if cmd_preamble == "" {
+		cmd = cmd + " " + cmd_postamble
+	} else {
+		cmd = "{ { " + cmd_preamble + "} && " + cmd + " } " + cmd_postamble
+	}
+
+	return cmd
 }
 
 // Run will build the design and run a simulation in GUI mode.
-func (rule SimulationQuesta) Run(args []string) string {
-	return Simulate(args, true, rule)
+func RunQuesta(rule Simulation, args []string) string {
+	return SimulateQuesta(rule, args, true)
 }
 
 // Test will build the design and run a simulation in batch mode.
-func (rule SimulationQuesta) Test(args []string) string {
-	return Simulate(args, false, rule)
+func TestQuesta(rule Simulation, args []string) string {
+	return SimulateQuesta(rule, args, false)
 }
