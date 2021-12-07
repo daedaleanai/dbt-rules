@@ -131,9 +131,9 @@ func CompileSrcs(ctx core.Context, rule Simulation,
 			// generated output
 			ctx.AddBuildStep(core.BuildStep{
 				Out:   log,
-				Ins:   deps,
+				Ins:   append(deps, src),
 				Cmd:   cmd,
-				Descr: fmt.Sprintf("%s: %s", tool, path.Base(src.String())),
+				Descr: fmt.Sprintf("%s: %s", tool, src.Relative()),
 			})
 			
 			// Add the log file to the dependencies of the next files
@@ -223,35 +223,9 @@ func Optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 	rules[log_file.String()] = true
 }
 
-// CreateLib creates a Questa simulation library named after the rule with the
-// suffix "Lib" added. It also adds the base name where source code will be
-// compiled to the global list of created rules after it has added the
-// build step for the library.
-func CreateLib(ctx core.Context, rule Simulation) {
-	path := rule.Path()
-
-	// Skip if we already know this rule
-	if rules[path.String()] {
-		return
-	}
-
-	// Add the rule to run 'vlib'
-	ctx.AddBuildStep(core.BuildStep{
-		Out:   path.WithSuffix("Lib"),
-		Cmd:   fmt.Sprintf("vlib %s", rule.Lib()),
-		Descr: fmt.Sprintf("vlib: %s", rule.Lib()),
-	})
-
-	// Remember that we created this rule
-	rules[path.String()] = true
-}
-
-// Build will compile and optimize the source and IPs associated with the given
+// BuildQuesta will compile and optimize the source and IPs associated with the given
 // rule.
 func BuildQuesta(ctx core.Context, rule Simulation) {
-	// Create the library
-	CreateLib(ctx, rule)
-
 	// Compile the code
 	deps := Compile(ctx, rule)
 
@@ -315,21 +289,20 @@ func SimulateQuesta(rule Simulation, args []string, gui bool) string {
 
 	// Create a testcase generation command if necessary
 	if rule.TestCaseGenerator != nil {
+		// Default, simply call script
+		cmd_preamble = fmt.Sprintf("%s . ; ", rule.TestCaseGenerator.String())
+		
+		// If directory of testcases available, pick the first one
 		if rule.TestCasesDir != nil {
-			items, err := os.ReadDir(rule.TestCasesDir.String())
-			if err != nil {
-				log.Fatal(err)
+			if items, err := os.ReadDir(rule.TestCasesDir.String()); err == nil {
+				if len(items) == 0 {
+					log.Fatal(fmt.Sprintf("TestCasesDir directory '%s' empty!", rule.TestCasesDir.String()))
+				}
+	
+				// Create path to testcase
+				testcase := rule.TestCasesDir.Absolute() + "/" + items[0].Name()
+				cmd_preamble = fmt.Sprintf(" { echo Testcase %s; } && { %s %s . ; } ", testcase, rule.TestCaseGenerator.String(), testcase)
 			}
-
-			if len(items) == 0 {
-				log.Fatal("TestCasesDir empty!")
-			}
-
-			// Create path to testcase
-			testcase_file := rule.TestCasesDir.WithSuffix("/" + items[0].Name())
-			cmd_preamble = fmt.Sprintf("%s %s . ; ", rule.TestCaseGenerator.String(), testcase_file.String())
-		} else {
-			cmd_preamble = fmt.Sprintf("%s . ; ", rule.TestCaseGenerator.String())
 		}
 	}
 
@@ -351,16 +324,17 @@ func SimulateQuesta(rule Simulation, args []string, gui bool) string {
 			} else {
 				log.Fatal("-verbosity expects an argument of 'low', 'medium', 'high' or 'none'!")
 			}
-		}	else if strings.HasPrefix(arg, "-testcase=") {
+		}	else if strings.HasPrefix(arg, "-testcase=")  && rule.TestCaseGenerator != nil {
 			var testcase string
 			if _, err := fmt.Sscanf(arg, "-testcase=%s", &testcase); err == nil {
-				// Create path to testcase
-				testcase_file := rule.TestCasesDir.WithSuffix("/" + testcase)
-
-				// Do we have a test generation script?
-				if rule.TestCaseGenerator != nil {
-					cmd_preamble = fmt.Sprintf("%s %s .;", rule.TestCaseGenerator.String(), testcase_file.String())
+				// Do we have a directory for testcases?
+				if rule.TestCasesDir != nil {
+					// Create path to testcase
+					testcase = rule.TestCasesDir.Absolute() + "/" + testcase
 				}
+
+				// Create commands
+				cmd_preamble = fmt.Sprintf(" { echo Testcase %s; } && { %s %s . ; } ", testcase, rule.TestCaseGenerator.String(), testcase)
 			}
 		}	else if strings.HasPrefix(arg, "+") {
 			// All '+' arguments go directly to the simulator

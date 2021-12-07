@@ -11,7 +11,7 @@ var Simulator = core.StringFlag{
 	Name:        "hdl-simulator",
 	Description: "HDL simulator to use when generating simulation targets",
 	DefaultFn: func() string {
-		return "xsim"
+		return "questa"
 	},
 	AllowedValues: []string{"xsim", "questa"},
 }.Register()
@@ -90,6 +90,7 @@ func (rule Simulation) Test(args []string) string {
 }
 
 func (rule Simulation) Description() string {
+	// Print the rule name as its needed for parameter selection
 	description := " Name: " + rule.Name + " "
 	first := true
 	for param, _ := range(rule.Params) {
@@ -102,31 +103,15 @@ func (rule Simulation) Description() string {
 
 	if rule.TestCaseGenerator != nil && rule.TestCasesDir != nil {
 		description = description + "TestCases: "
+		
 		// Loop through all defined testcases in directory
-		items, err := os.ReadDir(rule.TestCasesDir.String())
-		if err != nil {
+		if items, err := os.ReadDir(rule.TestCasesDir.String()); err == nil {
+			for _, item := range items {
+        description = description + item.Name() + " "
+			}
+		} else {
 			log.Fatal(err)
 		}
-
-    for _, item := range items {
-			// Handle one level of subdirectories
-			if item.IsDir() {
-				subitems, err := os.ReadDir(item.Name())
-				if err != nil {
-					log.Fatal(err)
-				}
-				
-				for _, subitem := range subitems {
-						if !subitem.IsDir() {
-								// handle file there
-								description = description + item.Name() + "/" + subitem.Name() + " "
-						}
-				}
-			} else {
-        // handle file there
-        description = description + item.Name() + " "
-      }
-    }
 	}
 
 	return description
