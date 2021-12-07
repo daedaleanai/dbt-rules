@@ -26,6 +26,14 @@ var VcomFlags = core.StringFlag{
 	},
 }.Register()
 
+// VsimFlags enables the user to specify additional flags for the 'vsim' command.
+var VsimFlags = core.StringFlag{
+	Name: "questa-vsim-flags",
+	DefaultFn: func() string {
+		return ""
+	},
+}.Register()
+
 // Access enables the user to control the accessibility in the compiled design for
 // debugging purposes.
 var Access = core.StringFlag{
@@ -451,7 +459,8 @@ func SimulateQuesta(rule Simulation, args []string, gui bool) string {
 		cmd_postamble = fmt.Sprintf("|| { cat %s; exit 1; }", log_file.String())
 	}
 
-	vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag + verbosity_flag + plusargs_flag
+	vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag + 
+							 verbosity_flag + plusargs_flag + VsimFlags.Value()
 
 	for _, do_flag := range do_flags {
 		vsim_flags = vsim_flags + " -do " + do_flag
