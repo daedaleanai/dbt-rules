@@ -24,14 +24,6 @@ var SimulatorLibDir = core.StringFlag{
 	},
 }.Register()
 
-var SimulatorParams = core.StringFlag{
-	Name:        "hdl-simulator-params",
-	Description: "Name of the parameter set to use",
-	DefaultFn: func() string {
-		return "default"
-	},
-}.Register()
-
 type ParamMap map[string]map[string]string
 
 type Simulation struct {
