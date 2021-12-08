@@ -97,10 +97,10 @@ var rules = make(map[string]bool)
 // common_flags holds common flags used for the 'vlog', 'vcom', and 'vopt' commands.
 const common_flags = "-nologo -quiet"
 
-// CompileSrcs compiles a list of sources using the specified context ctx, rule,
+// compileSrcs compiles a list of sources using the specified context ctx, rule,
 // dependencies and include paths. It returns the resulting dependencies and include paths
 // that result from compiling the source files.
-func CompileSrcs(ctx core.Context, rule Simulation,
+func compileSrcs(ctx core.Context, rule Simulation,
   deps []core.Path, incs []core.Path, srcs []core.Path) ([]core.Path, []core.Path) {
   for _, src := range srcs {
     // We handle header files separately from other source files
@@ -155,34 +155,34 @@ func CompileSrcs(ctx core.Context, rule Simulation,
   return deps, incs
 }
 
-// CompileIp compiles the IP dependencies and the source files and an IP.
-func CompileIp(ctx core.Context, rule Simulation, ip Ip,
+// compileIp compiles the IP dependencies and the source files and an IP.
+func compileIp(ctx core.Context, rule Simulation, ip Ip,
   deps []core.Path, incs []core.Path) ([]core.Path, []core.Path) {
   for _, sub_ip := range ip.Ips() {
-    deps, incs = CompileIp(ctx, rule, sub_ip, deps, incs)
+    deps, incs = compileIp(ctx, rule, sub_ip, deps, incs)
   }
-  deps, incs = CompileSrcs(ctx, rule, deps, incs, ip.Sources())
+  deps, incs = compileSrcs(ctx, rule, deps, incs, ip.Sources())
 
   return deps, incs
 }
 
-// Compile compiles the IP dependencies and source files of a simulation rule.
-func Compile(ctx core.Context, rule Simulation) []core.Path {
+// compile compiles the IP dependencies and source files of a simulation rule.
+func compile(ctx core.Context, rule Simulation) []core.Path {
   incs := []core.Path{}
   deps := []core.Path{}
 
   for _, ip := range rule.Ips {
-    deps, incs = CompileIp(ctx, rule, ip, deps, incs)
+    deps, incs = compileIp(ctx, rule, ip, deps, incs)
   }
-  CompileSrcs(ctx, rule, deps, incs, rule.Srcs)
+  compileSrcs(ctx, rule, deps, incs, rule.Srcs)
 
   return deps
 }
 
-// Optimize creates and optimized version of the design optionally including
+// optimize creates and optimized version of the design optionally including
 // coverage recording functionality. The optimized design unit can then conveniently
 // be simulated using 'vsim'.
-func Optimize(ctx core.Context, rule Simulation, deps []core.Path) {
+func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
   top := "board"
   if rule.Top != "" {
     top = rule.Top
@@ -254,16 +254,16 @@ func Optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 // BuildQuesta will compile and optimize the source and IPs associated with the given
 // rule.
 func BuildQuesta(ctx core.Context, rule Simulation) {
-  // Compile the code
-  deps := Compile(ctx, rule)
+  // compile the code
+  deps := compile(ctx, rule)
 
-  // Optimize the code
-  Optimize(ctx, rule, deps)
+  // optimize the code
+  optimize(ctx, rule, deps)
 }
 
-// VerbosityLevelToFlag takes a verbosity level of none, low, medium or high and
+// verbosityLevelToFlag takes a verbosity level of none, low, medium or high and
 // converts it to the corresponding DVM_ level.
-func VerbosityLevelToFlag(level string) (string, bool) {
+func verbosityLevelToFlag(level string) (string, bool) {
   var verbosity_flag string
   var print_output bool
   switch level {
@@ -287,9 +287,9 @@ func VerbosityLevelToFlag(level string) (string, bool) {
   return verbosity_flag, print_output
 }
 
-// Preamble creates a preamble for the simulation command for the purpose of generating
+// preamble creates a preamble for the simulation command for the purpose of generating
 // a testcase.
-func Preamble(rule Simulation, testcase string) (string, string) {
+func preamble(rule Simulation, testcase string) (string, string) {
   preamble := ""
 
   // Create a testcase generation command if necessary
@@ -331,9 +331,9 @@ func Preamble(rule Simulation, testcase string) (string, string) {
   return preamble, testcase
 }
 
-// QuestaCmd will create a command for starting 'vsim' on the compiled and optimized design with flags
+// questaCmd will create a command for starting 'vsim' on the compiled and optimized design with flags
 // set in accordance with what is specified on the command line.
-func QuestaCmd(rule Simulation, args []string, gui bool, testcase string, params string) string {
+func questaCmd(rule Simulation, args []string, gui bool, testcase string, params string) string {
   // Prefix the vsim command with this
   cmd_preamble := ""
 
@@ -383,7 +383,7 @@ func QuestaCmd(rule Simulation, args []string, gui bool, testcase string, params
       // Define verbosity level
       var level string
       if _, err := fmt.Sscanf(arg, "-verbosity=%s", &level); err == nil {
-        verbosity_flag, print_output = VerbosityLevelToFlag(level)
+        verbosity_flag, print_output = verbosityLevelToFlag(level)
       } else {
         log.Fatal("-verbosity expects an argument of 'low', 'medium', 'high' or 'none'!")
       }
@@ -394,7 +394,7 @@ func QuestaCmd(rule Simulation, args []string, gui bool, testcase string, params
   }
 
   // Create optional command preamble
-  cmd_preamble, testcase = Preamble(rule, testcase)
+  cmd_preamble, testcase = preamble(rule, testcase)
 
   cmd_echo := ""
   if rule.Params != nil && params != "" {
@@ -468,11 +468,11 @@ func QuestaCmd(rule Simulation, args []string, gui bool, testcase string, params
   return cmd
 }
 
-// SimulateQuesta will create a command to start 'vsim' on the compiled design
+// simulateQuesta will create a command to start 'vsim' on the compiled design
 // with flags set in accordance with what is specified on the command line. It will
 // optionally build a chain of commands in case the rule has parameters, but
 // no parameters are specified on the command line
-func SimulateQuesta(rule Simulation, args []string, gui bool) string {
+func simulateQuesta(rule Simulation, args []string, gui bool) string {
   // Optional testcase goes here
   testcases := []string{}
 
@@ -530,7 +530,7 @@ func SimulateQuesta(rule Simulation, args []string, gui bool) string {
   for i := range params {
     // Loop for all test cases
     for j := range testcases {
-      cmd = cmd + " && " + QuestaCmd(rule, args, gui, testcases[j], params[i])
+      cmd = cmd + " && " + questaCmd(rule, args, gui, testcases[j], params[i])
       // Only one testcase allowed in GUI mode
       if gui {
         break
@@ -547,10 +547,10 @@ func SimulateQuesta(rule Simulation, args []string, gui bool) string {
 
 // Run will build the design and run a simulation in GUI mode.
 func RunQuesta(rule Simulation, args []string) string {
-  return SimulateQuesta(rule, args, true)
+  return simulateQuesta(rule, args, true)
 }
 
 // Test will build the design and run a simulation in batch mode.
 func TestQuesta(rule Simulation, args []string) string {
-  return SimulateQuesta(rule, args, false)
+  return simulateQuesta(rule, args, false)
 }
