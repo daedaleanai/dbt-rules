@@ -1,10 +1,10 @@
 package hdl
 
 import (
-  "log"
-  "fmt"
-  "os"
   "dbt-rules/RULES/core"
+  "fmt"
+  "log"
+  "os"
 )
 
 var Simulator = core.StringFlag{
@@ -85,7 +85,7 @@ func (rule Simulation) Description() string {
   // Print the rule name as its needed for parameter selection
   description := " Name: " + rule.Name + " "
   first := true
-  for param, _ := range(rule.Params) {
+  for param, _ := range rule.Params {
     if first {
       description = description + "Params: "
       first = false
@@ -95,7 +95,7 @@ func (rule Simulation) Description() string {
 
   if rule.TestCaseGenerator != nil && rule.TestCasesDir != nil {
     description = description + "TestCases: "
-    
+
     // Loop through all defined testcases in directory
     if items, err := os.ReadDir(rule.TestCasesDir.String()); err == nil {
       for _, item := range items {

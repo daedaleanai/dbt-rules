@@ -2,10 +2,10 @@ package hdl
 
 import (
   "fmt"
-  "path"
-  "strings"
   "log"
   "os"
+  "path"
+  "strings"
 
   "dbt-rules/RULES/core"
 )
@@ -80,12 +80,12 @@ func (rule Simulation) Instance() string {
   // Pick top from rule
   if rule.Top != "" {
     top = rule.Top
-  } 
+  }
 
   // Pick DUT from rule
   if rule.Dut != "" {
     dut = rule.Dut
-  } 
+  }
 
   return "/" + top + "/" + dut
 }
@@ -100,8 +100,8 @@ const common_flags = "-nologo -quiet"
 // CompileSrcs compiles a list of sources using the specified context ctx, rule,
 // dependencies and include paths. It returns the resulting dependencies and include paths
 // that result from compiling the source files.
-func CompileSrcs(ctx core.Context, rule Simulation, 
-                 deps []core.Path, incs []core.Path, srcs []core.Path) ([]core.Path, []core.Path) {
+func CompileSrcs(ctx core.Context, rule Simulation,
+  deps []core.Path, incs []core.Path, srcs []core.Path) ([]core.Path, []core.Path) {
   for _, src := range srcs {
     // We handle header files separately from other source files
     if IsHeader(src.String()) {
@@ -117,7 +117,7 @@ func CompileSrcs(ctx core.Context, rule Simulation,
 
       // Holds common flags for both 'vlog' and 'vcom' commands
       cmd := fmt.Sprintf("%s +acc=%s -work %s -l %s", common_flags, Access.Value(), rule.Lib(), log.String())
-      
+
       // tool will point to the tool to execute (also used for logging below)
       var tool string
       if IsVerilog(src.String()) {
@@ -131,10 +131,10 @@ func CompileSrcs(ctx core.Context, rule Simulation,
       } else if IsVhdl(src.String()) {
         tool = "vcom"
       }
-      
+
       // Remove the log file if the command fails to ensure we can recompile it
       cmd = tool + " " + cmd + " " + src.String() + " || rm " + log.String()
-      
+
       // Add the compilation command as a build step with the log file as the
       // generated output
       ctx.AddBuildStep(core.BuildStep{
@@ -143,21 +143,21 @@ func CompileSrcs(ctx core.Context, rule Simulation,
         Cmd:   cmd,
         Descr: fmt.Sprintf("%s: %s", tool, src.Relative()),
       })
-      
+
       // Add the log file to the dependencies of the next files
       deps = append(deps, log)
 
       // Note down the created rule
       rules[log.String()] = true
-    }	
+    }
   }
 
   return deps, incs
 }
 
 // CompileIp compiles the IP dependencies and the source files and an IP.
-func CompileIp(ctx core.Context, rule Simulation, ip Ip, 
-               deps []core.Path, incs []core.Path) ([]core.Path, []core.Path) {
+func CompileIp(ctx core.Context, rule Simulation, ip Ip,
+  deps []core.Path, incs []core.Path) ([]core.Path, []core.Path) {
   for _, sub_ip := range ip.Ips() {
     deps, incs = CompileIp(ctx, rule, sub_ip, deps, incs)
   }
@@ -187,7 +187,7 @@ func Optimize(ctx core.Context, rule Simulation, deps []core.Path) {
   if rule.Top != "" {
     top = rule.Top
   }
-  
+
   cover_flag := ""
   log_file_suffix := "vopt.log"
   if Coverage.Value() {
@@ -200,12 +200,12 @@ func Optimize(ctx core.Context, rule Simulation, deps []core.Path) {
   params := []string{}
   if rule.Params != nil {
     for key, _ := range rule.Params {
-      log_files = append(log_files, rule.Path().WithSuffix("/" + key + "_" + log_file_suffix))
-      targets = append(targets, rule.Target() + key)
+      log_files = append(log_files, rule.Path().WithSuffix("/"+key+"_"+log_file_suffix))
+      targets = append(targets, rule.Target()+key)
       params = append(params, key)
     }
   } else {
-    log_files = append(log_files, rule.Path().WithSuffix("/" + log_file_suffix))
+    log_files = append(log_files, rule.Path().WithSuffix("/"+log_file_suffix))
     targets = append(targets, rule.Target())
     params = append(params, "")
   }
@@ -220,9 +220,9 @@ func Optimize(ctx core.Context, rule Simulation, deps []core.Path) {
       return
     }
 
-    cmd := fmt.Sprintf("vopt %s %s +acc=%s -l %s -work %s %s -o %s", 
-                      common_flags, cover_flag, Access.Value(),
-                      log_file.String(), rule.Lib(), top, target)
+    cmd := fmt.Sprintf("vopt %s %s +acc=%s -l %s -work %s %s -o %s",
+      common_flags, cover_flag, Access.Value(),
+      log_file.String(), rule.Lib(), top, target)
 
     // Set up parameters
     if param_set != "" {
@@ -233,17 +233,17 @@ func Optimize(ctx core.Context, rule Simulation, deps []core.Path) {
           cmd = fmt.Sprintf("%s -G %s=%s", cmd, param, value)
         }
       } else {
-        log.Fatal(fmt.Sprintf("parameter set '%s' not defined for Simulation target '%s'!", 
-                  params, rule.Name))
+        log.Fatal(fmt.Sprintf("parameter set '%s' not defined for Simulation target '%s'!",
+          params, rule.Name))
       }
     }
-    
+
     // Add the rule to run 'vopt'.
     ctx.AddBuildStep(core.BuildStep{
       Out:   log_file,
       Ins:   deps,
       Cmd:   cmd,
-      Descr: fmt.Sprintf("vopt: %s %s", rule.Lib() + "." + top, target),
+      Descr: fmt.Sprintf("vopt: %s %s", rule.Lib()+"."+top, target),
     })
 
     // Note that we created this rule
@@ -267,24 +267,24 @@ func VerbosityLevelToFlag(level string) (string, bool) {
   var verbosity_flag string
   var print_output bool
   switch level {
-    case "none":   
-      verbosity_flag = " +verbosity=DVM_VERB_NONE"
-      print_output = false
-    case "low":    
-      verbosity_flag = " +verbosity=DVM_VERB_LOW"
-      print_output = true
-    case "medium":
-      verbosity_flag = " +verbosity=DVM_VERB_MED"
-      print_output = true
-    case "high":
-      verbosity_flag = " +verbosity=DVM_VERB_HIGH"
-      print_output = true
-    default:
-      log.Fatal(fmt.Sprintf("invalid verbosity flag '%s', only 'low', 'medium'," + 
-                            " 'high' or 'none' allowed!", level))
-    }
+  case "none":
+    verbosity_flag = " +verbosity=DVM_VERB_NONE"
+    print_output = false
+  case "low":
+    verbosity_flag = " +verbosity=DVM_VERB_LOW"
+    print_output = true
+  case "medium":
+    verbosity_flag = " +verbosity=DVM_VERB_MED"
+    print_output = true
+  case "high":
+    verbosity_flag = " +verbosity=DVM_VERB_HIGH"
+    print_output = true
+  default:
+    log.Fatal(fmt.Sprintf("invalid verbosity flag '%s', only 'low', 'medium',"+
+      " 'high' or 'none' allowed!", level))
+  }
 
-    return verbosity_flag, print_output
+  return verbosity_flag, print_output
 }
 
 // Preamble creates a preamble for the simulation command for the purpose of generating
@@ -336,23 +336,23 @@ func Preamble(rule Simulation, testcase string) (string, string) {
 func QuestaCmd(rule Simulation, args []string, gui bool, testcase string, params string) string {
   // Prefix the vsim command with this
   cmd_preamble := ""
-  
+
   // Default log file
-	log_file_suffix := "vsim.log"
-	if testcase != "" {
-		log_file_suffix = testcase + "_" + log_file_suffix
-	}
-	if params != "" {
-		log_file_suffix = params + "_" + log_file_suffix
-	}
+  log_file_suffix := "vsim.log"
+  if testcase != "" {
+    log_file_suffix = testcase + "_" + log_file_suffix
+  }
+  if params != "" {
+    log_file_suffix = params + "_" + log_file_suffix
+  }
   log_file := rule.Path().WithSuffix("/" + log_file_suffix)
 
   // Default flag values
-  vsim_flags     := " -onfinish stop -l " + log_file.String()
-  seed_flag      := " -sv_seed random"
+  vsim_flags := " -onfinish stop -l " + log_file.String()
+  seed_flag := " -sv_seed random"
   verbosity_flag := " +verbosity=DVM_VERB_NONE"
-  mode_flag      := " -batch -quiet"
-  plusargs_flag  := ""
+  mode_flag := " -batch -quiet"
+  plusargs_flag := ""
 
   // Enable coverage in simulator
   coverage_flag := ""
@@ -387,38 +387,38 @@ func QuestaCmd(rule Simulation, args []string, gui bool, testcase string, params
       } else {
         log.Fatal("-verbosity expects an argument of 'low', 'medium', 'high' or 'none'!")
       }
-    }	else if strings.HasPrefix(arg, "+") {
+    } else if strings.HasPrefix(arg, "+") {
       // All '+' arguments go directly to the simulator
       plusargs_flag = plusargs_flag + " " + arg
-    } 
+    }
   }
 
   // Create optional command preamble
   cmd_preamble, testcase = Preamble(rule, testcase)
 
-	cmd_echo := ""
+  cmd_echo := ""
   if rule.Params != nil && params != "" {
     // Update coverage database name
     if testcase != "" {
       coverage_db = coverage_db + "_" + params + "_" + testcase
       testcase = params + "_" + testcase
-			cmd_echo = "Testcase " + params + "/" + testcase + ":"
+      cmd_echo = "Testcase " + params + "/" + testcase + ":"
     } else {
       coverage_db = coverage_db + "_" + params
       testcase = params
-			cmd_echo = "Testcase " + params + ":"
+      cmd_echo = "Testcase " + params + ":"
     }
   } else {
     // Update coverage database name
     if testcase != "" {
       coverage_db = coverage_db + "_" + testcase
-			cmd_echo = "Testcase " + testcase + ":"
+      cmd_echo = "Testcase " + testcase + ":"
     } else {
       testcase = "default"
     }
   }
 
-  cmd_postamble := "" 
+  cmd_postamble := ""
   if gui {
     mode_flag = " -gui"
     if rule.WaveformInit != nil {
@@ -430,45 +430,45 @@ func QuestaCmd(rule Simulation, args []string, gui bool, testcase string, params
     }
     do_flags = append(do_flags, "\"run -all\"")
     if Coverage.Value() {
-      do_flags = append(do_flags, 
-        fmt.Sprintf("\"coverage report -html -output %s_covhtml -details -assert" + 
-                    " -directive -cvg -code bcefst -threshL 50 -threshH 90\"", coverage_db))
-      do_flags = append(do_flags, fmt.Sprintf("\"coverage save -assert" +
-                                              " -directive -cvg -codeAll -testname %s" + 
-                                              " -instance %s %s.ucdb\"", 
-                                              testcase, rule.Instance(), coverage_db))
+      do_flags = append(do_flags,
+        fmt.Sprintf("\"coverage report -html -output %s_covhtml -details -assert"+
+          " -directive -cvg -code bcefst -threshL 50 -threshH 90\"", coverage_db))
+      do_flags = append(do_flags, fmt.Sprintf("\"coverage save -assert"+
+        " -directive -cvg -codeAll -testname %s"+
+        " -instance %s %s.ucdb\"",
+        testcase, rule.Instance(), coverage_db))
       do_flags = append(do_flags, fmt.Sprintf("\"vcover merge -out %s.ucdb {*}[glob %s*.ucdb]\"", rule.Name, rule.Name))
       do_flags = append(do_flags, fmt.Sprintf("\"file delete {*}[glob -nocomplain %s_*.ucdb]\"", rule.Name))
     }
     do_flags = append(do_flags, "\"quit -code [coverage attribute -name TESTSTATUS -concise]\"")
-		cmd_newline := ":"
-		if cmd_echo != "" {
-			cmd_newline = "echo"
-		}
+    cmd_newline := ":"
+    if cmd_echo != "" {
+      cmd_newline = "echo"
+    }
     cmd_postamble = fmt.Sprintf("|| { %s; cat %s; exit 1; }", cmd_newline, log_file.String())
   }
 
-  vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag + 
-               verbosity_flag + plusargs_flag + VsimFlags.Value()
+  vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag +
+    verbosity_flag + plusargs_flag + VsimFlags.Value()
 
   for _, do_flag := range do_flags {
     vsim_flags = vsim_flags + " -do " + do_flag
   }
 
-  cmd := fmt.Sprintf("{ echo -n %s && vsim %s -work %s %s && echo OK; }", cmd_echo, vsim_flags, rule.Lib(), rule.Target() + params)
+  cmd := fmt.Sprintf("{ echo -n %s && vsim %s -work %s %s && echo OK; }", cmd_echo, vsim_flags, rule.Lib(), rule.Target()+params)
   if cmd_preamble == "" {
     cmd = cmd + " " + cmd_postamble
   } else {
     cmd = "{ { " + cmd_preamble + " } && " + cmd + " } " + cmd_postamble
   }
 
-	// Wrap command in another layer of {} to enable chaining
-	cmd = "{ " + cmd + " }"
+  // Wrap command in another layer of {} to enable chaining
+  cmd = "{ " + cmd + " }"
 
   return cmd
 }
 
-// SimulateQuesta will create a command to start 'vsim' on the compiled design 
+// SimulateQuesta will create a command to start 'vsim' on the compiled design
 // with flags set in accordance with what is specified on the command line. It will
 // optionally build a chain of commands in case the rule has parameters, but
 // no parameters are specified on the command line
@@ -481,36 +481,36 @@ func SimulateQuesta(rule Simulation, args []string, gui bool) string {
 
   // Parse additional arguments
   for _, arg := range args {
-    if strings.HasPrefix(arg, "-testcase=")  && rule.TestCaseGenerator != nil {
-			var testcase string
+    if strings.HasPrefix(arg, "-testcase=") && rule.TestCaseGenerator != nil {
+      var testcase string
       if _, err := fmt.Sscanf(arg, "-testcase=%s", &testcase); err != nil {
         log.Fatal(fmt.Sprintf("-testcase expects a string argument!"))
       }
-			testcases = append(testcases, testcase)
-    }	else if strings.HasPrefix(arg, "-params=")  && rule.Params != nil {
-			var param string
+      testcases = append(testcases, testcase)
+    } else if strings.HasPrefix(arg, "-params=") && rule.Params != nil {
+      var param string
       if _, err := fmt.Sscanf(arg, "-params=%s", &param); err != nil {
         log.Fatal(fmt.Sprintf("-params expects a string argument!"))
       } else {
         if _, ok := rule.Params[param]; !ok {
           log.Fatal(fmt.Sprintf("parameter set '%s' not defined for Simulation target '%s'!", param, rule.Name))
         }
-				params = append(params, param)
+        params = append(params, param)
       }
     }
   }
 
-	// If no parameters have been specified, simulate them all
-	if rule.Params != nil && len(params) == 0 {
-		for key := range rule.Params {
-			params = append(params, key)
-		}
-	} else if len(params) == 0 {
-		params = append(params, "")
-	}
+  // If no parameters have been specified, simulate them all
+  if rule.Params != nil && len(params) == 0 {
+    for key := range rule.Params {
+      params = append(params, key)
+    }
+  } else if len(params) == 0 {
+    params = append(params, "")
+  }
 
-	// If no testcase has been specified, simulate them all
-	if rule.TestCaseGenerator != nil && rule.TestCasesDir != nil && len(testcases) == 0 {    
+  // If no testcase has been specified, simulate them all
+  if rule.TestCaseGenerator != nil && rule.TestCasesDir != nil && len(testcases) == 0 {
     // Loop through all defined testcases in directory
     if items, err := os.ReadDir(rule.TestCasesDir.String()); err == nil {
       for _, item := range items {
@@ -520,27 +520,27 @@ func SimulateQuesta(rule Simulation, args []string, gui bool) string {
       log.Fatal(err)
     }
   } else if len(testcases) == 0 {
-		testcases = append(testcases, "")
-	}
+    testcases = append(testcases, "")
+  }
 
-	// Final command
-	cmd := "{ :; }"
+  // Final command
+  cmd := "{ :; }"
 
-	// Loop for all parameter sets
-	for i := range params {
-		// Loop for all test cases
-		for j := range testcases {
-			cmd = cmd + " && " + QuestaCmd(rule, args, gui, testcases[j], params[i])
-			// Only one testcase allowed in GUI mode
-			if gui {
-				break
-			}
-		}
-		// Only one parameter set allowed in gui mode
-		if gui {
-			break
-		}
-	}
+  // Loop for all parameter sets
+  for i := range params {
+    // Loop for all test cases
+    for j := range testcases {
+      cmd = cmd + " && " + QuestaCmd(rule, args, gui, testcases[j], params[i])
+      // Only one testcase allowed in GUI mode
+      if gui {
+        break
+      }
+    }
+    // Only one parameter set allowed in gui mode
+    if gui {
+      break
+    }
+  }
 
   return cmd
 }
