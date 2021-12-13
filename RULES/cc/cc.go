@@ -2,6 +2,7 @@ package cc
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"dbt-rules/RULES/core"
@@ -20,7 +21,32 @@ type objectFile struct {
 func (obj objectFile) Build(ctx core.Context) {
 	toolchain := toolchainOrDefault(obj.Toolchain)
 	depfile := obj.Out.WithExt("d")
-	cmd := toolchain.ObjectFile(obj.Out, depfile, obj.Flags, obj.Includes, obj.Src)
+
+	cmd := ""
+	flags := []string{}
+
+	switch filepath.Ext(obj.Src.Absolute()) {
+	case ".cc":
+		cmd = toolchain.CxxCompiler()
+		flags = append(toolchain.CxxFlags(), "-pipe", "-c", "-MD", "-MF", fmt.Sprintf("%q", depfile))
+	case ".c":
+		cmd = toolchain.CCompiler()
+		flags = append(toolchain.CFlags(), "-pipe", "-c", "-MD", "-MF", fmt.Sprintf("%q", depfile))
+	case ".S":
+		cmd = toolchain.Assembler()
+		flags = append(toolchain.AsFlags(), "-c")
+	default:
+		core.Fatal("Unknown source extension for cc toolchain '" + filepath.Ext(obj.Src.Absolute()) + "'")
+	}
+
+	flags = append(flags, "-o", fmt.Sprintf("%q", obj.Out))
+
+	for _, include := range obj.Includes {
+		flags = append(flags, fmt.Sprintf("-I%q", include))
+	}
+
+	cmd = fmt.Sprintf("%s %s %q", cmd, strings.Join(flags, " "), obj.Src)
+
 	ctx.WithTrace("obj:"+obj.Out.Relative(), func(ctx core.Context) {
 		ctx.AddBuildStep(core.BuildStep{
 			Out:     obj.Out,
@@ -45,7 +71,7 @@ func (blob BlobObject) Build(ctx core.Context) {
 		ctx.AddBuildStep(core.BuildStep{
 			Out:   blob.out(),
 			In:    blob.In,
-			Cmd:   blob.Toolchain.BlobObject(blob.out(), blob.In),
+			Cmd:   fmt.Sprintf("%s %s -r -b binary -o %q %q", blob.Toolchain.Link(), blob.Toolchain.LdFlags(), blob.out(), blob.In),
 			Descr: fmt.Sprintf("BLOB (toolchain: %s) %s", toolchain.Name(), blob.out().Relative()),
 		})
 	})
@@ -167,10 +193,22 @@ func (lib Library) build(ctx core.Context) {
 
 	var cmd, descr string
 	if lib.Shared {
-		cmd = toolchain.SharedLibrary(lib.Out, objs)
+		cmd = fmt.Sprintf("%s -pipe -shared %s -o %q %s", toolchain.Link(), strings.Join(toolchain.LdFlags(), " "), lib.Out, joinQuoted(objs))
 		descr = fmt.Sprintf("LD (toolchain: %s) %s", toolchain.Name(), lib.Out.Relative())
 	} else {
-		cmd = toolchain.StaticLibrary(lib.Out, objs)
+		// ar updates an existing archive. This can cause faulty builds in the case
+		// where a symbol is defined in one file, that file is removed, and the
+		// symbol is subsequently defined in a new file. That's because the old object file
+		// can persist in the archive. See https://github.com/daedaleanai/dbt/issues/91
+		// There is no option to ar to always force creation of a new archive; the "c"
+		// modifier simply suppresses a warning if the archive doesn't already
+		// exist. So instead we delete the target (out) if it already exists.
+		cmd = fmt.Sprintf(
+			"rm %q 2>/dev/null ; %s rcs %q %s",
+			lib.Out,
+			toolchain.Archiver(),
+			lib.Out,
+			joinQuoted(objs))
 		descr = fmt.Sprintf("AR (toolchain: %s) %s", toolchain.Name(), lib.Out.Relative())
 	}
 
@@ -264,7 +302,17 @@ func (bin Binary) build(ctx core.Context) {
 		ins = append(ins, toolchain.Script())
 	}
 
-	cmd := toolchain.Binary(bin.Out, objs, alwaysLinkLibs, otherLibs, bin.LinkerFlags, bin.Script)
+	flags := bin.LinkerFlags
+	if bin.Script != nil {
+		flags = append(flags, "-T", fmt.Sprintf("%q", bin.Script))
+	}
+
+	cmd := fmt.Sprintf("%s %s %s -o %q -Wl,-whole-archive %s -Wl,-no-whole-archive %s", toolchain.Link(), strings.Join(toolchain.LdFlags(), " "), strings.Join(flags, " "),
+		bin.Out,
+		joinQuoted(alwaysLinkLibs),
+		joinQuoted(otherLibs),
+	)
+
 	ctx.AddBuildStep(core.BuildStep{
 		Out:   bin.Out,
 		Ins:   ins,

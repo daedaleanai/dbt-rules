@@ -10,12 +10,20 @@ import (
 
 type Toolchain interface {
 	Name() string
-	ObjectFile(out core.OutPath, depfile core.OutPath, flags []string, includes []core.Path, src core.Path) string
-	StaticLibrary(out core.Path, objs []core.Path) string
-	SharedLibrary(out core.Path, objs []core.Path) string
-	Binary(out core.Path, objs []core.Path, alwaysLinkLibs []core.Path, libs []core.Path, flags []string, script core.Path) string
-	BlobObject(out core.OutPath, src core.Path) string
-	RawBinary(out core.OutPath, elfSrc core.Path) string
+
+	CCompiler() string
+	CxxCompiler() string
+	Assembler() string
+	Archiver() string
+	Link() string
+	ObjcopyCommand() string
+
+	CFlags() []string
+	CxxFlags() []string
+	AsFlags() []string
+
+	LdFlags() []string
+
 	StdDeps() []Dep
 	Script() core.Path
 }
@@ -59,8 +67,10 @@ type GccToolchain struct {
 	Deps         []Dep
 	LinkerScript core.Path
 
-	CompilerFlags []string
-	LinkerFlags   []string
+	CCompilerFlags   []string
+	CxxCompilerFlags []string
+	AsCompilerFlags  []string
+	LinkerFlags      []string
 
 	ToolchainName string
 	ArchName      string
@@ -87,95 +97,60 @@ func (gcc GccToolchain) Freestanding() bool {
 	return false
 }
 
+func (gcc GccToolchain) CCompiler() string {
+	return fmt.Sprintf("%q", gcc.Cc)
+}
+
+func (gcc GccToolchain) CxxCompiler() string {
+	return fmt.Sprintf("%q", gcc.Cxx)
+}
+
+func (gcc GccToolchain) Link() string {
+	return fmt.Sprintf("%q", gcc.Cc)
+}
+
+func (gcc GccToolchain) Assembler() string {
+	return fmt.Sprintf("%q", gcc.As)
+}
+
+func (gcc GccToolchain) Archiver() string {
+	return fmt.Sprintf("%q", gcc.Ar)
+}
+
+func (gcc GccToolchain) ObjcopyCommand() string {
+	return fmt.Sprintf("%q", gcc.Objcopy)
+}
+
+func (gcc GccToolchain) CFlags() []string {
+	result := gcc.CCompilerFlags
+	for _,inc := range(gcc.Includes) {
+		result = append(result, "-isystem", fmt.Sprintf("%q", inc))
+	}
+	return result
+}
+
+func (gcc GccToolchain) CxxFlags() []string {
+	result := gcc.CxxCompilerFlags
+	for _,inc := range(gcc.Includes) {
+		result = append(result, "-isystem", fmt.Sprintf("%q", inc))
+	}
+	return result
+}
+
+func (gcc GccToolchain) AsFlags() []string {
+	return gcc.AsCompilerFlags
+}
+
+func (gcc GccToolchain) LdFlags() []string {
+	return gcc.LinkerFlags
+}
+
 func (gcc GccToolchain) NewWithStdLib(includes []core.Path, deps []Dep, linkerScript core.Path, toolchainName string) GccToolchain {
 	gcc.Includes = includes
 	gcc.Deps = deps
 	gcc.LinkerScript = linkerScript
 	gcc.ToolchainName = toolchainName
 	return gcc
-}
-
-// ObjectFile generates a compile command.
-func (gcc GccToolchain) ObjectFile(out core.OutPath, depfile core.OutPath, flags []string, includes []core.Path, src core.Path) string {
-	includesStr := strings.Builder{}
-	for _, include := range includes {
-		includesStr.WriteString(fmt.Sprintf("-I%q ", include))
-	}
-	for _, include := range gcc.Includes {
-		includesStr.WriteString(fmt.Sprintf("-isystem %q ", include))
-	}
-
-	return fmt.Sprintf(
-		"%q -pipe -c -o %q -MD -MF %q %s %s %q",
-		gcc.Cxx,
-		out,
-		depfile,
-		strings.Join(append(gcc.CompilerFlags, flags...), " "),
-		includesStr.String(),
-		src)
-}
-
-// StaticLibrary generates the command to build a static library.
-func (gcc GccToolchain) StaticLibrary(out core.Path, objs []core.Path) string {
-	// ar updates an existing archive. This can cause faulty builds in the case
-	// where a symbol is defined in one file, that file is removed, and the
-	// symbol is subsequently defined in a new file. That's because the old object file
-	// can persist in the archive. See https://github.com/daedaleanai/dbt/issues/91
-	// There is no option to ar to always force creation of a new archive; the "c"
-	// modifier simply suppresses a warning if the archive doesn't already
-	// exist. So instead we delete the target (out) if it already exists.
-	return fmt.Sprintf(
-		"rm %q 2>/dev/null ; %q rcs %q %s",
-		out,
-		gcc.Ar,
-		out,
-		joinQuoted(objs))
-}
-
-// SharedLibrary generates the command to build a shared library.
-func (gcc GccToolchain) SharedLibrary(out core.Path, objs []core.Path) string {
-	return fmt.Sprintf(
-		"%q -pipe -shared -o %q %s",
-		gcc.Cxx,
-		out,
-		joinQuoted(objs))
-}
-
-// Binary generates the command to build an executable.
-func (gcc GccToolchain) Binary(out core.Path, objs []core.Path, alwaysLinkLibs []core.Path, libs []core.Path, flags []string, script core.Path) string {
-	flags = append(gcc.LinkerFlags, flags...)
-	if script != nil {
-		flags = append(flags, "-T", fmt.Sprintf("%q", script))
-	} else if gcc.LinkerScript != nil {
-		flags = append(flags, "-T", fmt.Sprintf("%q", gcc.LinkerScript))
-	}
-
-	return fmt.Sprintf(
-		"%q -pipe -o %q %s -Wl,-whole-archive %s -Wl,-no-whole-archive %s %s",
-		gcc.Cxx,
-		out,
-		joinQuoted(objs),
-		joinQuoted(alwaysLinkLibs),
-		joinQuoted(libs),
-		strings.Join(flags, " "))
-}
-
-// BlobObject creates an object file from any binary blob of data
-func (gcc GccToolchain) BlobObject(out core.OutPath, src core.Path) string {
-	return fmt.Sprintf(
-		"%q -r -b binary -o %q %q",
-		gcc.Ld,
-		out,
-		src)
-}
-
-// RawBinary strips ELF metadata to create a raw binary image
-func (gcc GccToolchain) RawBinary(out core.OutPath, elfSrc core.Path) string {
-	return fmt.Sprintf(
-		"%q -O binary %q %q",
-		gcc.Objcopy,
-		elfSrc,
-		out)
 }
 
 func (gcc GccToolchain) StdDeps() []Dep {
@@ -216,8 +191,9 @@ var NativeGcc = RegisterToolchain(GccToolchain{
 	Objcopy: core.NewGlobalPath("objcopy"),
 	Ld:      core.NewGlobalPath("ld"),
 
-	CompilerFlags: []string{"-std=c++14", "-O3", "-fdiagnostics-color=always"},
-	LinkerFlags:   []string{"-fdiagnostics-color=always"},
+	CCompilerFlags:   []string{"-O3", "-fdiagnostics-color=always"},
+	CxxCompilerFlags: []string{"-std=c++14", "-O3", "-fdiagnostics-color=always"},
+	LinkerFlags:      []string{"-fdiagnostics-color=always"},
 
 	ToolchainName: "native-gcc",
 	ArchName:      "x86_64", // TODO: don't hardcode this.
