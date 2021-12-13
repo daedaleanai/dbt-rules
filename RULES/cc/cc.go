@@ -323,7 +323,7 @@ func (bin Binary) build(ctx core.Context) {
 		flags = append(flags, "-T", fmt.Sprintf("%q", bin.Script))
 	}
 
-	cmd := fmt.Sprintf("%s %s %s -o %q %s -Wl,-whole-archive %s -Wl,-no-whole-archive %s", toolchain.Link(), strings.Join(toolchain.LdFlags(), " "), strings.Join(flags, " "),
+	cmd := fmt.Sprintf("%s %s %s -o %q %s -Wl,-whole-archive %s -Wl,-no-whole-archive %s", toolchain.Link(), strings.Join(append(toolchain.LdFlags(), bin.LinkerFlags...), " "), strings.Join(flags, " "),
 		bin.Out,
 		joinQuoted(libsPre),
 		joinQuoted(alwaysLinkLibs),
