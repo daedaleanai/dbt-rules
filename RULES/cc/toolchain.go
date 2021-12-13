@@ -122,11 +122,19 @@ func (gcc GccToolchain) ObjcopyCommand() string {
 }
 
 func (gcc GccToolchain) CFlags() []string {
-	return gcc.CCompilerFlags
+	result := gcc.CCompilerFlags
+	for _,inc := range(gcc.Includes) {
+		result = append(result, "-isystem", fmt.Sprintf("%q", inc))
+	}
+	return result
 }
 
 func (gcc GccToolchain) CxxFlags() []string {
-	return gcc.CxxCompilerFlags
+	result := gcc.CxxCompilerFlags
+	for _,inc := range(gcc.Includes) {
+		result = append(result, "-isystem", fmt.Sprintf("%q", inc))
+	}
+	return result
 }
 
 func (gcc GccToolchain) AsFlags() []string {

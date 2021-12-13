@@ -36,7 +36,7 @@ func (obj objectFile) Build(ctx core.Context) {
 		cmd = toolchain.Assembler()
 		flags = append(toolchain.AsFlags(), "-c")
 	default:
-		panic("Unknown source extension for cc toolchain '" + filepath.Ext(obj.Src.Absolute()) + "'")
+		core.Fatal("Unknown source extension for cc toolchain '" + filepath.Ext(obj.Src.Absolute()) + "'")
 	}
 
 	flags = append(flags, "-o", fmt.Sprintf("%q", obj.Out))
@@ -196,6 +196,7 @@ func (lib Library) build(ctx core.Context) {
 		cmd = fmt.Sprintf("%s -pipe -shared %s -o %q %s", toolchain.Link(), strings.Join(toolchain.LdFlags(), " "), lib.Out, joinQuoted(objs))
 		descr = fmt.Sprintf("LD (toolchain: %s) %s", toolchain.Name(), lib.Out.Relative())
 	} else {
+		// ar updates an existing archive. This can cause faulty builds in the case
 		cmd = fmt.Sprintf(
 			"rm %q 2>/dev/null ; %s rcs %q %s",
 			lib.Out,
