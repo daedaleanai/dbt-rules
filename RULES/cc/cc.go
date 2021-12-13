@@ -263,6 +263,8 @@ type Binary struct {
 	CompilerFlags []string
 	LinkerFlags   []string
 	Deps          []Dep
+	DepsPre       []Dep
+	DepsPost      []Dep
 	Script        core.Path
 	Toolchain     Toolchain
 }
@@ -287,6 +289,7 @@ func (bin Binary) build(ctx core.Context) {
 	ins := objs
 	alwaysLinkLibs := []core.Path{}
 	otherLibs := []core.Path{}
+	
 	for _, dep := range deps {
 		ins = append(ins, dep.Out)
 		if dep.AlwaysLink {
@@ -294,6 +297,19 @@ func (bin Binary) build(ctx core.Context) {
 		} else {
 			otherLibs = append(otherLibs, dep.Out)
 		}
+	}
+
+	libsPre := []core.Path{}
+	for _, dep := range bin.DepsPre {
+		lib := dep.CcLibrary(toolchain)
+		ins = append(ins, lib.Out)
+		libsPre = append(libsPre, lib.Out)
+	}
+
+	for _, dep := range bin.DepsPost {
+		lib := dep.CcLibrary(toolchain)
+		ins = append(ins, lib.Out)
+		otherLibs = append(otherLibs, lib.Out)
 	}
 
 	if bin.Script != nil {
@@ -307,8 +323,9 @@ func (bin Binary) build(ctx core.Context) {
 		flags = append(flags, "-T", fmt.Sprintf("%q", bin.Script))
 	}
 
-	cmd := fmt.Sprintf("%s %s %s -o %q -Wl,-whole-archive %s -Wl,-no-whole-archive %s", toolchain.Link(), strings.Join(toolchain.LdFlags(), " "), strings.Join(flags, " "),
+	cmd := fmt.Sprintf("%s %s %s -o %q %s -Wl,-whole-archive %s -Wl,-no-whole-archive %s", toolchain.Link(), strings.Join(toolchain.LdFlags(), " "), strings.Join(flags, " "),
 		bin.Out,
+		joinQuoted(libsPre),
 		joinQuoted(alwaysLinkLibs),
 		joinQuoted(otherLibs),
 	)
