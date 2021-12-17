@@ -17,43 +17,74 @@ type objectFile struct {
 	Toolchain Toolchain
 }
 
+func ninjaEscape(s string) string {
+	return strings.ReplaceAll(s, " ", "$ ")
+}
+
+func (obj objectFile) cxxRule() core.BuildRule {
+	toolchain := toolchainOrDefault(obj.Toolchain)
+	return core.BuildRule {
+		Name: toolchain.Name() + "-cxx",
+		Variables: map[string]string{
+			"depfile": "$out.d",
+			"command": fmt.Sprintf("%s %s $flags -pipe -c -MD -MF $out.d -o $out $in", ninjaEscape(toolchain.CxxCompiler()), strings.Join(toolchain.CxxFlags(), " ")),
+			"description": fmt.Sprintf("CXX (toolchain: %s) $out", toolchain.Name()),
+		},
+	}
+}
+
+func (obj objectFile) ccRule() core.BuildRule {
+	toolchain := toolchainOrDefault(obj.Toolchain)
+	return core.BuildRule {
+		Name: toolchain.Name() + "-cc",
+		Variables: map[string]string{
+			"depfile": "$out.d",
+			"command": fmt.Sprintf("%s %s $flags -pipe -c -MD -MF $out.d -o $out $in", ninjaEscape(toolchain.CCompiler()), strings.Join(toolchain.CFlags(), " ")),
+			"description": fmt.Sprintf("CC (toolchain: %s) $out", toolchain.Name()),
+		},
+	}
+}
+
+func (obj objectFile) asRule() core.BuildRule {
+	toolchain := toolchainOrDefault(obj.Toolchain)
+	return core.BuildRule {
+		Name: toolchain.Name() + "-as",
+		Variables: map[string]string{
+			"command": fmt.Sprintf("%s %s $flags -c -o $out $in", ninjaEscape(toolchain.Assembler()), strings.Join(toolchain.AsFlags(), " ")),
+			"description": fmt.Sprintf("AS (toolchain: %s) $out", toolchain.Name()),
+		},
+	}
+}
+
 // Build an objectFile.
 func (obj objectFile) Build(ctx core.Context) {
-	toolchain := toolchainOrDefault(obj.Toolchain)
-	depfile := obj.Out.WithExt("d")
-
-	cmd := ""
-	flags := []string{}
+	rule := core.BuildRule{}
 
 	switch filepath.Ext(obj.Src.Absolute()) {
 	case ".cc":
-		cmd = toolchain.CxxCompiler()
-		flags = append(toolchain.CxxFlags(), "-pipe", "-c", "-MD", "-MF", fmt.Sprintf("%q", depfile))
+		rule = obj.cxxRule()
 	case ".c":
-		cmd = toolchain.CCompiler()
-		flags = append(toolchain.CFlags(), "-pipe", "-c", "-MD", "-MF", fmt.Sprintf("%q", depfile))
+		rule = obj.ccRule()
 	case ".S":
-		cmd = toolchain.Assembler()
-		flags = append(toolchain.AsFlags(), "-c")
+		rule = obj.asRule()
 	default:
 		core.Fatal("Unknown source extension for cc toolchain '" + filepath.Ext(obj.Src.Absolute()) + "'")
 	}
 
-	flags = append(flags, "-o", fmt.Sprintf("%q", obj.Out))
+	flags := []string{}
 
 	for _, include := range obj.Includes {
 		flags = append(flags, fmt.Sprintf("-I%q", include))
 	}
 
-	cmd = fmt.Sprintf("%s %s %q", cmd, strings.Join(flags, " "), obj.Src)
-
 	ctx.WithTrace("obj:"+obj.Out.Relative(), func(ctx core.Context) {
-		ctx.AddBuildStep(core.BuildStep{
-			Out:     obj.Out,
-			Depfile: depfile,
-			In:      obj.Src,
-			Cmd:     cmd,
-			Descr:   fmt.Sprintf("CC (toolchain: %s) %s", toolchain.Name(), obj.Out.Relative()),
+		ctx.AddBuildStepWithRule(core.BuildStepWithRule{
+			Outs:     []core.OutPath{obj.Out},
+			Ins:      []core.Path{obj.Src},
+			Rule:	  rule,
+			Variables: map[string]string {
+				"flags": strings.Join(flags, " "),
+			},
 		})
 	})
 }
@@ -165,6 +196,35 @@ type Library struct {
 	userToolchain Toolchain
 }
 
+func (lib Library) arRule() core.BuildRule {
+	toolchain := toolchainOrDefault(lib.Toolchain)
+	// ar updates an existing archive. This can cause faulty builds in the case
+	// where a symbol is defined in one file, that file is removed, and the
+	// symbol is subsequently defined in a new file. That's because the old object file
+	// can persist in the archive. See https://github.com/daedaleanai/dbt/issues/91
+	// There is no option to ar to always force creation of a new archive; the "c"
+	// modifier simply suppresses a warning if the archive doesn't already
+	// exist. So instead we delete the target (out) if it already exists.
+	return core.BuildRule {
+		Name: toolchain.Name() + "-ar",
+		Variables: map[string]string{
+			"command": fmt.Sprintf("rm -f $out 2> /dev/null; %s rcs $out $in", ninjaEscape(toolchain.Archiver())),
+			"description": fmt.Sprintf("AR (toolchain: %s) $out", toolchain.Name()),
+		},
+	}
+}
+
+func (lib Library) soRule() core.BuildRule {
+	toolchain := toolchainOrDefault(lib.Toolchain)
+	return core.BuildRule {
+		Name: toolchain.Name() + "-so",
+		Variables: map[string]string{
+			"command": fmt.Sprintf("%s -pipe -shared %s -o $out $in", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
+			"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
+		},
+	}
+}
+
 // Build a Library.
 func (lib Library) build(ctx core.Context) {
 	if lib.Out == nil {
@@ -191,32 +251,18 @@ func (lib Library) build(ctx core.Context) {
 		objs = append(objs, blobObject.out())
 	}
 
-	var cmd, descr string
+	rule := core.BuildRule{}
+
 	if lib.Shared {
-		cmd = fmt.Sprintf("%s -pipe -shared %s -o %q %s", toolchain.Link(), strings.Join(toolchain.LdFlags(), " "), lib.Out, joinQuoted(objs))
-		descr = fmt.Sprintf("LD (toolchain: %s) %s", toolchain.Name(), lib.Out.Relative())
+		rule = lib.soRule()
 	} else {
-		// ar updates an existing archive. This can cause faulty builds in the case
-		// where a symbol is defined in one file, that file is removed, and the
-		// symbol is subsequently defined in a new file. That's because the old object file
-		// can persist in the archive. See https://github.com/daedaleanai/dbt/issues/91
-		// There is no option to ar to always force creation of a new archive; the "c"
-		// modifier simply suppresses a warning if the archive doesn't already
-		// exist. So instead we delete the target (out) if it already exists.
-		cmd = fmt.Sprintf(
-			"rm %q 2>/dev/null ; %s rcs %q %s",
-			lib.Out,
-			toolchain.Archiver(),
-			lib.Out,
-			joinQuoted(objs))
-		descr = fmt.Sprintf("AR (toolchain: %s) %s", toolchain.Name(), lib.Out.Relative())
+		rule = lib.arRule()
 	}
 
-	ctx.AddBuildStep(core.BuildStep{
-		Out:   lib.Out,
+	ctx.AddBuildStepWithRule(core.BuildStepWithRule{
+		Outs:  []core.OutPath{lib.Out},
 		Ins:   objs,
-		Cmd:   cmd,
-		Descr: descr,
+		Rule: rule,
 	})
 }
 
@@ -277,6 +323,17 @@ func (bin Binary) Build(ctx core.Context) {
 	ctx.WithTrace("bin:"+bin.Out.Relative(), bin.build)
 }
 
+func (bin Binary) ldRule() core.BuildRule {
+	toolchain := toolchainOrDefault(bin.Toolchain)
+	return core.BuildRule {
+		Name: toolchain.Name() + "-ld",
+		Variables: map[string]string{
+			"command": fmt.Sprintf("%s -pipe %s $flags -o $out $libs", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
+			"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
+		},
+	}
+}
+
 func (bin Binary) build(ctx core.Context) {
 	toolchain := toolchainOrDefault(bin.Toolchain)
 
@@ -325,16 +382,14 @@ func (bin Binary) build(ctx core.Context) {
 		flags = append(flags, "-T", fmt.Sprintf("%q", bin.Script))
 	}
 
-	cmd := fmt.Sprintf("%s %s %s -o %q %s", toolchain.Link(), strings.Join(append(toolchain.LdFlags(), bin.LinkerFlags...), " "), strings.Join(flags, " "),
-		bin.Out,
-		strings.Join(libsToLink, " "),
-	)
-
-	ctx.AddBuildStep(core.BuildStep{
-		Out:   bin.Out,
+	ctx.AddBuildStepWithRule(core.BuildStepWithRule{
+		Outs:  []core.OutPath{bin.Out},
 		Ins:   ins,
-		Cmd:   cmd,
-		Descr: fmt.Sprintf("LD (toolchain: %s) %s", toolchain.Name(), bin.Out.Relative()),
+		Rule:  bin.ldRule(),
+		Variables: map[string]string {
+			"flags": strings.Join(bin.LinkerFlags, " "),
+			"libs": strings.Join(libsToLink, " "),
+		},
 	})
 }
 

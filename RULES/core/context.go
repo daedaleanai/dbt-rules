@@ -15,6 +15,7 @@ import (
 
 type Context interface {
 	AddBuildStep(BuildStep)
+	AddBuildStepWithRule(BuildStepWithRule)
 	Cwd() OutPath
 
 	// Built reports whether this is the first time Built has been
@@ -47,6 +48,18 @@ type BuildStep struct {
 	Data         string
 	DataFileMode os.FileMode
 	Descr        string
+}
+
+type BuildRule struct {
+	Name string
+	Variables map[string]string
+}
+
+type BuildStepWithRule struct {
+	Outs []OutPath
+	Ins  []Path
+	Variables map[string]string
+	Rule BuildRule 
 }
 
 func (step *BuildStep) outs() []OutPath {
@@ -96,6 +109,7 @@ type context struct {
 
 	trace    []string
 	seenOnce map[string]bool
+	seenRules map[string]bool
 }
 
 func newContext(vars map[string]interface{}) *context {
@@ -108,6 +122,7 @@ func newContext(vars map[string]interface{}) *context {
 		ninjaFile:    strings.Builder{},
 		bashFile:     strings.Builder{},
 		seenOnce:     map[string]bool{},
+		seenRules:     map[string]bool{},
 	}
 
 	for name := range vars {
@@ -213,6 +228,43 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 	}
 	fmt.Fprint(&ctx.ninjaFile, "\n")
 	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s\n", strings.Join(outs, " "), ctx.nextRuleID, strings.Join(ins, " "))
+	fmt.Fprint(&ctx.ninjaFile, "\n\n")
+
+	ctx.nextRuleID++
+}
+
+// AddBuildStepWithRule adds a build step for the current target.
+func (ctx *context) AddBuildStepWithRule(step BuildStepWithRule) {
+	outs := []string{}
+	for _, out := range step.Outs {
+		outs = append(outs, ninjaEscape(out.Absolute()))
+		ctx.leafOutputs[out] = true
+	}
+
+	if len(outs) == 0 {
+		return
+	}
+
+	ins := []string{}
+	for _, in := range step.Ins {
+		ins = append(ins, ninjaEscape(in.Absolute()))
+		delete(ctx.leafOutputs, in)
+	}
+
+	if !ctx.seenRules[step.Rule.Name] {
+		ctx.seenRules[step.Rule.Name] = true
+		fmt.Fprintf(&ctx.ninjaFile, "rule %s\n", step.Rule.Name)
+		for name,value := range step.Rule.Variables {
+			fmt.Fprintf(&ctx.ninjaFile, "  %s = %s\n", name, value)
+		}
+		fmt.Fprint(&ctx.ninjaFile, "\n")
+	}
+
+	fmt.Fprintf(&ctx.ninjaFile, "# trace: %s\n", strings.Join(ctx.Trace(), " // "))
+	fmt.Fprintf(&ctx.ninjaFile, "build %s: %s %s\n", strings.Join(outs, " "), step.Rule.Name, strings.Join(ins, " "))
+	for name,value := range step.Variables {
+		fmt.Fprintf(&ctx.ninjaFile, "  %s = %s\n", name, value)
+	}
 	fmt.Fprint(&ctx.ninjaFile, "\n\n")
 
 	ctx.nextRuleID++
