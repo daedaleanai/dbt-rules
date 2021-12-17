@@ -216,13 +216,6 @@ func (lib Library) arRule() core.BuildRule {
 
 func (lib Library) soRule() core.BuildRule {
 	toolchain := toolchainOrDefault(lib.Toolchain)
-	// ar updates an existing archive. This can cause faulty builds in the case
-	// where a symbol is defined in one file, that file is removed, and the
-	// symbol is subsequently defined in a new file. That's because the old object file
-	// can persist in the archive. See https://github.com/daedaleanai/dbt/issues/91
-	// There is no option to ar to always force creation of a new archive; the "c"
-	// modifier simply suppresses a warning if the archive doesn't already
-	// exist. So instead we delete the target (out) if it already exists.
 	return core.BuildRule {
 		Name: toolchain.Name() + "-so",
 		Variables: map[string]string{
@@ -270,8 +263,6 @@ func (lib Library) build(ctx core.Context) {
 		Outs:  []core.OutPath{lib.Out},
 		Ins:   objs,
 		Rule: rule,
-		Variables: map[string]string {
-		},
 	})
 }
 
@@ -334,13 +325,6 @@ func (bin Binary) Build(ctx core.Context) {
 
 func (bin Binary) ldRule() core.BuildRule {
 	toolchain := toolchainOrDefault(bin.Toolchain)
-	// ar updates an existing archive. This can cause faulty builds in the case
-	// where a symbol is defined in one file, that file is removed, and the
-	// symbol is subsequently defined in a new file. That's because the old object file
-	// can persist in the archive. See https://github.com/daedaleanai/dbt/issues/91
-	// There is no option to ar to always force creation of a new archive; the "c"
-	// modifier simply suppresses a warning if the archive doesn't already
-	// exist. So instead we delete the target (out) if it already exists.
 	return core.BuildRule {
 		Name: toolchain.Name() + "-ld",
 		Variables: map[string]string{

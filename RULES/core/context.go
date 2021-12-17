@@ -233,11 +233,10 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 	ctx.nextRuleID++
 }
 
-// AddBuildStep adds a build step for the current target.
+// AddBuildStepWithRule adds a build step for the current target.
 func (ctx *context) AddBuildStepWithRule(step BuildStepWithRule) {
 	outs := []string{}
 	for _, out := range step.Outs {
-		//ctx.buildOutputs[out.Absolute()] = step
 		outs = append(outs, ninjaEscape(out.Absolute()))
 		ctx.leafOutputs[out] = true
 	}
@@ -255,7 +254,7 @@ func (ctx *context) AddBuildStepWithRule(step BuildStepWithRule) {
 	if !ctx.seenRules[step.Rule.Name] {
 		ctx.seenRules[step.Rule.Name] = true
 		fmt.Fprintf(&ctx.ninjaFile, "rule %s\n", step.Rule.Name)
-		for name,value := range(step.Rule.Variables) {
+		for name,value := range step.Rule.Variables {
 			fmt.Fprintf(&ctx.ninjaFile, "  %s = %s\n", name, value)
 		}
 		fmt.Fprint(&ctx.ninjaFile, "\n")
@@ -263,7 +262,7 @@ func (ctx *context) AddBuildStepWithRule(step BuildStepWithRule) {
 
 	fmt.Fprintf(&ctx.ninjaFile, "# trace: %s\n", strings.Join(ctx.Trace(), " // "))
 	fmt.Fprintf(&ctx.ninjaFile, "build %s: %s %s\n", strings.Join(outs, " "), step.Rule.Name, strings.Join(ins, " "))
-	for name,value := range(step.Variables) {
+	for name,value := range step.Variables {
 		fmt.Fprintf(&ctx.ninjaFile, "  %s = %s\n", name, value)
 	}
 	fmt.Fprint(&ctx.ninjaFile, "\n\n")
