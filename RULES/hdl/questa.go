@@ -59,11 +59,6 @@ var CoverageHtml = core.BoolFlag{
   },
 }.Register()
 
-// Lib returns the standard Questa library name defined for this rule.
-func (rule Simulation) Lib() string {
-  return rule.Name + "Lib"
-}
-
 // Target returns the optimization target name defined for this rule.
 func (rule Simulation) Target() string {
   if Coverage.Value() {
@@ -71,11 +66,6 @@ func (rule Simulation) Target() string {
   } else {
     return rule.Name
   }
-}
-
-// Path returns the default root path for log files defined for this rule.
-func (rule Simulation) Path() core.Path {
-  return core.BuildPath("/" + rule.Name)
 }
 
 // Instance returns the instance name of the rule based on the Top and the DUT
@@ -182,7 +172,7 @@ func compile(ctx core.Context, rule Simulation) []core.Path {
   for _, ip := range rule.Ips {
     deps, incs = compileIp(ctx, rule, ip, deps, incs)
   }
-  compileSrcs(ctx, rule, deps, incs, rule.Srcs)
+  deps, incs = compileSrcs(ctx, rule, deps, incs, rule.Srcs)
 
   return deps
 }

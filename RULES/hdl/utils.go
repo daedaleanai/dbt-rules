@@ -7,6 +7,7 @@ import (
 func IsRtl(path string) bool {
   return strings.HasSuffix(path, ".v") ||
     strings.HasSuffix(path, ".sv") ||
+    strings.HasSuffix(path, ".vhdl") ||
     strings.HasSuffix(path, ".vhd")
 }
 

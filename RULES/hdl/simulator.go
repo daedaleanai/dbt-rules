@@ -39,16 +39,20 @@ type Simulation struct {
   WaveformInit      core.Path
 }
 
+// Lib returns the standard library name defined for this rule.
+func (rule Simulation) Lib() string {
+  return rule.Name + "Lib"
+}
+
+// Path returns the default root path for log files defined for this rule.
+func (rule Simulation) Path() core.Path {
+  return core.BuildPath("/" + rule.Name)
+}
+
 func (rule Simulation) Build(ctx core.Context) {
   switch Simulator.Value() {
   case "xsim":
-    SimulationXsim{
-      Name:    rule.Name,
-      Srcs:    rule.Srcs,
-      Ips:     rule.Ips,
-      Libs:    rule.Libs,
-      Verbose: false,
-    }.Build(ctx)
+    BuildXsim(ctx, rule)
   case "questa":
     BuildQuesta(ctx, rule)
   default:
@@ -60,6 +64,8 @@ func (rule Simulation) Run(args []string) string {
   res := ""
 
   switch Simulator.Value() {
+  case "xsim":
+    res = RunXsim(rule, args)
   case "questa":
     res = RunQuesta(rule, args)
   default:
@@ -72,6 +78,8 @@ func (rule Simulation) Run(args []string) string {
 func (rule Simulation) Test(args []string) string {
   res := ""
   switch Simulator.Value() {
+  case "xsim":
+    res = TestXsim(rule, args)
   case "questa":
     res = TestQuesta(rule, args)
   default:
