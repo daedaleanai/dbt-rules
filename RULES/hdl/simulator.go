@@ -83,7 +83,7 @@ func (rule Simulation) Test(args []string) string {
 
 func (rule Simulation) Description() string {
   // Print the rule name as its needed for parameter selection
-  description := " Name: " + rule.Name + " "
+  description := " "
   first := true
   for param, _ := range rule.Params {
     if first {

@@ -51,6 +51,14 @@ var Coverage = core.BoolFlag{
   },
 }.Register()
 
+// CoverageHtml enables the generation of an Html report in the output directory
+var CoverageHtml = core.BoolFlag{
+  Name: "questa-coverage-html",
+  DefaultFn: func() bool {
+    return false
+  },
+}.Register()
+
 // Lib returns the standard Questa library name defined for this rule.
 func (rule Simulation) Lib() string {
   return rule.Name + "Lib"
@@ -360,7 +368,11 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
     coverage_flag = " -coverage"
   }
 
-  // Determine the names of the coverage databases
+  // Determine the names of the coverage databases, this one will hold merged
+  // data from multiple testcases
+  main_coverage_db := rule.Name
+
+  // This will be the name of the database created by the current run
   coverage_db := rule.Name
 
   // Collect do-files here
@@ -398,18 +410,25 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 
   cmd_echo := ""
   if rule.Params != nil && params != "" {
-    // Update coverage database name
+    // Update coverage database name based on parameters. We cannot merge
+    // different parameter sets, do we have to make a dedicated main database
+    // for this parameter set.
+    main_coverage_db = main_coverage_db + "_" + params
+    coverage_db = coverage_db + "_" + params
+    cmd_echo = "Testcase " + params
+    
+    // Update with testcase if specified
     if testcase != "" {
-      coverage_db = coverage_db + "_" + params + "_" + testcase
+      coverage_db = coverage_db + "_" + testcase
+      cmd_echo = cmd_echo + "/" + testcase + ":"
       testcase = params + "_" + testcase
-      cmd_echo = "Testcase " + params + "/" + testcase + ":"
     } else {
-      coverage_db = coverage_db + "_" + params
+      cmd_echo = cmd_echo + ":"
       testcase = params
-      cmd_echo = "Testcase " + params + ":"
     }
   } else {
-    // Update coverage database name
+    // Update coverage database name with testcase alone, main database stays
+    // the same
     if testcase != "" {
       coverage_db = coverage_db + "_" + testcase
       cmd_echo = "Testcase " + testcase + ":"
@@ -430,15 +449,18 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
     }
     do_flags = append(do_flags, "\"run -all\"")
     if Coverage.Value() {
-      do_flags = append(do_flags,
-        fmt.Sprintf("\"coverage report -html -output %s_covhtml -details -assert"+
-          " -directive -cvg -code bcefst -threshL 50 -threshH 90\"", coverage_db))
       do_flags = append(do_flags, fmt.Sprintf("\"coverage save -assert"+
-        " -directive -cvg -codeAll -testname %s"+
-        " -instance %s %s.ucdb\"",
-        testcase, rule.Instance(), coverage_db))
-      do_flags = append(do_flags, fmt.Sprintf("\"vcover merge -out %s.ucdb {*}[glob %s*.ucdb]\"", rule.Name, rule.Name))
-      do_flags = append(do_flags, fmt.Sprintf("\"file delete {*}[glob -nocomplain %s_*.ucdb]\"", rule.Name))
+        " -cvg -codeAll -testname %s"+
+        " %s.ucdb\"",
+        testcase, coverage_db))
+      do_flags = append(do_flags, 
+        fmt.Sprintf("\"vcover merge -testassociated -out %s.ucdb %s.ucdb %s.ucdb\"", 
+          main_coverage_db, main_coverage_db, coverage_db))
+      if CoverageHtml.Value() {
+        do_flags = append(do_flags,
+          fmt.Sprintf("\"vcover report -html -output %s_covhtml -testdetails -details -assert"+
+            " -cvg -codeAll %s.ucdb\"", main_coverage_db, main_coverage_db))
+      }
     }
     do_flags = append(do_flags, "\"quit -code [coverage attribute -name TESTSTATUS -concise]\"")
     cmd_newline := ":"
@@ -455,7 +477,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
     vsim_flags = vsim_flags + " -do " + do_flag
   }
 
-  cmd := fmt.Sprintf("{ echo -n %s && vsim %s -work %s %s && echo OK; }", cmd_echo, vsim_flags, rule.Lib(), rule.Target()+params)
+  cmd := fmt.Sprintf("{ echo -n %s && vsim %s -work %s %s && echo PASS; }", cmd_echo, vsim_flags, rule.Lib(), rule.Target()+params)
   if cmd_preamble == "" {
     cmd = cmd + " " + cmd_postamble
   } else {
