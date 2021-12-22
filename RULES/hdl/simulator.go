@@ -9,7 +9,7 @@ import (
 
 var Simulator = core.StringFlag{
 	Name:        "hdl-simulator",
-	Description: "HDL simulator to use when generating simulation targets",
+	Description: "Select HDL simulator",
 	DefaultFn: func() string {
 		return "questa"
 	},
@@ -18,7 +18,7 @@ var Simulator = core.StringFlag{
 
 var SimulatorLibDir = core.StringFlag{
 	Name:        "hdl-simulator-lib-dir",
-	Description: "Path to the HDL Simulator libraries",
+	Description: "Path to the HDL simulator libraries",
 	DefaultFn: func() string {
 		return ""
 	},

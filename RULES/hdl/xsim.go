@@ -12,35 +12,40 @@ import (
 
 // XvlogFlags enables the user to specify additional flags for the 'vlog' command.
 var XvlogFlags = core.StringFlag{
-	Name: "xvlog-flags",
+	Name: "xsim-xvlog-flags",
 	DefaultFn: func() string {
 		return ""
 	},
+	Description: "Extra flags for the xvlog command",
 }.Register()
 
 // XvhdlFlags enables the user to specify additional flags for the 'vcom' command.
 var XvhdlFlags = core.StringFlag{
-	Name: "xvhdl-flags",
+	Name: "xsim-xvhdl-flags",
 	DefaultFn: func() string {
 		return ""
 	},
+	Description: "Extra flags for the xvhdl command",
 }.Register()
 
 // XsimFlags enables the user to specify additional flags for the 'vsim' command.
 var XsimFlags = core.StringFlag{
-	Name: "xsim-flags",
+	Name: "xsim-xsim-flags",
 	DefaultFn: func() string {
 		return ""
 	},
+	Description: "Extra flags for the xsim command",
 }.Register()
 
 // XelabDebug enables the user to control the accessibility in the compiled design for
 // debugging purposes.
 var XelabDebug = core.StringFlag{
-	Name: "xelab-debug",
+	Name: "xsim-xelab-debug",
 	DefaultFn: func() string {
 		return "typical"
 	},
+	Description:   "Extra debug flags for the xelab command",
+	AllowedValues: []string{"line", "wave", "drivers", "readers", "xlibs", "all", "typical", "subprogram", "off"},
 }.Register()
 
 // xsim_rules holds a map of all defined rules to prevent defining the same rule

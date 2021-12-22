@@ -16,6 +16,7 @@ var VlogFlags = core.StringFlag{
 	DefaultFn: func() string {
 		return ""
 	},
+	Description: "Extra flags for the vlog command",
 }.Register()
 
 // VcomFlags enables the user to specify additional flags for the 'vcom' command.
@@ -24,6 +25,7 @@ var VcomFlags = core.StringFlag{
 	DefaultFn: func() string {
 		return ""
 	},
+	Description: "Extra flags for the vcom command",
 }.Register()
 
 // VsimFlags enables the user to specify additional flags for the 'vsim' command.
@@ -32,6 +34,7 @@ var VsimFlags = core.StringFlag{
 	DefaultFn: func() string {
 		return ""
 	},
+	Description: "Extra flags for the vsim command",
 }.Register()
 
 // Access enables the user to control the accessibility in the compiled design for
@@ -41,6 +44,7 @@ var Access = core.StringFlag{
 	DefaultFn: func() string {
 		return "rna"
 	},
+	Description: "Control access to simulation objects for debugging purposes",
 }.Register()
 
 // Coverage enables the user to run the simulation with code coverage.
@@ -49,6 +53,7 @@ var Coverage = core.BoolFlag{
 	DefaultFn: func() bool {
 		return false
 	},
+	Description: "Enable code-coverage database generation",
 }.Register()
 
 // CoverageHtml enables the generation of an Html report in the output directory
@@ -57,6 +62,7 @@ var CoverageHtml = core.BoolFlag{
 	DefaultFn: func() bool {
 		return false
 	},
+	Description: "Enable code-coverage HTML report generation",
 }.Register()
 
 // Target returns the optimization target name defined for this rule.
