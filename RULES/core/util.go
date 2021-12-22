@@ -19,10 +19,21 @@ var (
 	buildDirSuffix = ""
 )
 
+var outptuDir = StringFlag {
+	Name: "output-dir",
+	Description: "Output dir",
+	DefaultFn: func() string { return "" },
+}.Register()
+
 func buildDir() string {
 	if !flagsLocked {
 		Fatal("cannot use build directory before all flag values are known")
 	}
+
+	if outptuDir.Value() != "" {
+		return outptuDir.Value()
+	}
+
 	return input.BuildDirPrefix + buildDirSuffix
 }
 
