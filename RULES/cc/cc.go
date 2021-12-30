@@ -13,7 +13,9 @@ type objectFile struct {
 	Out       core.OutPath
 	Src       core.Path
 	Includes  []core.Path
-	Flags     []string
+	CFlags     []string
+	CxxFlags     []string
+	AsFlags     []string
 	Toolchain Toolchain
 }
 
@@ -60,18 +62,21 @@ func (obj objectFile) asRule() core.BuildRule {
 func (obj objectFile) Build(ctx core.Context) {
 	rule := core.BuildRule{}
 
+	flags := []string{}
+
 	switch filepath.Ext(obj.Src.Absolute()) {
 	case ".cc":
 		rule = obj.cxxRule()
+		flags = obj.CxxFlags
 	case ".c":
 		rule = obj.ccRule()
+		flags = obj.CFlags
 	case ".S":
 		rule = obj.asRule()
+		flags = obj.AsFlags
 	default:
 		core.Fatal("Unknown source extension for cc toolchain '" + filepath.Ext(obj.Src.Absolute()) + "'")
 	}
-
-	flags := []string{}
 
 	for _, include := range obj.Includes {
 		flags = append(flags, fmt.Sprintf("-I%q", include))
@@ -102,7 +107,7 @@ func (blob BlobObject) Build(ctx core.Context) {
 		ctx.AddBuildStep(core.BuildStep{
 			Out:   blob.out(),
 			In:    blob.In,
-			Cmd:   fmt.Sprintf("%s %s -r -b binary -o %q %q", blob.Toolchain.Link(), blob.Toolchain.LdFlags(), blob.out(), blob.In),
+			Cmd:   fmt.Sprintf("%s %s -r -b binary -o %q %q", blob.Toolchain.Link(), strings.Join(blob.Toolchain.LdFlags(), " "), blob.out(), blob.In),
 			Descr: fmt.Sprintf("BLOB (toolchain: %s) %s", toolchain.Name(), blob.out().Relative()),
 		})
 	})
@@ -145,7 +150,7 @@ func collectDepsWithToolchain(toolchain Toolchain, deps []Dep) []Library {
 	return stack
 }
 
-func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, flags []string, deps []Library, toolchain Toolchain) []core.Path {
+func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, toolchain Toolchain) []core.Path {
 	includes := []core.Path{core.SourcePath("")}
 	for _, dep := range deps {
 		includes = append(includes, dep.Includes...)
@@ -158,7 +163,9 @@ func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, flags 
 			Out:       out.WithSuffix("_o/" + src.Relative()).WithExt("o"),
 			Src:       src,
 			Includes:  includes,
-			Flags:     flags,
+			CFlags:     cFlags,
+			CxxFlags:     cxxFlags,
+			AsFlags:     asFlags,
 			Toolchain: toolchain,
 		}
 		obj.Build(ctx)
@@ -185,7 +192,9 @@ type Library struct {
 	Blobs         []core.Path
 	Objs          []core.Path
 	Includes      []core.Path
-	CompilerFlags []string
+	CFlags		  []string
+	CxxFlags      []string
+	AsFlags       []string
 	Deps          []Dep
 	Shared        bool
 	AlwaysLink    bool
@@ -219,7 +228,7 @@ func (lib Library) soRule() core.BuildRule {
 	return core.BuildRule {
 		Name: toolchain.Name() + "-so",
 		Variables: map[string]string{
-			"command": fmt.Sprintf("%s -pipe -shared %s -o $out $in", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
+			"command": fmt.Sprintf("%s -shared %s -o $out $in", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
 			"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
 		},
 	}
@@ -242,7 +251,7 @@ func (lib Library) build(ctx core.Context) {
 		d.Build(ctx)
 	}
 
-	objs := compileSources(lib.Out, ctx, lib.Srcs, lib.CompilerFlags, deps, toolchain)
+	objs := compileSources(lib.Out, ctx, lib.Srcs, lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, toolchain)
 	objs = append(objs, lib.Objs...)
 
 	for _, blob := range lib.Blobs {
@@ -306,7 +315,9 @@ func (lib Library) CcLibrary(toolchain Toolchain) Library {
 type Binary struct {
 	Out           core.OutPath
 	Srcs          []core.Path
-	CompilerFlags []string
+	CFlags        []string
+	CxxFlags      []string
+    AsFlags       []string
 	LinkerFlags   []string
 	Deps          []Dep
 	DepsPre       []Dep
@@ -328,7 +339,7 @@ func (bin Binary) ldRule() core.BuildRule {
 	return core.BuildRule {
 		Name: toolchain.Name() + "-ld",
 		Variables: map[string]string{
-			"command": fmt.Sprintf("%s -pipe %s $flags -o $out $libs", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
+			"command": fmt.Sprintf("%s %s $flags -o $out $objs $libs", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
 			"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
 		},
 	}
@@ -341,7 +352,13 @@ func (bin Binary) build(ctx core.Context) {
 	for _, d := range deps {
 		d.Build(ctx)
 	}
-	objs := compileSources(bin.Out, ctx, bin.Srcs, bin.CompilerFlags, deps, toolchain)
+	objs := compileSources(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, toolchain)
+
+	objsToLink := []string{}
+
+	for _, obj := range objs {
+		objsToLink = append(objsToLink, fmt.Sprintf("%q", obj))
+	}
 
 	ins := objs
 	
@@ -365,7 +382,7 @@ func (bin Binary) build(ctx core.Context) {
 	for _, dep := range deps {
 		ins = append(ins, dep.Out)
 		if dep.AlwaysLink {
-			libsToLink = append(libsToLink, "-Wl,-whole-archive", fmt.Sprintf("%q",dep.Out), "-Wl,-no-whole-archive")
+			libsToLink = append(libsToLink, "-whole-archive", fmt.Sprintf("%q",dep.Out), "-no-whole-archive")
 		} else {
 			libsToLink = append(libsToLink, fmt.Sprintf("%q",dep.Out))
 		}
@@ -387,8 +404,9 @@ func (bin Binary) build(ctx core.Context) {
 		Ins:   ins,
 		Rule:  bin.ldRule(),
 		Variables: map[string]string {
-			"flags": strings.Join(bin.LinkerFlags, " "),
+			"flags": strings.Join(flags, " "),
 			"libs": strings.Join(libsToLink, " "),
+			"objs": strings.Join(objsToLink, " "),
 		},
 	})
 }
