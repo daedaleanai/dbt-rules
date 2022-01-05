@@ -106,7 +106,7 @@ func (gcc GccToolchain) CxxCompiler() string {
 }
 
 func (gcc GccToolchain) Link() string {
-	return fmt.Sprintf("%q", gcc.Cc)
+	return fmt.Sprintf("%q", gcc.Ld)
 }
 
 func (gcc GccToolchain) Assembler() string {
