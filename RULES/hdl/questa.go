@@ -236,9 +236,6 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 				for param, value := range params {
 					cmd = fmt.Sprintf("%s -G %s=%s", cmd, param, value)
 				}
-			} else {
-				log.Fatal(fmt.Sprintf("parameter set '%s' not defined for Simulation target '%s'!",
-					params, rule.Name))
 			}
 		}
 
@@ -510,10 +507,9 @@ func simulateQuesta(rule Simulation, args []string, gui bool) string {
 			if _, err := fmt.Sscanf(arg, "-params=%s", &param); err != nil {
 				log.Fatal(fmt.Sprintf("-params expects a string argument!"))
 			} else {
-				if _, ok := rule.Params[param]; !ok {
-					log.Fatal(fmt.Sprintf("parameter set '%s' not defined for Simulation target '%s'!", param, rule.Name))
+				if _, ok := rule.Params[param]; ok {
+					params = append(params, param)
 				}
-				params = append(params, param)
 			}
 		}
 	}
