@@ -68,9 +68,9 @@ var CoverageHtml = core.BoolFlag{
 // Target returns the optimization target name defined for this rule.
 func (rule Simulation) Target() string {
 	if Coverage.Value() {
-		return rule.Name + "Cov"
+		return rule.Name + "_OptCov"
 	} else {
-		return rule.Name
+		return rule.Name + "_Opt"
 	}
 }
 
