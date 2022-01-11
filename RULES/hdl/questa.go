@@ -239,6 +239,10 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 			}
 		}
 
+		if rule.TestCaseGenerator != nil {
+			deps = append(deps, rule.TestCaseGenerator)
+		}
+
 		// Add the rule to run 'vopt'.
 		ctx.AddBuildStep(core.BuildStep{
 			Out:   log_file,
@@ -349,7 +353,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	log_file := rule.Path().WithSuffix("/" + log_file_suffix)
 
 	// Default flag values
-	vsim_flags := " -onfinish stop -l " + log_file.String()
+	vsim_flags := " -onfinish final -l " + log_file.String()
 	seed_flag := " -sv_seed random"
 	verbosity_flag := " +verbosity=DVM_VERB_NONE"
 	mode_flag := " -batch -quiet"
