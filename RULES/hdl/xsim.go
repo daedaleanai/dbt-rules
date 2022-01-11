@@ -190,7 +190,12 @@ func elaborate(ctx core.Context, rule Simulation, deps []core.Path) {
 		cmd = cmd + " > /dev/null || { cat " + log_file.String() +
 			"; rm " + log_file.String() + "; exit 1; }"
 
-		// Add the rule to run 'vopt'.
+		// Hack: Add testcase generator as an optional dependency
+		if rule.TestCaseGenerator != nil {
+			deps = append(deps, rule.TestCaseGenerator)
+		}
+
+		// Add the rule to run 'xelab'.
 		ctx.AddBuildStep(core.BuildStep{
 			Out:   log_file,
 			Ins:   deps,
