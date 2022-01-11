@@ -68,9 +68,9 @@ var CoverageHtml = core.BoolFlag{
 // Target returns the optimization target name defined for this rule.
 func (rule Simulation) Target() string {
 	if Coverage.Value() {
-		return rule.Name + "_OptCov"
+		return rule.Name + "_optcov"
 	} else {
-		return rule.Name + "_Opt"
+		return rule.Name + "_opt"
 	}
 }
 
@@ -137,7 +137,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 			}
 
 			// Remove the log file if the command fails to ensure we can recompile it
-			cmd = tool + " " + cmd + " " + src.String() + " || rm " + log.String()
+			cmd = tool + " " + cmd + " " + src.String() + " || { rm " + log.String() + " && exit 1; }"
 
 			// Add the compilation command as a build step with the log file as the
 			// generated output

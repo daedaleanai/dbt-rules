@@ -41,7 +41,7 @@ type Simulation struct {
 
 // Lib returns the standard library name defined for this rule.
 func (rule Simulation) Lib() string {
-	return rule.Name + "Lib"
+	return rule.Name + "_lib"
 }
 
 // Path returns the default root path for log files defined for this rule.
