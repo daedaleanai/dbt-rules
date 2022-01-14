@@ -5,7 +5,24 @@ import (
 )
 
 func IsRtl(path string) bool {
-	return strings.HasSuffix(path, ".v") || strings.HasSuffix(path, ".sv") || strings.HasSuffix(path, ".vhd")
+	return strings.HasSuffix(path, ".v") ||
+		strings.HasSuffix(path, ".sv") ||
+		strings.HasSuffix(path, ".vhdl") ||
+		strings.HasSuffix(path, ".vhd")
+}
+
+func IsVerilog(path string) bool {
+	return strings.HasSuffix(path, ".v") ||
+		strings.HasSuffix(path, ".sv")
+}
+
+func IsVhdl(path string) bool {
+	return strings.HasSuffix(path, ".vhdl") ||
+		strings.HasSuffix(path, ".vhd")
+}
+
+func IsHeader(path string) bool {
+	return strings.HasSuffix(path, ".svh")
 }
 
 func IsConstraint(path string) bool {

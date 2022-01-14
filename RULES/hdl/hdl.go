@@ -25,6 +25,7 @@ type Ip interface {
 }
 
 type Library struct {
+	Lib       string
 	Srcs      []core.Path
 	DataFiles []core.Path
 	IpDeps    []Ip
