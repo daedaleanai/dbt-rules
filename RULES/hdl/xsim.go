@@ -244,50 +244,6 @@ func xsimVerbosityLevelToFlag(level string) (string, bool) {
 	return verbosity_flag, print_output
 }
 
-// xsimPreamble creates a preamble for the simulation command for the purpose of generating
-// a testcase.
-func xsimPreamble(rule Simulation, testcase string) (string, string) {
-	preamble := ""
-
-	// Create a testcase generation command if necessary
-	if rule.TestCaseGenerator != nil {
-		// No testcase specified, use default
-		if testcase == "" {
-			// If directory of testcases available, pick the first one
-			if rule.TestCasesDir != nil {
-				if items, err := os.ReadDir(rule.TestCasesDir.String()); err == nil {
-					if len(items) == 0 {
-						log.Fatal(fmt.Sprintf("TestCasesDir directory '%s' empty!", rule.TestCasesDir.String()))
-					}
-
-					// Create path to testcase
-					testcase = rule.TestCasesDir.Absolute() + "/" + items[0].Name()
-				}
-			}
-		} else if testcase != "" && rule.TestCasesDir != nil {
-			// Create path to testcase
-			testcase = rule.TestCasesDir.Absolute() + "/" + testcase
-		}
-
-		if testcase == "" {
-			// Create the preamble for testcase generator without any argument
-			preamble = fmt.Sprintf("{ %s . ; }", rule.TestCaseGenerator.String())
-			testcase = "default"
-		} else {
-			// Create the preamble for testcase generator with arguments
-			preamble = fmt.Sprintf("{ %s %s . ; }", rule.TestCaseGenerator.String(), testcase)
-		}
-
-		// Add information to command
-		preamble = fmt.Sprintf("{ echo Generating %s; } && ", testcase) + preamble
-
-		// Trim testcase for use in coverage databaes
-		testcase = strings.TrimSuffix(path.Base(testcase), path.Ext(testcase))
-	}
-
-	return preamble, testcase
-}
-
 // xsimCmd will create a command for starting 'vsim' on the compiled and optimized design with flags
 // set in accordance with what is specified on the command line.
 func xsimCmd(rule Simulation, args []string, gui bool, testcase string, params string) string {
@@ -342,7 +298,7 @@ func xsimCmd(rule Simulation, args []string, gui bool, testcase string, params s
 	}
 
 	// Create optional command preamble
-	cmd_preamble, testcase = xsimPreamble(rule, testcase)
+	cmd_preamble, testcase = Preamble(rule, testcase)
 
 	cmd_echo := ""
 	if rule.Params != nil && params != "" {
@@ -427,19 +383,21 @@ func simulateXsim(rule Simulation, args []string, gui bool) string {
 
 	// Parse additional arguments
 	for _, arg := range args {
-		if strings.HasPrefix(arg, "-testcase=") && rule.TestCaseGenerator != nil {
-			var testcase string
-			if _, err := fmt.Sscanf(arg, "-testcase=%s", &testcase); err != nil {
-				log.Fatal(fmt.Sprintf("-testcase expects a string argument!"))
+		if strings.HasPrefix(arg, "-testcases=") && rule.TestCaseGenerator != nil {
+			var testcases_arg string
+			if _, err := fmt.Sscanf(arg, "-testcases=%s", &testcases_arg); err != nil {
+				log.Fatal(fmt.Sprintf("-testcases expects a string argument!"))
 			}
-			testcases = append(testcases, testcase)
+			testcases = append(testcases, strings.Split(testcases_arg, ",")...)
 		} else if strings.HasPrefix(arg, "-params=") && rule.Params != nil {
-			var param string
-			if _, err := fmt.Sscanf(arg, "-params=%s", &param); err != nil {
+			var params_arg string
+			if _, err := fmt.Sscanf(arg, "-params=%s", &params_arg); err != nil {
 				log.Fatal(fmt.Sprintf("-params expects a string argument!"))
 			} else {
-				if _, ok := rule.Params[param]; ok {
-					params = append(params, param)
+				for _, param := range strings.Split(params_arg, ",") {
+					if _, ok := rule.Params[param]; ok {
+						params = append(params, param)
+					}
 				}
 			}
 		}

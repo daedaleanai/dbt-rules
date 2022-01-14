@@ -37,6 +37,15 @@ var VsimFlags = core.StringFlag{
 	Description: "Extra flags for the vsim command",
 }.Register()
 
+// Lint enables additional linting information during compilation.
+var Lint = core.BoolFlag{
+	Name: "questa-lint",
+	DefaultFn: func() bool {
+		return false
+	},
+	Description: "Enable additional lint information during compilation",
+}.Register()
+
 // Access enables the user to control the accessibility in the compiled design for
 // debugging purposes.
 var Access = core.StringFlag{
@@ -56,21 +65,12 @@ var Coverage = core.BoolFlag{
 	Description: "Enable code-coverage database generation",
 }.Register()
 
-// CoverageHtml enables the generation of an Html report in the output directory
-var CoverageHtml = core.BoolFlag{
-	Name: "questa-coverage-html",
-	DefaultFn: func() bool {
-		return false
-	},
-	Description: "Enable code-coverage HTML report generation",
-}.Register()
-
 // Target returns the optimization target name defined for this rule.
 func (rule Simulation) Target() string {
 	if Coverage.Value() {
-		return rule.Name + "_optcov"
+		return "vopt_cover"
 	} else {
-		return rule.Name + "_opt"
+		return "vopt"
 	}
 }
 
@@ -134,10 +134,18 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				}
 			} else if IsVhdl(src.String()) {
 				tool = "vcom"
+				cmd = cmd + " " + VcomFlags.Value()
 			}
 
+			if Lint.Value() {
+				cmd = cmd + " -lint"
+			}
+
+			// Create plain compilation command
+			cmd = tool + " " + cmd + " " + src.String()
+			
 			// Remove the log file if the command fails to ensure we can recompile it
-			cmd = tool + " " + cmd + " " + src.String() + " || { rm " + log.String() + " && exit 1; }"
+			cmd = cmd + " || { rm " + log.String() + " && exit 1; }"
 
 			// Add the compilation command as a build step with the log file as the
 			// generated output
@@ -205,7 +213,7 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 	if rule.Params != nil {
 		for key, _ := range rule.Params {
 			log_files = append(log_files, rule.Path().WithSuffix("/"+key+"_"+log_file_suffix))
-			targets = append(targets, rule.Target()+key)
+			targets = append(targets, key + "_" + rule.Target())
 			params = append(params, key)
 		}
 	} else {
@@ -292,50 +300,6 @@ func verbosityLevelToFlag(level string) (string, bool) {
 	return verbosity_flag, print_output
 }
 
-// preamble creates a preamble for the simulation command for the purpose of generating
-// a testcase.
-func preamble(rule Simulation, testcase string) (string, string) {
-	preamble := ""
-
-	// Create a testcase generation command if necessary
-	if rule.TestCaseGenerator != nil {
-		// No testcase specified, use default
-		if testcase == "" {
-			// If directory of testcases available, pick the first one
-			if rule.TestCasesDir != nil {
-				if items, err := os.ReadDir(rule.TestCasesDir.String()); err == nil {
-					if len(items) == 0 {
-						log.Fatal(fmt.Sprintf("TestCasesDir directory '%s' empty!", rule.TestCasesDir.String()))
-					}
-
-					// Create path to testcase
-					testcase = rule.TestCasesDir.Absolute() + "/" + items[0].Name()
-				}
-			}
-		} else if testcase != "" && rule.TestCasesDir != nil {
-			// Create path to testcase
-			testcase = rule.TestCasesDir.Absolute() + "/" + testcase
-		}
-
-		if testcase == "" {
-			// Create the preamble for testcase generator without any argument
-			preamble = fmt.Sprintf("{ %s . ; }", rule.TestCaseGenerator.String())
-			testcase = "default"
-		} else {
-			// Create the preamble for testcase generator with arguments
-			preamble = fmt.Sprintf("{ %s %s . ; }", rule.TestCaseGenerator.String(), testcase)
-		}
-
-		// Add information to command
-		preamble = fmt.Sprintf("{ echo Generating %s; } && ", testcase) + preamble
-
-		// Trim testcase for use in coverage databaes
-		testcase = strings.TrimSuffix(path.Base(testcase), path.Ext(testcase))
-	}
-
-	return preamble, testcase
-}
-
 // questaCmd will create a command for starting 'vsim' on the compiled and optimized design with flags
 // set in accordance with what is specified on the command line.
 func questaCmd(rule Simulation, args []string, gui bool, testcase string, params string) string {
@@ -358,6 +322,14 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	verbosity_flag := " +verbosity=DVM_VERB_NONE"
 	mode_flag := " -batch -quiet"
 	plusargs_flag := ""
+
+	// Default database name for simulation
+	var target string
+	if len(params) > 0 {
+		target = params + "_" + rule.Target()
+	} else {
+		target = rule.Target()
+	}
 
 	// Enable coverage in simulator
 	coverage_flag := ""
@@ -403,12 +375,12 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	}
 
 	// Create optional command preamble
-	cmd_preamble, testcase = preamble(rule, testcase)
+	cmd_preamble, testcase = Preamble(rule, testcase)
 
 	cmd_echo := ""
 	if rule.Params != nil && params != "" {
-		// Update coverage database name based on parameters. We cannot merge
-		// different parameter sets, do we have to make a dedicated main database
+		// Update coverage database name based on parameters. Since we cannot merge
+		// different parameter sets, we have to make a dedicated main database
 		// for this parameter set.
 		main_coverage_db = main_coverage_db + "_" + params
 		coverage_db = coverage_db + "_" + params
@@ -435,6 +407,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	}
 
 	cmd_postamble := ""
+	cmd_pass := "PASS"
 	if gui {
 		mode_flag = " -gui"
 		if rule.WaveformInit != nil {
@@ -453,11 +426,10 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 			do_flags = append(do_flags,
 				fmt.Sprintf("\"vcover merge -testassociated -out %s.ucdb %s.ucdb %s.ucdb\"",
 					main_coverage_db, main_coverage_db, coverage_db))
-			if CoverageHtml.Value() {
-				do_flags = append(do_flags,
-					fmt.Sprintf("\"vcover report -html -output %s_covhtml -testdetails -details -assert"+
-						" -cvg -codeAll %s.ucdb\"", main_coverage_db, main_coverage_db))
-			}
+			do_flags = append(do_flags,
+				fmt.Sprintf("\"vcover report -html -output %s_covhtml -testdetails -details -assert"+
+					" -cvg -codeAll %s.ucdb\"", main_coverage_db, main_coverage_db))
+			cmd_pass = cmd_pass + fmt.Sprintf(" Coverage:$$(pwd)/%s.ucdb", main_coverage_db)
 		}
 		do_flags = append(do_flags, "\"quit -code [coverage attribute -name TESTSTATUS -concise]\"")
 		cmd_newline := ":"
@@ -474,7 +446,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 		vsim_flags = vsim_flags + " -do " + do_flag
 	}
 
-	cmd := fmt.Sprintf("{ echo -n %s && vsim %s -work %s %s && echo PASS; }", cmd_echo, vsim_flags, rule.Lib(), rule.Target()+params)
+	cmd := fmt.Sprintf("{ echo -n %s && vsim %s -work %s %s && echo %s; }", cmd_echo, vsim_flags, rule.Lib(), target, cmd_pass)
 	if cmd_preamble == "" {
 		cmd = cmd + " " + cmd_postamble
 	} else {
@@ -500,19 +472,21 @@ func simulateQuesta(rule Simulation, args []string, gui bool) string {
 
 	// Parse additional arguments
 	for _, arg := range args {
-		if strings.HasPrefix(arg, "-testcase=") && rule.TestCaseGenerator != nil {
-			var testcase string
-			if _, err := fmt.Sscanf(arg, "-testcase=%s", &testcase); err != nil {
-				log.Fatal(fmt.Sprintf("-testcase expects a string argument!"))
+		if strings.HasPrefix(arg, "-testcases=") && rule.TestCaseGenerator != nil {
+			var testcases_arg string
+			if _, err := fmt.Sscanf(arg, "-testcases=%s", &testcases_arg); err != nil {
+				log.Fatal(fmt.Sprintf("-testcases expects a string argument!"))
 			}
-			testcases = append(testcases, testcase)
+			testcases = append(testcases, strings.Split(testcases_arg, ",")...)
 		} else if strings.HasPrefix(arg, "-params=") && rule.Params != nil {
-			var param string
-			if _, err := fmt.Sscanf(arg, "-params=%s", &param); err != nil {
+			var params_arg string
+			if _, err := fmt.Sscanf(arg, "-params=%s", &params_arg); err != nil {
 				log.Fatal(fmt.Sprintf("-params expects a string argument!"))
 			} else {
-				if _, ok := rule.Params[param]; ok {
-					params = append(params, param)
+				for _, param := range strings.Split(params_arg, ",") {
+					if _, ok := rule.Params[param]; ok {
+						params = append(params, param)
+					}
 				}
 			}
 		}

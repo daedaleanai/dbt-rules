@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"errors"
+	"strings"
+	"path"
 )
 
 var Simulator = core.StringFlag{
@@ -91,28 +94,82 @@ func (rule Simulation) Test(args []string) string {
 
 func (rule Simulation) Description() string {
 	// Print the rule name as its needed for parameter selection
-	description := " "
+	description := ""
 	first := true
 	for param, _ := range rule.Params {
 		if first {
-			description = description + "Params: "
+			description = description + " -params=" + param
 			first = false
+		} else {
+			description = description + "," + param
 		}
-		description = description + param + " "
 	}
 
 	if rule.TestCaseGenerator != nil && rule.TestCasesDir != nil {
-		description = description + "TestCases: "
+		description = description + " -testcases="
 
 		// Loop through all defined testcases in directory
 		if items, err := os.ReadDir(rule.TestCasesDir.String()); err == nil {
-			for _, item := range items {
-				description = description + item.Name() + " "
+			for index, item := range items {
+				if index > 0 {
+					description = description + ","
+				}
+				description = description + item.Name()
 			}
 		} else {
 			log.Fatal(err)
 		}
 	}
 
+	if len(description) > 0 {
+		description = description + " "
+	}
+
 	return description
+}
+
+// Preamble creates a preamble for the simulation command for the purpose of generating
+// a testcase.
+func Preamble(rule Simulation, testcase string) (string, string) {
+	preamble := ""
+
+	// Create a testcase generation command if necessary
+	if rule.TestCaseGenerator != nil {
+		if testcase == "" && rule.TestCasesDir != nil {
+			// No testcase specified, pick the first one from the directory
+			if items, err := os.ReadDir(rule.TestCasesDir.String()); err == nil {
+				if len(items) == 0 {
+					log.Fatal(fmt.Sprintf("TestCasesDir directory '%s' empty!", rule.TestCasesDir.String()))
+				}
+
+				// Create path to testcase
+				testcase = rule.TestCasesDir.Absolute() + "/" + items[0].Name()
+			}
+		} else if testcase != "" && rule.TestCasesDir != nil {
+			// Testcase specified, create path to testcase
+			testcase = rule.TestCasesDir.Absolute() + "/" + testcase
+		}
+
+		if testcase == "" {
+			// Create the preamble for testcase generator without any argument
+			preamble = fmt.Sprintf("{ %s . ; }", rule.TestCaseGenerator.String())
+			testcase = "default"
+		} else {
+			// Check that the testcase exists
+			if _, err := os.Stat(testcase); errors.Is(err, os.ErrNotExist) {
+				log.Fatal(fmt.Sprintf("Testcase '%s' does not exist!", testcase))
+			}
+			
+			// Create the preamble for testcase generator with arguments
+			preamble = fmt.Sprintf("{ %s %s . ; }", rule.TestCaseGenerator.String(), testcase)
+		}
+
+		// Add information to command
+		preamble = fmt.Sprintf("{ echo Generating %s; } && ", testcase) + preamble
+
+		// Trim testcase for use in coverage databaes
+		testcase = strings.TrimSuffix(path.Base(testcase), path.Ext(testcase))
+	}
+
+	return preamble, testcase
 }
