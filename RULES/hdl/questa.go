@@ -440,7 +440,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	}
 
 	vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag +
-		verbosity_flag + plusargs_flag + VsimFlags.Value()
+		verbosity_flag + plusargs_flag + " " + VsimFlags.Value()
 
 	for _, do_flag := range do_flags {
 		vsim_flags = vsim_flags + " -do " + do_flag
