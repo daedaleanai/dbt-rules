@@ -8,6 +8,8 @@ import (
 	"errors"
 	"strings"
 	"path"
+	"regexp"
+	"io/ioutil"
 )
 
 var Simulator = core.StringFlag{
@@ -26,6 +28,16 @@ var SimulatorLibDir = core.StringFlag{
 		return ""
 	},
 }.Register()
+
+// FindTestcases enables parsing of source files to discover testcases
+var FindTestcases = core.BoolFlag{
+	Name: "hdl-find-testcases",
+	DefaultFn: func() bool {
+		return false
+	},
+	Description: "Enable parsing of HDL files to discover testcases",
+}.Register()
+
 
 type ParamMap map[string]map[string]string
 
@@ -105,19 +117,49 @@ func (rule Simulation) Description() string {
 		}
 	}
 
+	// Collect testcases in case a test generator is used with a directory of test cases
 	if rule.TestCaseGenerator != nil && rule.TestCasesDir != nil {
-		description = description + " -testcases="
+		// Collect testcases
+		testcases := []string{}
 
 		// Loop through all defined testcases in directory
 		if items, err := os.ReadDir(rule.TestCasesDir.String()); err == nil {
-			for index, item := range items {
-				if index > 0 {
-					description = description + ","
-				}
-				description = description + item.Name()
+			for _, item := range items {
+				testcases = append(testcases, item.Name())
 			}
 		} else {
 			log.Fatal(err)
+		}
+
+		// Append to description
+		if len(testcases) > 0 {
+			description = description + " -testcases=" + strings.Join(testcases, ",")
+		}
+	}
+
+	// Scan source files for testcases
+	if FindTestcases.Value() {
+		// Collect testcases
+		testcases := []string{}
+
+		for _, src := range(rule.Srcs) {
+			b, err := ioutil.ReadFile(src.Absolute())
+			if err == nil {
+				re1, err := regexp.Compile(`\s*` + "`" + `TEST_CASE\s*\(\s*"([^"]+)"\s*\)`)
+				if err == nil {
+					match := re1.FindAllSubmatch(b, -1)
+					for _, submatch := range match {
+						testcases = append(testcases, string(submatch[1]))
+					}
+				}
+			} else {
+				log.Fatal(err)
+			}
+		}
+
+		// Append to description
+		if len(testcases) > 0 {
+			description = description + " +testcases=" + strings.Join(testcases, ",")
 		}
 	}
 

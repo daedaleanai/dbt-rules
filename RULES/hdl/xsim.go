@@ -84,6 +84,7 @@ func xsimCompileSrcs(ctx core.Context, rule Simulation,
 				}
 			} else if IsVhdl(src.String()) {
 				tool = "xvhdl"
+				cmd = cmd + " " + XvhdlFlags.Value()
 			}
 
 			// Remove the log file if the command fails to ensure we can recompile it
