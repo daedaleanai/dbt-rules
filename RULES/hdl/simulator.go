@@ -29,8 +29,8 @@ var SimulatorLibDir = core.StringFlag{
 	},
 }.Register()
 
-// FindTestcases enables parsing of source files to discover testcases
-var FindTestcases = core.BoolFlag{
+// FindTestCases enables parsing of source files to discover testcases
+var FindTestCases = core.BoolFlag{
 	Name: "hdl-find-testcases",
 	DefaultFn: func() bool {
 		return false
@@ -38,6 +38,14 @@ var FindTestcases = core.BoolFlag{
 	Description: "Enable parsing of HDL files to discover testcases",
 }.Register()
 
+// ShowTestCasesFile enables outputting of the source file where testcases were found
+var ShowTestCasesFile = core.BoolFlag{
+	Name: "hdl-show-testcases-file",
+	DefaultFn: func() bool {
+		return false
+	},
+	Description: "Enable output of the file where testcases were found",
+}.Register()
 
 type ParamMap map[string]map[string]string
 
@@ -138,28 +146,36 @@ func (rule Simulation) Description() string {
 	}
 
 	// Scan source files for testcases
-	if FindTestcases.Value() {
-		// Collect testcases
-		testcases := []string{}
+	if FindTestCases.Value() {
+		re := regexp.MustCompile(`\s*` + "`" + `TEST_CASE\s*\(\s*"([^"]+)"\s*\)`)
+		re_file := regexp.MustCompile(`([^\/]+)\/DEPS\/([^\/]+)`)
 
 		for _, src := range(rule.Srcs) {
+			// Collect testcases
+			testcases := []string{}
+			// Read the source file
 			b, err := ioutil.ReadFile(src.Absolute())
 			if err == nil {
-				re1, err := regexp.Compile(`\s*` + "`" + `TEST_CASE\s*\(\s*"([^"]+)"\s*\)`)
-				if err == nil {
-					match := re1.FindAllSubmatch(b, -1)
-					for _, submatch := range match {
-						testcases = append(testcases, string(submatch[1]))
-					}
+				match := re.FindAllSubmatch(b, -1)
+				for _, submatch := range match {
+					testcases = append(testcases, string(submatch[1]))
 				}
 			} else {
 				log.Fatal(err)
 			}
-		}
 
-		// Append to description
-		if len(testcases) > 0 {
-			description = description + " +testcases=" + strings.Join(testcases, ",")
+			// Append to description
+			if len(testcases) > 0 {
+				if ShowTestCasesFile.Value() {
+					name := src.Absolute()
+					match := re_file.FindStringSubmatch(name)
+					if (len(match) > 0) && (match[1] == match[2]) {
+						name = re_file.ReplaceAllString(name, match[1])
+					}
+					description = description + " " + name
+				}
+				description = description + " +testcases=" + strings.Join(testcases, ",")
+			}
 		}
 	}
 
