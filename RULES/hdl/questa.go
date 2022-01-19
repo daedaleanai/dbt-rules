@@ -161,6 +161,9 @@ func compileSrcs(ctx core.Context, rule Simulation,
 
 			// Note down the created rule
 			rules[log.String()] = true
+		} else {
+			// Just add the file to the dependencies of the next one
+			deps = append(deps, src)
 		}
 	}
 
@@ -436,7 +439,10 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 		if cmd_echo != "" {
 			cmd_newline = "echo"
 		}
-		cmd_postamble = fmt.Sprintf("|| { %s; cat %s; exit 1; }", cmd_newline, log_file.String())
+
+		if !print_output {
+			cmd_postamble = fmt.Sprintf("|| { %s; cat %s; exit 1; }", cmd_newline, log_file.String())
+		}
 	}
 
 	vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag +
