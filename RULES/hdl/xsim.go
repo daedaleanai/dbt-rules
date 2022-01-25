@@ -58,10 +58,7 @@ var xsim_rules = make(map[string]bool)
 func xsimCompileSrcs(ctx core.Context, rule Simulation,
 	deps []core.Path, incs []core.Path, srcs []core.Path) ([]core.Path, []core.Path) {
 	for _, src := range srcs {
-		// We handle header files separately from other source files
-		if IsHeader(src.String()) {
-			incs = append(incs, src)
-		} else if IsRtl(src.String()) {
+		if IsRtl(src.String()) {
 			// log will point to the log file to be generated when compiling the code
 			log := rule.Path().WithSuffix("/" + src.Relative() + ".log")
 
@@ -106,7 +103,11 @@ func xsimCompileSrcs(ctx core.Context, rule Simulation,
 			// Note down the created rule
 			xsim_rules[log.String()] = true
 		} else {
-			// Just add the file to the dependencies of the next one
+			// We handle header files separately from other source files
+			if IsHeader(src.String()) {
+				incs = append(incs, src)
+			}
+			// Add the file to the dependencies of the next one (including header files)
 			deps = append(deps, src)
 		}
 	}
