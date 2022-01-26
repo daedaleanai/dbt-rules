@@ -50,16 +50,17 @@ var ShowTestCasesFile = core.BoolFlag{
 type ParamMap map[string]map[string]string
 
 type Simulation struct {
-	Name              string
-	Srcs              []core.Path
-	Ips               []Ip
-	Libs              []string
-	Params            ParamMap
-	Top               string
-	Dut               string
-	TestCaseGenerator core.Path
-	TestCasesDir      core.Path
-	WaveformInit      core.Path
+	Name                   string
+	Srcs                   []core.Path
+	Ips                    []Ip
+	Libs                   []string
+	Params                 ParamMap
+	Top                    string
+	Dut                    string
+	TestCaseGenerator      core.Path
+	TestCaseGeneratorFlags string
+	TestCasesDir           core.Path
+	WaveformInit           core.Path
 }
 
 // Lib returns the standard library name defined for this rule.
@@ -217,9 +218,16 @@ func Preamble(rule Simulation, testcase string) (string, string) {
 			if _, err := os.Stat(testcase); errors.Is(err, os.ErrNotExist) {
 				log.Fatal(fmt.Sprintf("Testcase '%s' does not exist!", testcase))
 			}
-			
+			testCaseGeneratorFlags := rule.TestCaseGeneratorFlags
+			// Check format of the testcase file
+			if strings.HasSuffix(testcase, ".json") {
+				testCaseGeneratorFlags += " -testcase"
+			} else if strings.HasSuffix(testcase, ".onnx") {
+				testCaseGeneratorFlags += " -onnx"
+			}
+
 			// Create the preamble for testcase generator with arguments
-			preamble = fmt.Sprintf("{ %s %s . ; }", rule.TestCaseGenerator.String(), testcase)
+			preamble = fmt.Sprintf("{ %s %s %s -out . ; }", rule.TestCaseGenerator.String(), testCaseGeneratorFlags, testcase)
 		}
 
 		// Add information to command
