@@ -335,7 +335,7 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 			if params, ok := rule.Params[param_set]; ok {
 				// Add parameters for all generics
 				for param, value := range params {
-					cmd = fmt.Sprintf("%s -G %s=%s", cmd, param, value)
+					cmd = fmt.Sprintf("%s -g %s=%s", cmd, param, value)
 				}
 			}
 		}
