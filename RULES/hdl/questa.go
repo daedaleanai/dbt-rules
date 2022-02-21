@@ -413,6 +413,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 
   cmd_postamble := ""
   cmd_pass := "PASS"
+	cmd_fail := "FAIL"
   if gui {
     mode_flag = " -gui"
     if rule.WaveformInit != nil {
@@ -435,6 +436,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
         fmt.Sprintf("\"vcover report -html -output %s_covhtml -testdetails -details -assert -directive"+
           " -cvg -codeAll %s.ucdb\"", main_coverage_db, main_coverage_db))
       cmd_pass = cmd_pass + fmt.Sprintf(" Coverage:$$(pwd)/%s.ucdb", main_coverage_db)
+      cmd_fail = cmd_fail + fmt.Sprintf(" Coverage:$$(pwd)/%s.ucdb", main_coverage_db)
     }
     do_flags = append(do_flags, "\"quit -code [coverage attribute -name TESTSTATUS -concise]\"")
     cmd_newline := ":"
@@ -443,7 +445,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
     }
 
     if !print_output {
-      cmd_postamble = fmt.Sprintf("|| { %s; cat %s; exit 1; }", cmd_newline, log_file.String())
+      cmd_postamble = fmt.Sprintf("|| { %s; cat %s; echo %s; exit 1; }", cmd_newline, log_file.String(), cmd_fail)
     }
   }
 
