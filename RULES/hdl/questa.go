@@ -339,7 +339,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
   // Enable coverage in simulator
   coverage_flag := ""
   if Coverage.Value() {
-    coverage_flag = " -coverage"
+    coverage_flag = " -coverage -assertdebug"
   }
 
   // Determine the names of the coverage databases, this one will hold merged
@@ -424,7 +424,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
     }
     do_flags = append(do_flags, "\"run -all\"")
     if Coverage.Value() {
-      do_flags = append(do_flags, fmt.Sprintf("\"coverage save -assert"+
+      do_flags = append(do_flags, fmt.Sprintf("\"coverage save -assert -directive"+
         " -cvg -codeAll -testname %s"+
         " %s.ucdb\"",
         testcase, coverage_db))
@@ -432,7 +432,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
         fmt.Sprintf("\"vcover merge -testassociated -out %s.ucdb %s.ucdb %s.ucdb\"",
           main_coverage_db, main_coverage_db, coverage_db))
       do_flags = append(do_flags,
-        fmt.Sprintf("\"vcover report -html -output %s_covhtml -testdetails -details -assert"+
+        fmt.Sprintf("\"vcover report -html -output %s_covhtml -testdetails -details -assert -directive"+
           " -cvg -codeAll %s.ucdb\"", main_coverage_db, main_coverage_db))
       cmd_pass = cmd_pass + fmt.Sprintf(" Coverage:$$(pwd)/%s.ucdb", main_coverage_db)
     }
