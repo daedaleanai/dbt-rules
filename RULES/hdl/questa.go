@@ -351,6 +351,8 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 
   // Collect do-files here
   var do_flags []string
+	// Collect main do-file contents here
+	var do_file []string
 
   // Turn off output unless verbosity is activated
   print_output := false
@@ -419,38 +421,63 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
     if rule.WaveformInit != nil {
       do_flags = append(do_flags, rule.WaveformInit.String())
     }
-  } else {
-    if !print_output {
-      mode_flag = mode_flag + " -nostdout"
-    }
-    do_flags = append(do_flags, "\"run -all\"")
-    if Coverage.Value() {
-      do_flags = append(do_flags, fmt.Sprintf("\"coverage save -assert -directive"+
-        " -cvg -codeAll -testname %s"+
-        " %s.ucdb\"",
-        testcase, coverage_db))
-      do_flags = append(do_flags,
-        fmt.Sprintf("\"vcover merge -testassociated -out %s.ucdb %s.ucdb %s.ucdb\"",
-          main_coverage_db, main_coverage_db, coverage_db))
-      do_flags = append(do_flags,
-        fmt.Sprintf("\"vcover report -html -output %s_covhtml -testdetails -details -assert -directive"+
-          " -cvg -codeAll %s.ucdb\"", main_coverage_db, main_coverage_db))
-      cmd_pass = cmd_pass + fmt.Sprintf(" Coverage:$$(pwd)/%s.ucdb", main_coverage_db)
-      cmd_fail = cmd_fail + fmt.Sprintf(" Coverage:$$(pwd)/%s.ucdb", main_coverage_db)
-    }
-    do_flags = append(do_flags, "\"quit -code [coverage attribute -name TESTSTATUS -concise]\"")
-    cmd_newline := ":"
-    if cmd_echo != "" {
-      cmd_newline = "echo"
-    }
+  } 
+	
+	if !print_output && !gui {
+		mode_flag = mode_flag + " -nostdout"
+	}
+	
+	do_file = append(do_file, "\"run -all\"")
+	if Coverage.Value() {
+		do_file = append(do_file, fmt.Sprintf("\"coverage save -assert -directive"+
+			" -cvg -codeAll -testname %s"+
+			" %s.ucdb\"",
+			testcase, coverage_db))
+		do_file = append(do_file,
+			fmt.Sprintf("\"vcover merge -testassociated -out %s.ucdb %s.ucdb %s.ucdb\"",
+				main_coverage_db, main_coverage_db, coverage_db))
+		do_file = append(do_file,
+			fmt.Sprintf("\"vcover report -html -output %s_covhtml -testdetails -details -assert -directive"+
+				" -cvg -codeAll %s.ucdb\"", main_coverage_db, main_coverage_db))
+		do_file = append(do_file,
+			fmt.Sprintf("\"vcover report -text -output %s.txt -testdetails -details -assert -directive"+
+				" -cvg -codeAll %s.ucdb\"", main_coverage_db, main_coverage_db))
+		cmd_pass = cmd_pass + fmt.Sprintf(" Coverage: $$(pwd)/%s.ucdb", main_coverage_db)
+		cmd_fail = cmd_fail + fmt.Sprintf(" Coverage: $$(pwd)/%s.ucdb", main_coverage_db)
+	}
+    
+	if !gui {
+		do_file = append(do_file, "\"quit -code [coverage attribute -name TESTSTATUS -concise]\"")
+	}
 
-    if !print_output {
-      cmd_postamble = fmt.Sprintf("|| { %s; cat %s; echo %s; exit 1; }", cmd_newline, log_file.String(), cmd_fail)
-    }
-  }
+	cmd_newline := ":"
+	if cmd_echo != "" {
+		cmd_newline = "echo"
+	}
+
+	if !print_output {
+		cmd_postamble = fmt.Sprintf("|| { %s; cat %s; echo %s; exit 1; }", cmd_newline, log_file.String(), cmd_fail)
+	}
 
   vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag +
     verbosity_flag + plusargs_flag + " " + VsimFlags.Value()
+
+	// Write the main do file
+	do_filename := fmt.Sprintf("%s.do", target)
+	f, err := os.Create(do_filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer f.Close()
+
+	for _, line := range do_file {
+		_, err := f.WriteString(line + "\n")
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	do_flags = append(do_flags, do_filename)
 
   for _, do_flag := range do_flags {
     vsim_flags = vsim_flags + " -do " + do_flag
