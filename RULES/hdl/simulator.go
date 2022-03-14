@@ -2,14 +2,14 @@ package hdl
 
 import (
 	"dbt-rules/RULES/core"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
-	"errors"
-	"strings"
 	"path"
 	"regexp"
-	"io/ioutil"
+	"strings"
 )
 
 var Simulator = core.StringFlag{
@@ -59,6 +59,7 @@ type Simulation struct {
 	Dut                    string
 	TestCaseGenerator      core.Path
 	TestCaseGeneratorFlags string
+	TestCaseElf            core.Path
 	TestCasesDir           core.Path
 	WaveformInit           core.Path
 }
@@ -151,7 +152,7 @@ func (rule Simulation) Description() string {
 		re := regexp.MustCompile(`\s*` + "`" + `TEST_CASE\s*\(\s*"([^"]+)"\s*\)`)
 		re_file := regexp.MustCompile(`([^\/]+)\/DEPS\/([^\/]+)`)
 
-		for _, src := range(rule.Srcs) {
+		for _, src := range rule.Srcs {
 			// Collect testcases
 			testcases := []string{}
 			// Read the source file
@@ -227,7 +228,7 @@ func Preamble(rule Simulation, testcase string) (string, string) {
 			}
 
 			// Create the preamble for testcase generator with arguments
-			preamble = fmt.Sprintf("{ %s %s %s -out . ; }", rule.TestCaseGenerator.String(), testCaseGeneratorFlags, testcase)
+			preamble = fmt.Sprintf("{ %s %s %s -out %s ; }", rule.TestCaseGenerator.String(), testCaseGeneratorFlags, testcase, rule.TestCaseElf.String())
 		}
 
 		// Add information to command
