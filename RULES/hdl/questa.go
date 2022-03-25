@@ -101,6 +101,45 @@ var rules = make(map[string]bool)
 // common_flags holds common flags used for the 'vlog', 'vcom', and 'vopt' commands.
 const common_flags = "-nologo -quiet"
 
+// Parameters of the do-file
+type DoFileParams struct {
+	Lib string
+	WaveformInit string
+}
+
+// Do-file template
+const do_file_template = `
+proc reload {} {
+	global target
+	vsim -work {{ .Lib }} $target
+}
+
+{{ if .WaveformInit }}
+if {$gui} {
+	source {{ .WaveformInit }}
+}
+{{ end }}
+
+run -all
+
+if {$coverage} {
+	coverage save -assert -directive -cvg -codeall -testname $testcase $coverage_db.ucdb
+	if {$main_coverage_db != $coverage_db} {
+		puts "Writing merged coverage database to [pwd]/$main_coverage_db.ucdb"
+		vcover merge -testassociated -output $main_coverage_db.ucdb $main_coverage_db.ucdb $coverage_db.ucdb
+	}
+	vcover report -html -output ${main_coverage_db}_covhtml \
+		-testdetails -details -assert -directive -cvg -codeAll $main_coverage_db.ucdb
+	puts "Writing coverage report to [pwd]/${main_coverage_db}_cover.txt"
+	vcover report -output ${main_coverage_db}_cover.txt -flat -directive -cvg $main_coverage_db.ucdb
+	puts "Writing assertion report to [pwd]/${main_coverage_db}_cover.txt"
+	vcover report -output ${main_coverage_db}_assert.txt -flat -assert $main_coverage_db.ucdb
+}
+
+if {!$gui} {
+	quit -code [coverage attribute -name TESTSTATUS -concise]
+}
+`
 // compileSrcs compiles a list of sources using the specified context ctx, rule,
 // dependencies and include paths. It returns the resulting dependencies and include paths
 // that result from compiling the source files.
@@ -269,6 +308,25 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
   }
 }
 
+// Create a simulation script
+func doFile(ctx core.Context, rule Simulation) {
+	// Do-file script
+	params := DoFileParams{
+		Lib: rule.Lib(),
+	}
+	
+	if rule.WaveformInit != nil {
+		params.WaveformInit = rule.WaveformInit.String()
+	}
+
+	doFile := rule.Path().WithSuffix("/" + "vsim.do")
+	ctx.AddBuildStep(core.BuildStep{
+		Out:   doFile,
+		Data:  core.CompileTemplate(do_file_template, "do", params),
+		Descr: fmt.Sprintf("vsim: %s", doFile.Relative()),
+	})
+}
+
 // BuildQuesta will compile and optimize the source and IPs associated with the given
 // rule.
 func BuildQuesta(ctx core.Context, rule Simulation) {
@@ -277,6 +335,9 @@ func BuildQuesta(ctx core.Context, rule Simulation) {
 
   // optimize the code
   optimize(ctx, rule, deps)
+
+	// Create script
+	doFile(ctx, rule)
 }
 
 // verbosityLevelToFlag takes a verbosity level of none, low, medium or high and
@@ -321,6 +382,12 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
   }
   log_file := rule.Path().WithSuffix("/" + log_file_suffix)
 
+	// Script to execute
+	do_file := rule.Path().WithSuffix("/" + "vsim.do")
+
+	// Collect do-files and commands here
+	var do_flags []string
+
   // Default flag values
   vsim_flags := " -onfinish final -l " + log_file.String()
   seed_flag := " -sv_seed random"
@@ -340,7 +407,10 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
   coverage_flag := ""
   if Coverage.Value() {
     coverage_flag = " -coverage -assertdebug"
-  }
+		do_flags = append(do_flags, "\"set coverage 1\"")
+  } else {
+		do_flags = append(do_flags, "\"set coverage 0\"")
+	}
 
   // Determine the names of the coverage databases, this one will hold merged
   // data from multiple testcases
@@ -348,11 +418,6 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 
   // This will be the name of the database created by the current run
   coverage_db := rule.Name
-
-  // Collect do-files here
-  var do_flags []string
-	// Collect main do-file contents here
-	var do_file []string
 
   // Turn off output unless verbosity is activated
   print_output := false
@@ -413,43 +478,30 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
     }
   }
 
+	do_flags = append(do_flags, fmt.Sprintf("\"set target %s\"", target))
+	do_flags = append(do_flags, fmt.Sprintf("\"set testcase %s\"", testcase))
+	do_flags = append(do_flags, fmt.Sprintf("\"set main_coverage_db %s\"", main_coverage_db))
+	do_flags = append(do_flags, fmt.Sprintf("\"set coverage_db %s\"", coverage_db))
+
   cmd_postamble := ""
   cmd_pass := "PASS"
 	cmd_fail := "FAIL"
   if gui {
     mode_flag = " -gui"
-    if rule.WaveformInit != nil {
-      do_flags = append(do_flags, rule.WaveformInit.String())
-    }
-  } 
+		do_flags = append(do_flags, "\"set gui 1\"")
+  } else {
+		do_flags = append(do_flags, "\"set gui 0\"")
+	}
 	
 	if !print_output && !gui {
 		mode_flag = mode_flag + " -nostdout"
 	}
 	
-	do_file = append(do_file, "\"run -all\"")
 	if Coverage.Value() {
-		do_file = append(do_file, fmt.Sprintf("\"coverage save -assert -directive"+
-			" -cvg -codeAll -testname %s"+
-			" %s.ucdb\"",
-			testcase, coverage_db))
-		do_file = append(do_file,
-			fmt.Sprintf("\"vcover merge -testassociated -out %s.ucdb %s.ucdb %s.ucdb\"",
-				main_coverage_db, main_coverage_db, coverage_db))
-		do_file = append(do_file,
-			fmt.Sprintf("\"vcover report -html -output %s_covhtml -testdetails -details -assert -directive"+
-				" -cvg -codeAll %s.ucdb\"", main_coverage_db, main_coverage_db))
-		do_file = append(do_file,
-			fmt.Sprintf("\"vcover report -text -output %s.txt -testdetails -details -assert -directive"+
-				" -cvg -codeAll %s.ucdb\"", main_coverage_db, main_coverage_db))
 		cmd_pass = cmd_pass + fmt.Sprintf(" Coverage: $$(pwd)/%s.ucdb", main_coverage_db)
 		cmd_fail = cmd_fail + fmt.Sprintf(" Coverage: $$(pwd)/%s.ucdb", main_coverage_db)
 	}
     
-	if !gui {
-		do_file = append(do_file, "\"quit -code [coverage attribute -name TESTSTATUS -concise]\"")
-	}
-
 	cmd_newline := ":"
 	if cmd_echo != "" {
 		cmd_newline = "echo"
@@ -462,26 +514,12 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
   vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag +
     verbosity_flag + plusargs_flag + " " + VsimFlags.Value()
 
-	// Write the main do file
-	do_filename := fmt.Sprintf("%s.do", target)
-	f, err := os.Create(do_filename)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer f.Close()
-
-	for _, line := range do_file {
-		_, err := f.WriteString(line + "\n")
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-	do_flags = append(do_flags, do_filename)
-
   for _, do_flag := range do_flags {
     vsim_flags = vsim_flags + " -do " + do_flag
   }
+
+	// Add the file as the last argument
+	vsim_flags = vsim_flags + " -do " + do_file.String()
 
   cmd := fmt.Sprintf("{ echo -n %s && vsim %s -work %s %s && echo %s; }", cmd_echo, vsim_flags, rule.Lib(), target, cmd_pass)
   if cmd_preamble == "" {
