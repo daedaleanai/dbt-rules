@@ -250,74 +250,76 @@ func compile(ctx core.Context, rule Simulation) []core.Path {
 // coverage recording functionality. The optimized design unit can then conveniently
 // be simulated using 'vsim'.
 func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
-	top := "board"
-	if rule.Top != "" {
-		top = rule.Top
-	}
+  top := "board"
+  if rule.Top != "" {
+    top = rule.Top
+  }
 
-	cover_flag := ""
-	log_file_suffix := "vopt.log"
-	if Coverage.Value() {
-		cover_flag = "+cover"
-		log_file_suffix = "vopt_cover.log"
-	}
+  cover_flag := ""
+  log_file_suffix := "vopt.log"
+  if Coverage.Value() {
+    cover_flag = "+cover"
+    log_file_suffix = "vopt_cover.log"
+  }
 
-	log_files := []core.OutPath{}
-	targets := []string{}
-	params := []string{}
-	if rule.Params != nil {
-		for key, _ := range rule.Params {
-			log_files = append(log_files, rule.Path().WithSuffix("/"+key+"_"+log_file_suffix))
-			targets = append(targets, key+"_"+rule.Target())
-			params = append(params, key)
-		}
-	} else {
-		log_files = append(log_files, rule.Path().WithSuffix("/"+log_file_suffix))
-		targets = append(targets, rule.Target())
-		params = append(params, "")
-	}
+  log_files := []core.OutPath{}
+  targets := []string{}
+  params := []string{}
+  if rule.Params != nil {
+    for key, _ := range rule.Params {
+      log_files = append(log_files, rule.Path().WithSuffix("/"+key+"_"+log_file_suffix))
+      targets = append(targets, key + "_" + rule.Target())
+      params = append(params, key)
+    }
+  } else {
+    log_files = append(log_files, rule.Path().WithSuffix("/"+log_file_suffix))
+    targets = append(targets, rule.Target())
+    params = append(params, "")
+  }
 
-	for i := range log_files {
-		log_file := log_files[i]
-		target := targets[i]
-		param_set := params[i]
+  for i := range log_files {
+    log_file := log_files[i]
+    target := targets[i]
+    param_set := params[i]
 
-		// Skip if we already have a rule
-		if rules[log_file.String()] {
-			return
-		}
+    // Skip if we already have a rule
+    if rules[log_file.String()] {
+      return
+    }
 
-		cmd := fmt.Sprintf("vopt %s %s +acc=%s -l %s -work %s %s -o %s",
-			common_flags, cover_flag, Access.Value(),
-			log_file.String(), rule.Lib(), top, target)
+    cmd := fmt.Sprintf("vopt %s %s +acc=%s -l %s -work %s %s -o %s",
+      common_flags, cover_flag, Access.Value(),
+      log_file.String(), rule.Lib(), top, target)
 
-		// Set up parameters
-		if param_set != "" {
-			// Check that the parameters exist
-			if params, ok := rule.Params[param_set]; ok {
-				// Add parameters for all generics
-				for param, value := range params {
-					cmd = fmt.Sprintf("%s -G %s=%s", cmd, param, value)
-				}
+    // Set up parameters
+    if param_set != "" {
+      // Check that the parameters exist
+      if params, ok := rule.Params[param_set]; ok {
+        // Add parameters for all generics
+        for param, value := range params {
+          cmd = fmt.Sprintf("%s -G %s=%s", cmd, param, value)
+        }
+      }
+    }
+
+		// Add any extra flags specified with the rule
+		if rule.ToolFlags != nil {
+			if vopt_flags, ok := rule.ToolFlags["vopt"]; ok {
+				cmd = cmd + " " + vopt_flags
 			}
 		}
 
-		if rule.TestCaseGenerator != nil {
-			deps = append(deps, rule.TestCaseGenerator)
-		}
+    if rule.TestCaseGenerator != nil {
+      deps = append(deps, rule.TestCaseGenerator)
+    }
 
-		// Add the rule to run 'vopt'.
-		ctx.AddBuildStep(core.BuildStep{
-			Out:   log_file,
-			Ins:   deps,
-			Cmd:   cmd,
-			Descr: fmt.Sprintf("vopt: %s %s", rule.Lib()+"."+top, target),
-		})
-
-		// Note that we created this rule
-		rules[log_file.String()] = true
-	}
-}
+    // Add the rule to run 'vopt'.
+    ctx.AddBuildStep(core.BuildStep{
+      Out:   log_file,
+      Ins:   deps,
+      Cmd:   cmd,
+      Descr: fmt.Sprintf("vopt: %s %s", rule.Lib()+"."+top, target),
+    })
 
 // Create a simulation script
 func doFile(ctx core.Context, rule Simulation) {
@@ -524,6 +526,13 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 
 	vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag +
 		verbosity_flag + plusargs_flag + " " + VsimFlags.Value()
+
+	// Add any extra flags specified with the rule
+	if rule.ToolFlags != nil {
+		if extra_flags, ok := rule.ToolFlags["vsim"]; ok {
+			vsim_flags = vsim_flags + " " + extra_flags
+		}
+	}
 
 	for _, do_flag := range do_flags {
 		vsim_flags = vsim_flags + " -do " + do_flag
