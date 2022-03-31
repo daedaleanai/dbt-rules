@@ -321,6 +321,11 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
       Descr: fmt.Sprintf("vopt: %s %s", rule.Lib()+"."+top, target),
     })
 
+		// Note that we created this rule
+		rules[log_file.String()] = true
+	}
+}
+
 // Create a simulation script
 func doFile(ctx core.Context, rule Simulation) {
 	// Do-file script
