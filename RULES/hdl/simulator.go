@@ -55,6 +55,7 @@ type Simulation struct {
 	Ips                    []Ip
 	Libs                   []string
 	Params                 ParamMap
+	ToolFlags              FlagMap
 	Top                    string
 	Dut                    string
 	TestCaseGenerator      core.Path

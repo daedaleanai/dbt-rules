@@ -18,10 +18,13 @@ var PartName = core.StringFlag{
 	},
 }.Register()
 
+type FlagMap map[string]string
+
 type Ip interface {
 	Sources() []core.Path
 	Data() []core.Path
 	Ips() []Ip
+	Flags() FlagMap
 }
 
 type Library struct {
@@ -29,6 +32,7 @@ type Library struct {
 	Srcs      []core.Path
 	DataFiles []core.Path
 	IpDeps    []Ip
+	ToolFlags FlagMap
 }
 
 func (lib Library) Sources() []core.Path {
@@ -41,4 +45,8 @@ func (lib Library) Data() []core.Path {
 
 func (lib Library) Ips() []Ip {
 	return lib.IpDeps
+}
+
+func (lib Library) Flags() FlagMap {
+	return lib.ToolFlags
 }
