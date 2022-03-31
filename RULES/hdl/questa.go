@@ -145,90 +145,90 @@ if {!$gui} {
 // dependencies and include paths. It returns the resulting dependencies and include paths
 // that result from compiling the source files.
 func compileSrcs(ctx core.Context, rule Simulation,
-  deps []core.Path, incs []core.Path, srcs []core.Path, flags FlagMap) ([]core.Path, []core.Path) {
-  for _, src := range srcs {
-    if IsRtl(src.String()) {
-      // log will point to the log file to be generated when compiling the code
-      log := rule.Path().WithSuffix("/" + src.Relative() + ".log")
+	deps []core.Path, incs []core.Path, srcs []core.Path, flags FlagMap) ([]core.Path, []core.Path) {
+	for _, src := range srcs {
+		if IsRtl(src.String()) {
+			// log will point to the log file to be generated when compiling the code
+			log := rule.Path().WithSuffix("/" + src.Relative() + ".log")
 
-      // If we already have a rule for this file, skip it.
-      if rules[log.String()] {
-        continue
-      }
+			// If we already have a rule for this file, skip it.
+			if rules[log.String()] {
+				continue
+			}
 
-      // Holds common flags for both 'vlog' and 'vcom' commands
-      cmd := fmt.Sprintf("%s +acc=%s -work %s -l %s", common_flags, Access.Value(), rule.Lib(), log.String())
+			// Holds common flags for both 'vlog' and 'vcom' commands
+			cmd := fmt.Sprintf("%s +acc=%s -work %s -l %s", common_flags, Access.Value(), rule.Lib(), log.String())
 
-      // tool will point to the tool to execute (also used for logging below)
-      var tool string
-      if IsVerilog(src.String()) {
-        tool = "vlog"
-        cmd = cmd + " " + VlogFlags.Value()
-        cmd = cmd + " -suppress 2583 -svinputport=net"
-        cmd = cmd + fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
-        for _, inc := range incs {
-          cmd = cmd + fmt.Sprintf(" +incdir+%s", path.Dir(inc.Absolute()))
-        }
+			// tool will point to the tool to execute (also used for logging below)
+			var tool string
+			if IsVerilog(src.String()) {
+				tool = "vlog"
+				cmd = cmd + " " + VlogFlags.Value()
+				cmd = cmd + " -suppress 2583 -svinputport=net"
+				cmd = cmd + fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
+				for _, inc := range incs {
+					cmd = cmd + fmt.Sprintf(" +incdir+%s", path.Dir(inc.Absolute()))
+				}
 				if flags != nil {
 					if vlog_flags, ok := flags["vlog"]; ok {
 						cmd = cmd + " " + vlog_flags
 					}
 				}
-      } else if IsVhdl(src.String()) {
-        tool = "vcom"
-        cmd = cmd + " " + VcomFlags.Value()
+			} else if IsVhdl(src.String()) {
+				tool = "vcom"
+				cmd = cmd + " " + VcomFlags.Value()
 				if flags != nil {
 					if vcom_flags, ok := flags["vcom"]; ok {
 						cmd = cmd + " " + vcom_flags
 					}
 				}
-      }
+			}
 
-      if Lint.Value() {
-        cmd = cmd + " -lint"
-      }
+			if Lint.Value() {
+				cmd = cmd + " -lint"
+			}
 
-      // Create plain compilation command
-      cmd = tool + " " + cmd + " " + src.String()
+			// Create plain compilation command
+			cmd = tool + " " + cmd + " " + src.String()
 
-      // Remove the log file if the command fails to ensure we can recompile it
-      cmd = cmd + " || { rm " + log.String() + " && exit 1; }"
+			// Remove the log file if the command fails to ensure we can recompile it
+			cmd = cmd + " || { rm " + log.String() + " && exit 1; }"
 
-      // Add the compilation command as a build step with the log file as the
-      // generated output
-      ctx.AddBuildStep(core.BuildStep{
-        Out:   log,
-        Ins:   append(deps, src),
-        Cmd:   cmd,
-        Descr: fmt.Sprintf("%s: %s", tool, src.Relative()),
-      })
+			// Add the compilation command as a build step with the log file as the
+			// generated output
+			ctx.AddBuildStep(core.BuildStep{
+				Out:   log,
+				Ins:   append(deps, src),
+				Cmd:   cmd,
+				Descr: fmt.Sprintf("%s: %s", tool, src.Relative()),
+			})
 
-      // Add the log file to the dependencies of the next files
-      deps = append(deps, log)
+			// Add the log file to the dependencies of the next files
+			deps = append(deps, log)
 
-      // Note down the created rule
-      rules[log.String()] = true
-    } else {
-      // We handle header files separately from other source files
-      if IsHeader(src.String()) {
-        incs = append(incs, src)
-      }
+			// Note down the created rule
+			rules[log.String()] = true
+		} else {
+			// We handle header files separately from other source files
+			if IsHeader(src.String()) {
+				incs = append(incs, src)
+			}
 
-      // Just add the file to the dependencies of the next one (including header files)
-      deps = append(deps, src)
-    }
-  }
+			// Just add the file to the dependencies of the next one (including header files)
+			deps = append(deps, src)
+		}
+	}
 
-  return deps, incs
+	return deps, incs
 }
 
 // compileIp compiles the IP dependencies and the source files and an IP.
 func compileIp(ctx core.Context, rule Simulation, ip Ip,
-  deps []core.Path, incs []core.Path) ([]core.Path, []core.Path) {
-  for _, sub_ip := range ip.Ips() {
-    deps, incs = compileIp(ctx, rule, sub_ip, deps, incs)
-  }
-  deps, incs = compileSrcs(ctx, rule, deps, incs, ip.Sources(), ip.Flags())
+	deps []core.Path, incs []core.Path) ([]core.Path, []core.Path) {
+	for _, sub_ip := range ip.Ips() {
+		deps, incs = compileIp(ctx, rule, sub_ip, deps, incs)
+	}
+	deps, incs = compileSrcs(ctx, rule, deps, incs, ip.Sources(), ip.Flags())
 
 	return deps, incs
 }
@@ -238,10 +238,10 @@ func compile(ctx core.Context, rule Simulation) []core.Path {
 	incs := []core.Path{}
 	deps := []core.Path{}
 
-  for _, ip := range rule.Ips {
-    deps, incs = compileIp(ctx, rule, ip, deps, incs)
-  }
-  deps, incs = compileSrcs(ctx, rule, deps, incs, rule.Srcs, rule.ToolFlags)
+	for _, ip := range rule.Ips {
+		deps, incs = compileIp(ctx, rule, ip, deps, incs)
+	}
+	deps, incs = compileSrcs(ctx, rule, deps, incs, rule.Srcs, rule.ToolFlags)
 
 	return deps
 }
@@ -250,57 +250,57 @@ func compile(ctx core.Context, rule Simulation) []core.Path {
 // coverage recording functionality. The optimized design unit can then conveniently
 // be simulated using 'vsim'.
 func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
-  top := "board"
-  if rule.Top != "" {
-    top = rule.Top
-  }
+	top := "board"
+	if rule.Top != "" {
+		top = rule.Top
+	}
 
-  cover_flag := ""
-  log_file_suffix := "vopt.log"
-  if Coverage.Value() {
-    cover_flag = "+cover"
-    log_file_suffix = "vopt_cover.log"
-  }
+	cover_flag := ""
+	log_file_suffix := "vopt.log"
+	if Coverage.Value() {
+		cover_flag = "+cover"
+		log_file_suffix = "vopt_cover.log"
+	}
 
-  log_files := []core.OutPath{}
-  targets := []string{}
-  params := []string{}
-  if rule.Params != nil {
-    for key, _ := range rule.Params {
-      log_files = append(log_files, rule.Path().WithSuffix("/"+key+"_"+log_file_suffix))
-      targets = append(targets, key + "_" + rule.Target())
-      params = append(params, key)
-    }
-  } else {
-    log_files = append(log_files, rule.Path().WithSuffix("/"+log_file_suffix))
-    targets = append(targets, rule.Target())
-    params = append(params, "")
-  }
+	log_files := []core.OutPath{}
+	targets := []string{}
+	params := []string{}
+	if rule.Params != nil {
+		for key, _ := range rule.Params {
+			log_files = append(log_files, rule.Path().WithSuffix("/"+key+"_"+log_file_suffix))
+			targets = append(targets, key+"_"+rule.Target())
+			params = append(params, key)
+		}
+	} else {
+		log_files = append(log_files, rule.Path().WithSuffix("/"+log_file_suffix))
+		targets = append(targets, rule.Target())
+		params = append(params, "")
+	}
 
-  for i := range log_files {
-    log_file := log_files[i]
-    target := targets[i]
-    param_set := params[i]
+	for i := range log_files {
+		log_file := log_files[i]
+		target := targets[i]
+		param_set := params[i]
 
-    // Skip if we already have a rule
-    if rules[log_file.String()] {
-      return
-    }
+		// Skip if we already have a rule
+		if rules[log_file.String()] {
+			return
+		}
 
-    cmd := fmt.Sprintf("vopt %s %s +acc=%s -l %s -work %s %s -o %s",
-      common_flags, cover_flag, Access.Value(),
-      log_file.String(), rule.Lib(), top, target)
+		cmd := fmt.Sprintf("vopt %s %s +acc=%s -l %s -work %s %s -o %s",
+			common_flags, cover_flag, Access.Value(),
+			log_file.String(), rule.Lib(), top, target)
 
-    // Set up parameters
-    if param_set != "" {
-      // Check that the parameters exist
-      if params, ok := rule.Params[param_set]; ok {
-        // Add parameters for all generics
-        for param, value := range params {
-          cmd = fmt.Sprintf("%s -G %s=%s", cmd, param, value)
-        }
-      }
-    }
+		// Set up parameters
+		if param_set != "" {
+			// Check that the parameters exist
+			if params, ok := rule.Params[param_set]; ok {
+				// Add parameters for all generics
+				for param, value := range params {
+					cmd = fmt.Sprintf("%s -G %s=%s", cmd, param, value)
+				}
+			}
+		}
 
 		// Add any extra flags specified with the rule
 		if rule.ToolFlags != nil {
@@ -309,17 +309,17 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 			}
 		}
 
-    if rule.TestCaseGenerator != nil {
-      deps = append(deps, rule.TestCaseGenerator)
-    }
+		if rule.TestCaseGenerator != nil {
+			deps = append(deps, rule.TestCaseGenerator)
+		}
 
-    // Add the rule to run 'vopt'.
-    ctx.AddBuildStep(core.BuildStep{
-      Out:   log_file,
-      Ins:   deps,
-      Cmd:   cmd,
-      Descr: fmt.Sprintf("vopt: %s %s", rule.Lib()+"."+top, target),
-    })
+		// Add the rule to run 'vopt'.
+		ctx.AddBuildStep(core.BuildStep{
+			Out:   log_file,
+			Ins:   deps,
+			Cmd:   cmd,
+			Descr: fmt.Sprintf("vopt: %s %s", rule.Lib()+"."+top, target),
+		})
 
 		// Note that we created this rule
 		rules[log_file.String()] = true
