@@ -145,7 +145,7 @@ if {!$gui} {
 // dependencies and include paths. It returns the resulting dependencies and include paths
 // that result from compiling the source files.
 func compileSrcs(ctx core.Context, rule Simulation,
-	deps []core.Path, incs []core.Path, srcs []core.Path) ([]core.Path, []core.Path) {
+	deps []core.Path, incs []core.Path, srcs []core.Path, flags FlagMap) ([]core.Path, []core.Path) {
 	for _, src := range srcs {
 		if IsRtl(src.String()) {
 			// log will point to the log file to be generated when compiling the code
@@ -169,9 +169,19 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				for _, inc := range incs {
 					cmd = cmd + fmt.Sprintf(" +incdir+%s", path.Dir(inc.Absolute()))
 				}
+				if flags != nil {
+					if vlog_flags, ok := flags["vlog"]; ok {
+						cmd = cmd + " " + vlog_flags
+					}
+				}
 			} else if IsVhdl(src.String()) {
 				tool = "vcom"
 				cmd = cmd + " " + VcomFlags.Value()
+				if flags != nil {
+					if vcom_flags, ok := flags["vcom"]; ok {
+						cmd = cmd + " " + vcom_flags
+					}
+				}
 			}
 
 			if Lint.Value() {
@@ -218,7 +228,7 @@ func compileIp(ctx core.Context, rule Simulation, ip Ip,
 	for _, sub_ip := range ip.Ips() {
 		deps, incs = compileIp(ctx, rule, sub_ip, deps, incs)
 	}
-	deps, incs = compileSrcs(ctx, rule, deps, incs, ip.Sources())
+	deps, incs = compileSrcs(ctx, rule, deps, incs, ip.Sources(), ip.Flags())
 
 	return deps, incs
 }
@@ -231,7 +241,7 @@ func compile(ctx core.Context, rule Simulation) []core.Path {
 	for _, ip := range rule.Ips {
 		deps, incs = compileIp(ctx, rule, ip, deps, incs)
 	}
-	deps, incs = compileSrcs(ctx, rule, deps, incs, rule.Srcs)
+	deps, incs = compileSrcs(ctx, rule, deps, incs, rule.Srcs, rule.ToolFlags)
 
 	return deps
 }
@@ -289,6 +299,13 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 				for param, value := range params {
 					cmd = fmt.Sprintf("%s -G %s=%s", cmd, param, value)
 				}
+			}
+		}
+
+		// Add any extra flags specified with the rule
+		if rule.ToolFlags != nil {
+			if vopt_flags, ok := rule.ToolFlags["vopt"]; ok {
+				cmd = cmd + " " + vopt_flags
 			}
 		}
 
@@ -514,6 +531,13 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 
 	vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag +
 		verbosity_flag + plusargs_flag + " " + VsimFlags.Value()
+
+	// Add any extra flags specified with the rule
+	if rule.ToolFlags != nil {
+		if extra_flags, ok := rule.ToolFlags["vsim"]; ok {
+			vsim_flags = vsim_flags + " " + extra_flags
+		}
+	}
 
 	for _, do_flag := range do_flags {
 		vsim_flags = vsim_flags + " -do " + do_flag
