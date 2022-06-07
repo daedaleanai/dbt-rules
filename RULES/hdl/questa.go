@@ -51,7 +51,7 @@ var Lint = core.BoolFlag{
 var Access = core.StringFlag{
 	Name: "questa-access",
 	DefaultFn: func() string {
-		return "rna"
+		return "debug"
 	},
 	Description: "Control access to simulation objects for debugging purposes",
 }.Register()
@@ -156,8 +156,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				continue
 			}
 
-			// Holds common flags for both 'vlog' and 'vcom' commands
-			cmd := fmt.Sprintf("%s +acc=%s -work %s -l %s", common_flags, Access.Value(), rule.Lib(), log.String())
+			cmd := fmt.Sprintf("%s -work %s -l %s", common_flags, rule.Lib(), log.String())
 
 			// tool will point to the tool to execute (also used for logging below)
 			var tool string
@@ -287,8 +286,16 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 			return
 		}
 
-		cmd := fmt.Sprintf("vopt %s %s +acc=%s -l %s -work %s %s -o %s",
-			common_flags, cover_flag, Access.Value(),
+		// Generate access flag
+		access_flag := ""
+		if Access.Value() == "debug" {
+			access_flag = "+acc"
+		} else if Access.Value() != "" {
+			access_flag = fmt.Sprintf("+acc=%s", Access.Value())
+		}
+
+		cmd := fmt.Sprintf("vopt %s %s %s -l %s -work %s %s -o %s",
+			common_flags, cover_flag, access_flag,
 			log_file.String(), rule.Lib(), top, target)
 
 		// Set up parameters
