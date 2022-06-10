@@ -81,9 +81,16 @@ func (obj objectFile) Build(ctx core.Context) {
 		core.Fatal("Unknown source extension for cc toolchain '" + filepath.Ext(obj.Src.Absolute()) + "'")
 	}
 
+	includes := map[string]bool{}
 	for _, include := range obj.Includes {
-		flags = append(flags, fmt.Sprintf("-I%q", include))
+		includes[fmt.Sprintf("-I%q", include)] = true
 	}
+	includeFlags := []string{}
+	for include := range includes {
+		includeFlags = append(includeFlags, include)
+	}
+	sort.Strings(includeFlags)
+	flags = append(flags, includeFlags...)
 
 	ctx.WithTrace("obj:"+obj.Out.Relative(), func(ctx core.Context) {
 		ctx.AddBuildStepWithRule(core.BuildStepWithRule{
@@ -213,7 +220,7 @@ func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags
 
 	for _, src := range srcs {
 		obj := objectFile{
-			Out:       out.WithSuffix("_o/" + src.Relative()).WithExt("o"),
+			Out:       src.WithExt("o"),
 			Src:       src,
 			OrderDeps: orderDeps,
 			Includes:  includes,
@@ -323,16 +330,9 @@ func (lib Library) build(ctx core.Context) {
 		core.Fatal("Out field is required for cc.Library")
 	}
 
-	if ctx.Built(lib.Out.Absolute()) {
-		return
-	}
-
 	toolchain := toolchainOrDefault(lib.Toolchain)
 
-	deps := collectDepsWithToolchain(toolchain, append(toolchain.StdDeps(), lib))
-	for _, d := range deps {
-		d.Build(ctx)
-	}
+	deps := collectDepsWithToolchain(toolchain, append(lib.Deps, toolchain.StdDeps()...))
 
 	objs := compileSources(lib.Out, ctx, append(lib.Srcs, lib.GeneratedSrcs...), lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, lib.Includes, toolchain, lib.GeneratedSrcs)
 	objs = append(objs, lib.Objs...)
@@ -350,7 +350,6 @@ func (lib Library) build(ctx core.Context) {
 	} else {
 		rule = lib.arRule()
 	}
-
 	ctx.AddBuildStepWithRule(core.BuildStepWithRule{
 		Outs: []core.OutPath{lib.Out},
 		Ins:  objs,

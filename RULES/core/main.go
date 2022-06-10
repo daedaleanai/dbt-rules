@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"path"
+	"sort"
 	"unicode"
 )
 
@@ -66,12 +67,20 @@ func GeneratorMain(vars map[string]interface{}) {
 	// Create build files.
 	if !input.CompletionsOnly {
 		ctx := newContext(vars)
-		for targetPath, variable := range vars {
-			if build, ok := variable.(buildInterface); ok {
+
+		// Making sure targets are processed in a deterministic order
+		targetPaths := []string{}
+		for targetPath := range vars {
+			targetPaths = append(targetPaths, targetPath)
+		}
+		sort.Strings(targetPaths)
+
+		for _, targetPath := range targetPaths {
+			if build, ok := vars[targetPath].(buildInterface); ok {
 				ctx.handleTarget(targetPath, build)
 			}
 		}
-		output.NinjaFile = ctx.ninjaFile.String()
+		output.NinjaFile = ctx.ninjaFile()
 	}
 
 	// Serialize generator output.
