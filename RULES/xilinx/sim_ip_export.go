@@ -15,25 +15,8 @@ type ExportScriptParams struct {
 	Output    string
 }
 
-var exportScript = `#!/bin/bash
-set -eu -o pipefail
-
-if [ {{ .Simulator }} != "questa"  ]; then
-    echo "This target only supports questa. {{ .Simulator }} is not supported."
-    exit 1
-fi
-` +
-	"QUESTA=`which vsim`\n" +
-	"SIMDIR=`dirname $QUESTA`\n" +
-	`
-mkdir -p "{{ .Output }}"
-(
-    cd {{ .Output }}
-    cat > compile.tcl << EOF
-compile_simlib -simulator {{ .Simulator }} -simulator_exec_path $SIMDIR -family {{ .Family }} -language {{ .Language }} -library {{ .Library }} -dir {{ .Output }}
-EOF
-    vivado -mode batch -nolog -nojournal -notrace -source compile.tcl
-)
+var exportScript = `#!/usr/bin/env -S vivado -log {{ .Output }}/vivado.log -nojournal -notrace -mode batch -source
+compile_simlib -directory {{ .Output }} -simulator {{ .Simulator }} -family {{ .Family }} -language {{ .Language }} -library {{ .Library }}
 `
 
 // Export the Xilinx IP blocks to the an external simulator. The target simulator selection is based on the
@@ -51,6 +34,10 @@ type ExportSimulatorIp struct {
 }
 
 func (rule ExportSimulatorIp) Build(ctx core.Context) {
+	if hdl.Simulator.Value() != "questa" {
+		core.Fatal("Simulator %s not supported!", hdl.Simulator.Value())
+	}
+
 	simLibs := hdl.SimulatorLibDir.Value()
 	if simLibs == "" {
 		simLibs = ctx.Cwd().String()
