@@ -123,7 +123,7 @@ func (gcc GccToolchain) ObjcopyCommand() string {
 
 func (gcc GccToolchain) CFlags() []string {
 	result := gcc.CCompilerFlags
-	for _,inc := range(gcc.Includes) {
+	for _, inc := range gcc.Includes {
 		result = append(result, "-isystem", fmt.Sprintf("%q", inc))
 	}
 	return result
@@ -131,7 +131,7 @@ func (gcc GccToolchain) CFlags() []string {
 
 func (gcc GccToolchain) CxxFlags() []string {
 	result := gcc.CxxCompilerFlags
-	for _,inc := range(gcc.Includes) {
+	for _, inc := range gcc.Includes {
 		result = append(result, "-isystem", fmt.Sprintf("%q", inc))
 	}
 	return result

@@ -208,7 +208,7 @@ func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags
 
 	for _, src := range srcs {
 		obj := objectFile{
-			Out:       out.WithSuffix("_o/" + src.Relative()).WithExt("o"),
+			Out:       src.WithExt("o"),
 			Src:       src,
 			Includes:  includes,
 			CFlags:    cFlags,
@@ -288,16 +288,9 @@ func (lib Library) build(ctx core.Context) {
 		core.Fatal("Out field is required for cc.Library")
 	}
 
-	if ctx.Built(lib.Out.Absolute()) {
-		return
-	}
-
 	toolchain := toolchainOrDefault(lib.Toolchain)
 
-	deps := collectDepsWithToolchain(toolchain, append(toolchain.StdDeps(), lib))
-	for _, d := range deps {
-		d.Build(ctx)
-	}
+	deps := collectDepsWithToolchain(toolchain, append(lib.Deps, toolchain.StdDeps()...))
 
 	objs := compileSources(lib.Out, ctx, lib.Srcs, lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, lib.Includes, toolchain)
 	objs = append(objs, lib.Objs...)
@@ -315,7 +308,6 @@ func (lib Library) build(ctx core.Context) {
 	} else {
 		rule = lib.arRule()
 	}
-
 	ctx.AddBuildStepWithRule(core.BuildStepWithRule{
 		Outs: []core.OutPath{lib.Out},
 		Ins:  objs,

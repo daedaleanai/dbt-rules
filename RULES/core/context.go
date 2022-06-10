@@ -7,7 +7,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strings"
 	"unicode"
@@ -18,21 +17,12 @@ type Context interface {
 	AddBuildStepWithRule(BuildStepWithRule)
 	Cwd() OutPath
 
-	// Built reports whether this is the first time Built has been
-	// called with the given id.
-	// It can be used to build a target at most once:
-	//   if ctx.Built(out) { return }
-	//   ... actually build out
-	Built(id string) bool
-
 	// WithTrace calls the given function, with the given value added
 	// to the trace.
 	WithTrace(id string, f func(Context))
 
 	// Trace returns the strings in the current trace (most recent last).
 	Trace() []string
-
-	addTargetDependency(interface{})
 }
 
 // BuildStep represents one build step (i.e., one build command).
@@ -51,15 +41,22 @@ type BuildStep struct {
 }
 
 type BuildRule struct {
-	Name string
+	Name      string
 	Variables map[string]string
 }
 
 type BuildStepWithRule struct {
-	Outs []OutPath
-	Ins  []Path
+	Outs      []OutPath
+	Ins       []Path
 	Variables map[string]string
-	Rule BuildRule 
+	Rule      BuildRule
+	traces    [][]string
+}
+
+type TargetRule struct {
+	Target    string
+	Ins       []string
+	Variables map[string]string
 }
 
 func (step *BuildStep) outs() []OutPath {
@@ -97,49 +94,22 @@ type testInterface interface {
 }
 
 type context struct {
-	cwd                OutPath
-	targetDependencies []string
-	leafOutputs        map[Path]bool
-
-	targetNames  map[interface{}]string
-	buildOutputs map[string]BuildStep
-	ninjaFile    strings.Builder
-	bashFile     strings.Builder
-	nextRuleID   int
-
-	trace    []string
-	seenOnce map[string]bool
-	seenRules map[string]bool
+	cwd         OutPath
+	nextRuleID  int
+	trace       []string
+	leafOutputs map[Path]bool
+	buildSteps  map[string]*BuildStepWithRule
+	targetRules []TargetRule
 }
 
 func newContext(vars map[string]interface{}) *context {
 	ctx := &context{
 		cwd:         outPath{""},
 		leafOutputs: map[Path]bool{},
-
-		targetNames:  map[interface{}]string{},
-		buildOutputs: map[string]BuildStep{},
-		ninjaFile:    strings.Builder{},
-		bashFile:     strings.Builder{},
-		seenOnce:     map[string]bool{},
-		seenRules:     map[string]bool{},
+		buildSteps:  map[string]*BuildStepWithRule{},
 	}
-
-	for name := range vars {
-		ctx.targetNames[vars[name]] = name
-	}
-
-	fmt.Fprintf(&ctx.ninjaFile, "build __phony__: phony\n\n")
 
 	return ctx
-}
-
-func (ctx *context) Built(id string) bool {
-	if ctx.seenOnce[id] {
-		return true
-	}
-	ctx.seenOnce[id] = true
-	return false
 }
 
 func (ctx *context) WithTrace(id string, f func(Context)) {
@@ -157,23 +127,6 @@ func (ctx *context) Trace() []string {
 
 // AddBuildStep adds a build step for the current target.
 func (ctx *context) AddBuildStep(step BuildStep) {
-	outs := []string{}
-	for _, out := range step.outs() {
-		ctx.buildOutputs[out.Absolute()] = step
-		outs = append(outs, ninjaEscape(out.Absolute()))
-		ctx.leafOutputs[out] = true
-	}
-
-	if len(outs) == 0 {
-		return
-	}
-
-	ins := []string{}
-	for _, in := range step.ins() {
-		ins = append(ins, ninjaEscape(in.Absolute()))
-		delete(ctx.leafOutputs, in)
-	}
-
 	data := ""
 	dataFileMode := os.FileMode(0644)
 	dataFilePath := ""
@@ -216,58 +169,57 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 		step.Cmd = fmt.Sprintf("cp %q %q", dataFilePath, step.Out)
 	}
 
-	fmt.Fprintf(&ctx.ninjaFile, "# trace: %s\n", strings.Join(ctx.Trace(), " // "))
-	fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
+	rule := BuildRule{
+		Variables: map[string]string{
+			"command":     step.Cmd,
+			"description": step.Descr,
+		},
+	}
 	if step.Depfile != nil {
-		depfile := ninjaEscape(step.Depfile.Absolute())
-		fmt.Fprintf(&ctx.ninjaFile, "  depfile = %s\n", depfile)
+		rule.Variables["depfile"] = ninjaEscape(step.Depfile.Absolute())
 	}
-	fmt.Fprintf(&ctx.ninjaFile, "  command = %s\n", step.Cmd)
-	if step.Descr != "" {
-		fmt.Fprintf(&ctx.ninjaFile, "  description = %s\n", step.Descr)
-	}
-	fmt.Fprint(&ctx.ninjaFile, "\n")
-	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s\n", strings.Join(outs, " "), ctx.nextRuleID, strings.Join(ins, " "))
-	fmt.Fprint(&ctx.ninjaFile, "\n\n")
 
-	ctx.nextRuleID++
+	ctx.AddBuildStepWithRule(BuildStepWithRule{
+		Outs: step.outs(),
+		Ins:  step.ins(),
+		Rule: rule,
+	})
 }
 
 // AddBuildStepWithRule adds a build step for the current target.
 func (ctx *context) AddBuildStepWithRule(step BuildStepWithRule) {
-	outs := []string{}
-	for _, out := range step.Outs {
-		outs = append(outs, ninjaEscape(out.Absolute()))
-		ctx.leafOutputs[out] = true
-	}
-
-	if len(outs) == 0 {
+	if len(step.Outs) == 0 {
 		return
 	}
 
-	ins := []string{}
+	if prevStep, ok := ctx.buildSteps[step.Outs[0].Absolute()]; ok {
+		if err := stepsAreEquivalent(&step, prevStep); err != nil {
+			Fatal("Second incompatible build step for ourput %s: %s", step.Outs[0].Absolute(), err)
+		}
+
+		prevStep.traces = append(prevStep.traces, ctx.Trace())
+
+		for _, out := range step.Outs {
+			ctx.leafOutputs[out] = true
+		}
+		for _, in := range step.Ins {
+			delete(ctx.leafOutputs, in)
+		}
+	} else {
+		step.traces = append(step.traces, ctx.Trace())
+
+		for _, out := range step.Outs {
+			ctx.buildSteps[out.Absolute()] = &step
+		}
+	}
+
+	for _, out := range step.Outs {
+		ctx.leafOutputs[out] = true
+	}
+
 	for _, in := range step.Ins {
-		ins = append(ins, ninjaEscape(in.Absolute()))
 		delete(ctx.leafOutputs, in)
 	}
-
-	if !ctx.seenRules[step.Rule.Name] {
-		ctx.seenRules[step.Rule.Name] = true
-		fmt.Fprintf(&ctx.ninjaFile, "rule %s\n", step.Rule.Name)
-		for name,value := range step.Rule.Variables {
-			fmt.Fprintf(&ctx.ninjaFile, "  %s = %s\n", name, value)
-		}
-		fmt.Fprint(&ctx.ninjaFile, "\n")
-	}
-
-	fmt.Fprintf(&ctx.ninjaFile, "# trace: %s\n", strings.Join(ctx.Trace(), " // "))
-	fmt.Fprintf(&ctx.ninjaFile, "build %s: %s %s\n", strings.Join(outs, " "), step.Rule.Name, strings.Join(ins, " "))
-	for name,value := range step.Variables {
-		fmt.Fprintf(&ctx.ninjaFile, "  %s = %s\n", name, value)
-	}
-	fmt.Fprint(&ctx.ninjaFile, "\n\n")
-
-	ctx.nextRuleID++
 }
 
 // Cwd returns the build directory of the current target.
@@ -279,10 +231,10 @@ func (ctx *context) handleTarget(targetPath string, target buildInterface) {
 	currentTarget = targetPath
 	ctx.cwd = outPath{path.Dir(targetPath)}
 	ctx.leafOutputs = map[Path]bool{}
-	ctx.targetDependencies = []string{}
 
-	ctx.WithTrace("top:"+targetPath, target.Build)
+	ctx.WithTrace("target:"+targetPath, target.Build)
 
+	// Private targets that start with a lower-case letter.
 	if !unicode.IsUpper([]rune(path.Base(targetPath))[0]) {
 		return
 	}
@@ -311,51 +263,156 @@ func (ctx *context) handleTarget(targetPath string, target buildInterface) {
 		printOuts = []string{"<no outputs produced>"}
 	}
 
-	fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
-	fmt.Fprintf(&ctx.ninjaFile, "  command = echo \"%s\"\n", strings.Join(printOuts, "\\n"))
-	fmt.Fprintf(&ctx.ninjaFile, "  description = Created %s:", targetPath)
-	fmt.Fprintf(&ctx.ninjaFile, "\n")
-	fmt.Fprintf(&ctx.ninjaFile, "build %s: r%d %s %s __phony__\n", targetPath, ctx.nextRuleID, strings.Join(ninjaOuts, " "), strings.Join(ctx.targetDependencies, " "))
-	fmt.Fprintf(&ctx.ninjaFile, "\n")
-	fmt.Fprintf(&ctx.ninjaFile, "\n")
-	ctx.nextRuleID++
+	ctx.targetRules = append(ctx.targetRules, TargetRule{
+		Target: targetPath,
+		Ins:    ninjaOuts,
+		Variables: map[string]string{
+			"command":     fmt.Sprintf("echo \"%s\"", strings.Join(printOuts, "\\n")),
+			"description": fmt.Sprintf("Created %s:", targetPath),
+		},
+	})
 
 	if runIface, ok := target.(runInterface); ok {
-		runCmd := runIface.Run(input.RunArgs)
-		fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
-		fmt.Fprintf(&ctx.ninjaFile, "  command = %s\n", runCmd)
-		fmt.Fprintf(&ctx.ninjaFile, "  description = Running %s:\n", targetPath)
-		fmt.Fprintf(&ctx.ninjaFile, "  pool = console\n")
-		fmt.Fprintf(&ctx.ninjaFile, "\n")
-		fmt.Fprintf(&ctx.ninjaFile, "build %s#run: r%d %s __phony__\n", targetPath, ctx.nextRuleID, targetPath)
-		fmt.Fprintf(&ctx.ninjaFile, "\n")
-		fmt.Fprintf(&ctx.ninjaFile, "\n")
-		ctx.nextRuleID++
+		ctx.targetRules = append(ctx.targetRules, TargetRule{
+			Target: fmt.Sprintf("%s#run", targetPath),
+			Ins:    []string{targetPath},
+			Variables: map[string]string{
+				"command":     runIface.Run(input.RunArgs),
+				"description": fmt.Sprintf("Running %s:", targetPath),
+				"pool":        "console",
+			},
+		})
 	}
 
 	if testIface, ok := target.(testInterface); ok {
-		testCmd := testIface.Test(input.TestArgs)
-		fmt.Fprintf(&ctx.ninjaFile, "rule r%d\n", ctx.nextRuleID)
-		fmt.Fprintf(&ctx.ninjaFile, "  command = %s\n", testCmd)
-		fmt.Fprintf(&ctx.ninjaFile, "  description = Testing %s:\n", targetPath)
-		fmt.Fprintf(&ctx.ninjaFile, "  pool = console\n")
-		fmt.Fprintf(&ctx.ninjaFile, "\n")
-		fmt.Fprintf(&ctx.ninjaFile, "build %s#test: r%d %s __phony__\n", targetPath, ctx.nextRuleID, targetPath)
-		fmt.Fprintf(&ctx.ninjaFile, "\n")
-		fmt.Fprintf(&ctx.ninjaFile, "\n")
-		ctx.nextRuleID++
+		ctx.targetRules = append(ctx.targetRules, TargetRule{
+			Target: fmt.Sprintf("%s#test", targetPath),
+			Ins:    []string{targetPath},
+			Variables: map[string]string{
+				"command":     testIface.Test(input.TestArgs),
+				"description": fmt.Sprintf("Testing %s:", targetPath),
+				"pool":        "console",
+			},
+		})
 	}
 }
 
-func (ctx *context) addTargetDependency(target interface{}) {
-	if reflect.TypeOf(target).Kind() != reflect.Ptr {
-		Fatal("adding target dependency to non-pointer target")
+func stepsAreEquivalent(a, b *BuildStepWithRule) error {
+	if len(a.Ins) != len(b.Ins) {
+		return fmt.Errorf("different number of inputs")
 	}
-	name, exists := ctx.targetNames[target]
-	if !exists {
-		Fatal("adding target dependency to invalid target")
+	for i := range a.Ins {
+		if a.Ins[i] != b.Ins[i] {
+			return fmt.Errorf("different input at position %d: %s vs %s", i, a.Ins[i], b.Ins[i])
+		}
 	}
-	ctx.targetDependencies = append(ctx.targetDependencies, name)
+
+	if len(a.Outs) != len(b.Outs) {
+		return fmt.Errorf("different number of outputs")
+	}
+	for i := range a.Outs {
+		if a.Outs[i] != b.Outs[i] {
+			return fmt.Errorf("different output at position %d: %s vs %s", i, a.Outs[i], b.Outs[i])
+		}
+	}
+
+	if len(a.Variables) != len(b.Variables) {
+		return fmt.Errorf("different number of variables")
+	}
+	for name := range a.Variables {
+		if a.Variables[name] != b.Variables[name] {
+			return fmt.Errorf("different value for variable %s", name)
+		}
+	}
+
+	if a.Rule.Name != b.Rule.Name {
+		return fmt.Errorf("different build rule")
+	}
+	if len(a.Rule.Variables) != len(b.Rule.Variables) {
+		return fmt.Errorf("different number of variables in build rule")
+	}
+	for name := range a.Rule.Variables {
+		if a.Rule.Variables[name] != b.Rule.Variables[name] {
+			return fmt.Errorf("different value for of variables %s in build rule", name)
+		}
+	}
+
+	return nil
+}
+
+func (ctx *context) ninjaFile() string {
+	ninjaFile := &strings.Builder{}
+
+	fmt.Fprintf(ninjaFile, "build __phony__: phony\n\n")
+
+	fmt.Fprintf(ninjaFile, "# build rules\n\n")
+
+	seenRules := map[string]bool{}
+	i := 0
+	for _, step := range ctx.buildSteps {
+		if step.Rule.Name == "" {
+			step.Rule.Name = fmt.Sprintf("__rule%d", i)
+			i++
+		}
+
+		if _, ok := seenRules[step.Rule.Name]; ok {
+			continue
+		}
+		seenRules[step.Rule.Name] = true
+
+		fmt.Fprintf(ninjaFile, "rule %s\n", step.Rule.Name)
+		for name, value := range step.Rule.Variables {
+			fmt.Fprintf(ninjaFile, "  %s = %s\n", name, value)
+		}
+		fmt.Fprint(ninjaFile, "\n\n")
+	}
+
+	fmt.Fprintf(ninjaFile, "# build steps\n\n")
+
+	seenSteps := map[*BuildStepWithRule]bool{}
+	for _, step := range ctx.buildSteps {
+		if _, ok := seenSteps[step]; ok {
+			continue
+		}
+		seenSteps[step] = true
+
+		outs := []string{}
+		for _, out := range step.Outs {
+			outs = append(outs, ninjaEscape(out.Absolute()))
+		}
+
+		ins := []string{}
+		for _, in := range step.Ins {
+			ins = append(ins, ninjaEscape(in.Absolute()))
+		}
+
+		for i, trace := range step.traces {
+			fmt.Fprintf(ninjaFile, "# trace: %s\n", strings.Join(trace, " --> "))
+			if i == 10 {
+				fmt.Fprintf(ninjaFile, "# (skipped %d additional traces)\n", len(step.traces)-10)
+				break
+			}
+		}
+
+		fmt.Fprintf(ninjaFile, "build %s: %s %s\n", strings.Join(outs, " "), step.Rule.Name, strings.Join(ins, " "))
+		for name, value := range step.Variables {
+			fmt.Fprintf(ninjaFile, "  %s = %s\n", name, value)
+		}
+		fmt.Fprint(ninjaFile, "\n\n")
+	}
+
+	fmt.Fprintf(ninjaFile, "# targets\n\n")
+	for i, target := range ctx.targetRules {
+		fmt.Fprintf(ninjaFile, "rule __target%d\n", i)
+		for name, value := range target.Variables {
+			fmt.Fprintf(ninjaFile, "  %s = %s\n", name, value)
+		}
+		fmt.Fprintf(ninjaFile, "\n")
+		fmt.Fprintf(ninjaFile, "build %s: __target%d %s __phony__\n", target.Target, i, strings.Join(target.Ins, " "))
+		fmt.Fprintf(ninjaFile, "\n\n")
+	}
+
+	return ninjaFile.String()
 }
 
 func ninjaEscape(s string) string {

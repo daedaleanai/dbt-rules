@@ -75,7 +75,7 @@ func GeneratorMain(vars map[string]interface{}) {
 				ctx.handleTarget(targetPath, build)
 			}
 		}
-		output.NinjaFile = ctx.ninjaFile.String()
+		output.NinjaFile = ctx.ninjaFile()
 	}
 
 	// Serialize generator output.
