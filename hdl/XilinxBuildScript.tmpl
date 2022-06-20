@@ -62,17 +62,21 @@ proc main {out_path} {
 
 	report_ip_status
 
+	exec mkdir -p \$out_path/snapshot
+
 	{{ range .Rtls }}
 	    {{ if hasSuffix .String ".vhd" }}
 		read_vhdl "{{ . }}"
 	    {{ else }}
 		read_verilog -sv "{{ . }}"
 	    {{ end }}
+	    exec cp {{ . }} \$out_path/snapshot
 	{{ end }}
 
 	puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Reading constraints..."
 	{{ range .Constrs }}
 		read_xdc {{ if $outOfContext }} -mode out_of_context {{ end }} "{{ . }}"
+		exec cp {{ . }} \$out_path/snapshot
 	{{ end }}
 
 
@@ -85,18 +89,15 @@ proc main {out_path} {
 	opt_design > \$out_path/opt.log
 	write_checkpoint -force \$out_path/checkpoints/post_opt
 	exec mkdir -p \$out_path/post_opt
-	generate_reports \$out_path/post_opt
 
 	puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Running placement..."
 	place_design > \$out_path/place.log
 	write_checkpoint -force \$out_path/checkpoints/post_place
 	exec mkdir -p \$out_path/post_place
-	generate_reports \$out_path/post_place
 
 	phys_opt_design > \$out_path/phys_opt.log
 	write_checkpoint -force \$out_path/checkpoints/post_phys_opt
 	exec mkdir -p \$out_path/post_phys_opt
-	generate_reports \$out_path/post_phys_opt
 
 	puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Running routing..."
 	route_design > \$out_path/route.log
