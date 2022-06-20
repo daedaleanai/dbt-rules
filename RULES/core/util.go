@@ -14,28 +14,7 @@ import (
 
 const fileMode = 0755
 
-var (
-	currentTarget  = ""
-	buildDirSuffix = ""
-)
-
-var outptuDir = StringFlag {
-	Name: "output-dir",
-	Description: "Output dir",
-	DefaultFn: func() string { return "" },
-}.Register()
-
-func buildDir() string {
-	if !flagsLocked {
-		Fatal("cannot use build directory before all flag values are known")
-	}
-
-	if outptuDir.Value() != "" {
-		return outptuDir.Value()
-	}
-
-	return input.BuildDirPrefix + buildDirSuffix
-}
+var currentTarget = ""
 
 func loadInput() generatorInput {
 	data, err := ioutil.ReadFile(inputFileName)
