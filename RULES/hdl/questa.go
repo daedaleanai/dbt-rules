@@ -51,7 +51,7 @@ var Lint = core.BoolFlag{
 var Access = core.StringFlag{
 	Name: "questa-access",
 	DefaultFn: func() string {
-		return "rna"
+		return "debug"
 	},
 	Description: "Control access to simulation objects for debugging purposes",
 }.Register()
@@ -94,6 +94,19 @@ func (rule Simulation) Instance() string {
 	return "/" + top + "/" + dut
 }
 
+// libFlags returns the flags needed to configure the extra libraries for this rule
+func (rule Simulation) libFlags() string {
+	flags := ""
+	if SimulatorLibDir.Value() != "" {
+		flags += fmt.Sprintf("-modelsimini %s/modelsim.ini", SimulatorLibDir.Value())
+		for _, lib := range rule.Libs {
+			flags += fmt.Sprintf(" -L %s", lib)
+		}
+	}
+
+	return flags
+}
+
 // rules holds a map of all defined rules to prevent defining the same rule
 // multiple times.
 var rules = make(map[string]bool)
@@ -117,6 +130,7 @@ proc reload {} {
 {{ if .WaveformInit }}
 if {$gui} {
 	source {{ .WaveformInit }}
+	assertion fail -action break
 }
 {{ end }}
 
@@ -156,8 +170,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				continue
 			}
 
-			// Holds common flags for both 'vlog' and 'vcom' commands
-			cmd := fmt.Sprintf("%s +acc=%s -work %s -l %s", common_flags, Access.Value(), rule.Lib(), log.String())
+			cmd := fmt.Sprintf("%s %s -work %s -l %s", common_flags, rule.libFlags(), rule.Lib(), log.String())
 
 			// tool will point to the tool to execute (also used for logging below)
 			var tool string
@@ -251,8 +264,21 @@ func compile(ctx core.Context, rule Simulation) []core.Path {
 // be simulated using 'vsim'.
 func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 	top := "board"
+	additional_tops := ""
+
+	if rule.Top != "" && len(rule.Tops) > 0 {
+		log.Fatal(fmt.Sprintf("only one of Top or Tops allowed!"))
+	}
+
 	if rule.Top != "" {
 		top = rule.Top
+	}
+
+	if len(rule.Tops) > 0 {
+		top = rule.Tops[0]
+		if len(rule.Tops) > 1 {
+			additional_tops = strings.Join(rule.Tops[1:], " ")
+		}
 	}
 
 	cover_flag := ""
@@ -287,9 +313,17 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 			return
 		}
 
-		cmd := fmt.Sprintf("vopt %s %s +acc=%s -l %s -work %s %s -o %s",
-			common_flags, cover_flag, Access.Value(),
-			log_file.String(), rule.Lib(), top, target)
+		// Generate access flag
+		access_flag := ""
+		if Access.Value() == "debug" {
+			access_flag = "+acc"
+		} else if Access.Value() != "" {
+			access_flag = fmt.Sprintf("+acc=%s", Access.Value())
+		}
+
+		cmd := fmt.Sprintf("vopt %s %s %s -l %s -work %s %s %s -o %s %s",
+			common_flags, cover_flag, access_flag,
+			log_file.String(), rule.Lib(), top, additional_tops, target, rule.libFlags())
 
 		// Set up parameters
 		if param_set != "" {
@@ -407,7 +441,8 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	var do_flags []string
 
 	// Default flag values
-	vsim_flags := " -onfinish final -l " + log_file.String()
+	vsim_flags := " -onfinish final -l " + log_file.String() + rule.libFlags()
+
 	seed_flag := " -sv_seed random"
 	verbosity_flag := " +verbosity=DVM_VERB_NONE"
 	mode_flag := " -batch -quiet"

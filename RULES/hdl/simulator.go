@@ -57,6 +57,7 @@ type Simulation struct {
 	Params                 ParamMap
 	ToolFlags              FlagMap
 	Top                    string
+	Tops                   []string
 	Dut                    string
 	TestCaseGenerator      core.Path
 	TestCaseGeneratorFlags string
