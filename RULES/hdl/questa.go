@@ -125,6 +125,10 @@ const do_file_template = `
 proc reload {} {
 	global target
 	vsim -work {{ .Lib }} $target
+	{{ if .WaveformInit }}
+		source {{ .WaveformInit }}
+	{{ end }}
+
 }
 
 {{ if .WaveformInit }}
