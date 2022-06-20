@@ -98,9 +98,8 @@ func (rule Simulation) Instance() string {
 func (rule Simulation) libFlags() string {
 	flags := ""
 	if SimulatorLibDir.Value() != "" {
-		flags += fmt.Sprintf("-modelsimini %s/modelsim.ini", SimulatorLibDir.Value())
 		for _, lib := range rule.Libs {
-			flags += fmt.Sprintf(" -L %s", lib)
+			flags += fmt.Sprintf(" -L %s/%s", SimulatorLibDir.Value(), lib)
 		}
 	}
 
