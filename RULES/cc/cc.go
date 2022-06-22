@@ -13,9 +13,9 @@ type objectFile struct {
 	Out       core.OutPath
 	Src       core.Path
 	Includes  []core.Path
-	CFlags     []string
-	CxxFlags     []string
-	AsFlags     []string
+	CFlags    []string
+	CxxFlags  []string
+	AsFlags   []string
 	Toolchain Toolchain
 }
 
@@ -25,11 +25,11 @@ func ninjaEscape(s string) string {
 
 func (obj objectFile) cxxRule() core.BuildRule {
 	toolchain := toolchainOrDefault(obj.Toolchain)
-	return core.BuildRule {
+	return core.BuildRule{
 		Name: toolchain.Name() + "-cxx",
 		Variables: map[string]string{
-			"depfile": "$out.d",
-			"command": fmt.Sprintf("%s %s $flags -pipe -c -MD -MF $out.d -o $out $in", ninjaEscape(toolchain.CxxCompiler()), strings.Join(toolchain.CxxFlags(), " ")),
+			"depfile":     "$out.d",
+			"command":     fmt.Sprintf("%s %s $flags -pipe -c -MD -MF $out.d -o $out $in", ninjaEscape(toolchain.CxxCompiler()), strings.Join(toolchain.CxxFlags(), " ")),
 			"description": fmt.Sprintf("CXX (toolchain: %s) $out", toolchain.Name()),
 		},
 	}
@@ -37,11 +37,11 @@ func (obj objectFile) cxxRule() core.BuildRule {
 
 func (obj objectFile) ccRule() core.BuildRule {
 	toolchain := toolchainOrDefault(obj.Toolchain)
-	return core.BuildRule {
+	return core.BuildRule{
 		Name: toolchain.Name() + "-cc",
 		Variables: map[string]string{
-			"depfile": "$out.d",
-			"command": fmt.Sprintf("%s %s $flags -pipe -c -MD -MF $out.d -o $out $in", ninjaEscape(toolchain.CCompiler()), strings.Join(toolchain.CFlags(), " ")),
+			"depfile":     "$out.d",
+			"command":     fmt.Sprintf("%s %s $flags -pipe -c -MD -MF $out.d -o $out $in", ninjaEscape(toolchain.CCompiler()), strings.Join(toolchain.CFlags(), " ")),
 			"description": fmt.Sprintf("CC (toolchain: %s) $out", toolchain.Name()),
 		},
 	}
@@ -49,10 +49,10 @@ func (obj objectFile) ccRule() core.BuildRule {
 
 func (obj objectFile) asRule() core.BuildRule {
 	toolchain := toolchainOrDefault(obj.Toolchain)
-	return core.BuildRule {
+	return core.BuildRule{
 		Name: toolchain.Name() + "-as",
 		Variables: map[string]string{
-			"command": fmt.Sprintf("%s %s $flags -c -o $out $in", ninjaEscape(toolchain.Assembler()), strings.Join(toolchain.AsFlags(), " ")),
+			"command":     fmt.Sprintf("%s %s $flags -c -o $out $in", ninjaEscape(toolchain.Assembler()), strings.Join(toolchain.AsFlags(), " ")),
 			"description": fmt.Sprintf("AS (toolchain: %s) $out", toolchain.Name()),
 		},
 	}
@@ -84,10 +84,10 @@ func (obj objectFile) Build(ctx core.Context) {
 
 	ctx.WithTrace("obj:"+obj.Out.Relative(), func(ctx core.Context) {
 		ctx.AddBuildStepWithRule(core.BuildStepWithRule{
-			Outs:     []core.OutPath{obj.Out},
-			Ins:      []core.Path{obj.Src},
-			Rule:	  rule,
-			Variables: map[string]string {
+			Outs: []core.OutPath{obj.Out},
+			Ins:  []core.Path{obj.Src},
+			Rule: rule,
+			Variables: map[string]string{
 				"flags": strings.Join(flags, " "),
 			},
 		})
@@ -151,7 +151,8 @@ func collectDepsWithToolchain(toolchain Toolchain, deps []Dep) []Library {
 }
 
 func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, toolchain Toolchain) []core.Path {
-	includes := []core.Path{core.SourcePath("")}
+	//FIXME: porpper include path
+	includes := []core.Path{core.SourcePath(""), core.SourcePath("/../include")}
 	for _, dep := range deps {
 		includes = append(includes, dep.Includes...)
 	}
@@ -163,9 +164,9 @@ func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags
 			Out:       out.WithSuffix("_o/" + src.Relative()).WithExt("o"),
 			Src:       src,
 			Includes:  includes,
-			CFlags:     cFlags,
-			CxxFlags:     cxxFlags,
-			AsFlags:     asFlags,
+			CFlags:    cFlags,
+			CxxFlags:  cxxFlags,
+			AsFlags:   asFlags,
 			Toolchain: toolchain,
 		}
 		obj.Build(ctx)
@@ -187,18 +188,18 @@ type Dep interface {
 // Toolchain or for the DefaultToolchain in case user didn't specify a Toolchain.
 // In all other cases, user-specified Out path is directory-prefixed with the Toolchain name.
 type Library struct {
-	Out           core.OutPath
-	Srcs          []core.Path
-	Blobs         []core.Path
-	Objs          []core.Path
-	Includes      []core.Path
-	CFlags		  []string
-	CxxFlags      []string
-	AsFlags       []string
-	Deps          []Dep
-	Shared        bool
-	AlwaysLink    bool
-	Toolchain     Toolchain
+	Out        core.OutPath
+	Srcs       []core.Path
+	Blobs      []core.Path
+	Objs       []core.Path
+	Includes   []core.Path
+	CFlags     []string
+	CxxFlags   []string
+	AsFlags    []string
+	Deps       []Dep
+	Shared     bool
+	AlwaysLink bool
+	Toolchain  Toolchain
 
 	// Extra fields for handling multi-toolchain logic.
 	userOut       core.OutPath
@@ -214,10 +215,10 @@ func (lib Library) arRule() core.BuildRule {
 	// There is no option to ar to always force creation of a new archive; the "c"
 	// modifier simply suppresses a warning if the archive doesn't already
 	// exist. So instead we delete the target (out) if it already exists.
-	return core.BuildRule {
+	return core.BuildRule{
 		Name: toolchain.Name() + "-ar",
 		Variables: map[string]string{
-			"command": fmt.Sprintf("rm -f $out 2> /dev/null; %s rcs $out $in", ninjaEscape(toolchain.Archiver())),
+			"command":     fmt.Sprintf("rm -f $out 2> /dev/null; %s rcs $out $in", ninjaEscape(toolchain.Archiver())),
 			"description": fmt.Sprintf("AR (toolchain: %s) $out", toolchain.Name()),
 		},
 	}
@@ -225,10 +226,10 @@ func (lib Library) arRule() core.BuildRule {
 
 func (lib Library) soRule() core.BuildRule {
 	toolchain := toolchainOrDefault(lib.Toolchain)
-	return core.BuildRule {
+	return core.BuildRule{
 		Name: toolchain.Name() + "-so",
 		Variables: map[string]string{
-			"command": fmt.Sprintf("%s -shared %s -o $out $in", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
+			"command":     fmt.Sprintf("%s -shared %s -o $out $in", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
 			"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
 		},
 	}
@@ -269,8 +270,8 @@ func (lib Library) build(ctx core.Context) {
 	}
 
 	ctx.AddBuildStepWithRule(core.BuildStepWithRule{
-		Outs:  []core.OutPath{lib.Out},
-		Ins:   objs,
+		Outs: []core.OutPath{lib.Out},
+		Ins:  objs,
 		Rule: rule,
 	})
 }
@@ -313,17 +314,17 @@ func (lib Library) CcLibrary(toolchain Toolchain) Library {
 
 // Binary builds and links an executable.
 type Binary struct {
-	Out           core.OutPath
-	Srcs          []core.Path
-	CFlags        []string
-	CxxFlags      []string
-    AsFlags       []string
-	LinkerFlags   []string
-	Deps          []Dep
-	DepsPre       []Dep
-	DepsPost      []Dep
-	Script        core.Path
-	Toolchain     Toolchain
+	Out         core.OutPath
+	Srcs        []core.Path
+	CFlags      []string
+	CxxFlags    []string
+	AsFlags     []string
+	LinkerFlags []string
+	Deps        []Dep
+	DepsPre     []Dep
+	DepsPost    []Dep
+	Script      core.Path
+	Toolchain   Toolchain
 }
 
 // Build a Binary.
@@ -336,10 +337,10 @@ func (bin Binary) Build(ctx core.Context) {
 
 func (bin Binary) ldRule() core.BuildRule {
 	toolchain := toolchainOrDefault(bin.Toolchain)
-	return core.BuildRule {
+	return core.BuildRule{
 		Name: toolchain.Name() + "-ld",
 		Variables: map[string]string{
-			"command": fmt.Sprintf("%s %s $flags -o $out $objs $libs", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
+			"command":     fmt.Sprintf("%s %s $flags -o $out $objs $libs", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
 			"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
 		},
 	}
@@ -361,7 +362,7 @@ func (bin Binary) build(ctx core.Context) {
 	}
 
 	ins := objs
-	
+
 	libsPre := []Library{}
 	for _, dep := range bin.DepsPre {
 		lib := dep.CcLibrary(toolchain)
@@ -382,9 +383,9 @@ func (bin Binary) build(ctx core.Context) {
 	for _, dep := range deps {
 		ins = append(ins, dep.Out)
 		if dep.AlwaysLink {
-			libsToLink = append(libsToLink, "-whole-archive", fmt.Sprintf("%q",dep.Out), "-no-whole-archive")
+			libsToLink = append(libsToLink, "-whole-archive", fmt.Sprintf("%q", dep.Out), "-no-whole-archive")
 		} else {
-			libsToLink = append(libsToLink, fmt.Sprintf("%q",dep.Out))
+			libsToLink = append(libsToLink, fmt.Sprintf("%q", dep.Out))
 		}
 	}
 
@@ -400,13 +401,13 @@ func (bin Binary) build(ctx core.Context) {
 	}
 
 	ctx.AddBuildStepWithRule(core.BuildStepWithRule{
-		Outs:  []core.OutPath{bin.Out},
-		Ins:   ins,
-		Rule:  bin.ldRule(),
-		Variables: map[string]string {
+		Outs: []core.OutPath{bin.Out},
+		Ins:  ins,
+		Rule: bin.ldRule(),
+		Variables: map[string]string{
 			"flags": strings.Join(flags, " "),
-			"libs": strings.Join(libsToLink, " "),
-			"objs": strings.Join(objsToLink, " "),
+			"libs":  strings.Join(libsToLink, " "),
+			"objs":  strings.Join(objsToLink, " "),
 		},
 	})
 }

@@ -26,6 +26,7 @@ type generatorInput struct {
 	CompletionsOnly bool
 	RunArgs         []string
 	TestArgs        []string
+	Layout          string
 }
 
 type generatorOutput struct {

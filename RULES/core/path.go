@@ -17,13 +17,21 @@ type Path interface {
 	WithSuffix(suffix string) OutPath
 }
 
+type PkgPath interface {
+	SrcDir() string
+}
+
 // inPath is a path relative to the workspace source directory.
 type inPath struct {
 	rel string
+	abs string
 }
 
 // Absolute returns the absolute path.
 func (p inPath) Absolute() string {
+	if p.abs != "" {
+		return p.abs
+	}
 	return path.Join(input.SourceDir, p.rel)
 }
 
@@ -117,8 +125,8 @@ func (p globalPath) String() string {
 }
 
 // NewInPath creates an inPath for a path relativ to the source directory.
-func NewInPath(pkg interface{}, p string) Path {
-	return inPath{path.Join(reflect.TypeOf(pkg).PkgPath(), p)}
+func NewInPath(pkg PkgPath, p string) Path {
+	return inPath{path.Join(reflect.TypeOf(pkg).PkgPath(), p), path.Join(pkg.SrcDir(), p)}
 }
 
 // NewOutPath creates an OutPath for a path relativ to the build directory.
@@ -138,5 +146,5 @@ func BuildPath(p string) OutPath {
 
 // SourcePath returns a path relative to the source directory.
 func SourcePath(p string) Path {
-	return inPath{p}
+	return inPath{p, ""}
 }
