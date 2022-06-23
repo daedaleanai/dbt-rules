@@ -2,7 +2,9 @@ package cc
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"dbt-rules/RULES/core"
@@ -150,12 +152,57 @@ func collectDepsWithToolchain(toolchain Toolchain, deps []Dep) []Library {
 	return stack
 }
 
-func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, toolchain Toolchain) []core.Path {
-	//FIXME: porpper include path
-	includes := []core.Path{core.SourcePath(""), core.SourcePath("/../include")}
+func includesForSoruces(srcs []core.Path, private bool) []core.Path {
+	includes := []string{}
+
+	depsDir := core.SourcePath("").Absolute()
+	workspaceDir := path.Dir(depsDir)
+
+	for _, src := range srcs {
+		srcPath := src.Absolute()
+		prefix := ""
+		if strings.HasPrefix(srcPath, depsDir) {
+			srcPath = strings.TrimPrefix(srcPath, depsDir)
+			prefix = ""
+		} else if strings.HasPrefix(srcPath, workspaceDir) {
+			srcPath = strings.TrimPrefix(srcPath, workspaceDir)
+			prefix = ".."
+		} else {
+			continue
+		}
+
+		parts := strings.Split(srcPath, "/")
+		if parts[1] != "src" {
+			continue
+		}
+
+		includes = append(includes, path.Join(prefix, parts[0], "include"))
+		if private {
+			includes = append(includes, path.Join(prefix, parts[0], "src"))
+		}
+	}
+
+	sort.Strings(includes)
+
+	result := []core.Path{}
+	prevInc := ""
+	for _, inc := range includes {
+		if inc == prevInc {
+			continue
+		}
+		prevInc = inc
+		result = append(result, core.SourcePath(inc))
+	}
+
+	return result
+}
+
+func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, includes []core.Path, toolchain Toolchain) []core.Path {
 	for _, dep := range deps {
 		includes = append(includes, dep.Includes...)
 	}
+
+	includes = append(includes, includesForSoruces(srcs, true)...)
 
 	objs := []core.Path{}
 
@@ -252,7 +299,7 @@ func (lib Library) build(ctx core.Context) {
 		d.Build(ctx)
 	}
 
-	objs := compileSources(lib.Out, ctx, lib.Srcs, lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, toolchain)
+	objs := compileSources(lib.Out, ctx, lib.Srcs, lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, lib.Includes, toolchain)
 	objs = append(objs, lib.Objs...)
 
 	for _, blob := range lib.Blobs {
@@ -281,7 +328,9 @@ func (lib Library) Build(ctx core.Context) {
 }
 
 // CcLibrary for Library returns the library itself, or a toolchain-specific variant
-func (lib Library) CcLibrary(toolchain Toolchain) Library {
+func (inputLibrary Library) CcLibrary(toolchain Toolchain) Library {
+	lib := inputLibrary
+
 	if toolchain == nil {
 		core.Fatal("CcLibrary() called with nil toolchain.")
 	}
@@ -289,6 +338,8 @@ func (lib Library) CcLibrary(toolchain Toolchain) Library {
 	if lib.Out == nil {
 		core.Fatal("Out field is required for cc.Library")
 	}
+
+	lib.Includes = append(lib.Includes, includesForSoruces(lib.Srcs, false)...)
 
 	// Ensure userOut and userToolchain are set.
 	if lib.userOut == nil {
@@ -325,6 +376,7 @@ type Binary struct {
 	DepsPost    []Dep
 	Script      core.Path
 	Toolchain   Toolchain
+	Includes    []core.Path
 }
 
 // Build a Binary.
@@ -353,7 +405,7 @@ func (bin Binary) build(ctx core.Context) {
 	for _, d := range deps {
 		d.Build(ctx)
 	}
-	objs := compileSources(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, toolchain)
+	objs := compileSources(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, bin.Includes, toolchain)
 
 	objsToLink := []string{}
 
