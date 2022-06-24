@@ -203,6 +203,7 @@ func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags
 	}
 
 	includes = append(includes, includesForSoruces(srcs, true)...)
+	includes = append(includes, core.SourcePath(""))
 
 	objs := []core.Path{}
 
