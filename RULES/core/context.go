@@ -58,6 +58,7 @@ type BuildRule struct {
 type BuildStepWithRule struct {
 	Outs      []OutPath
 	Ins       []Path
+	OrderDeps []Path
 	Variables map[string]string
 	Rule      BuildRule
 }
@@ -251,6 +252,11 @@ func (ctx *context) AddBuildStepWithRule(step BuildStepWithRule) {
 		delete(ctx.leafOutputs, in)
 	}
 
+	orderDeps := []string{}
+	for _, in := range step.OrderDeps {
+		orderDeps = append(orderDeps, ninjaEscape(in.Absolute()))
+	}
+
 	if !ctx.seenRules[step.Rule.Name] {
 		ctx.seenRules[step.Rule.Name] = true
 		fmt.Fprintf(&ctx.ninjaFile, "rule %s\n", step.Rule.Name)
@@ -261,7 +267,7 @@ func (ctx *context) AddBuildStepWithRule(step BuildStepWithRule) {
 	}
 
 	fmt.Fprintf(&ctx.ninjaFile, "# trace: %s\n", strings.Join(ctx.Trace(), " // "))
-	fmt.Fprintf(&ctx.ninjaFile, "build %s: %s %s\n", strings.Join(outs, " "), step.Rule.Name, strings.Join(ins, " "))
+	fmt.Fprintf(&ctx.ninjaFile, "build %s: %s %s || %s\n", strings.Join(outs, " "), step.Rule.Name, strings.Join(ins, " "), strings.Join(orderDeps, " "))
 	for name, value := range step.Variables {
 		fmt.Fprintf(&ctx.ninjaFile, "  %s = %s\n", name, value)
 	}
