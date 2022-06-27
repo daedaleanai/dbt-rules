@@ -7,7 +7,6 @@ import (
 	"unicode"
 )
 
-const buildProtocolVersion = 2
 const inputFileName = "input.json"
 const outputFileName = "output.json"
 
@@ -18,32 +17,29 @@ type targetInfo struct {
 }
 
 type generatorInput struct {
-	Version         uint
+	DbtVersion      version
 	SourceDir       string
 	WorkingDir      string
-	BuildDirPrefix  string
-	BuildFlags      map[string]string
+	OutputDir       string
+	CmdlineFlags    map[string]string
+	WorkspaceFlags  map[string]string
 	CompletionsOnly bool
 	RunArgs         []string
 	TestArgs        []string
 }
 
 type generatorOutput struct {
-	Version   uint
 	NinjaFile string
 	Targets   map[string]targetInfo
 	Flags     map[string]flagInfo
-	BuildDir  string
 }
 
 var input = loadInput()
 
 func GeneratorMain(vars map[string]interface{}) {
 	output := generatorOutput{
-		Version:  buildProtocolVersion,
-		Targets:  map[string]targetInfo{},
-		Flags:    lockAndGetFlags(),
-		BuildDir: buildDir(),
+		Targets: map[string]targetInfo{},
+		Flags:   lockAndGetFlags(),
 	}
 
 	for targetPath, variable := range vars {

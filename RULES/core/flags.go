@@ -3,22 +3,19 @@ package core
 import (
 	"encoding/json"
 	"fmt"
-	"hash/crc32"
 	"io/ioutil"
 	"os"
-	"sort"
+	"path"
+	"path/filepath"
 	"strconv"
-	"strings"
 )
 
-const configFilePath = "../FLAGS.json"
+const flagsFileName = "FLAGS.json"
 
 var (
-	cmdlineFlags    = getCmdlineFlags()
-	configFileFlags = getConfigFileFlags()
-
-	registeredFlags = map[string]flagInterface{}
+	flagValues      = getFlagValues()
 	flagsLocked     = false
+	registeredFlags = map[string]flagInterface{}
 )
 
 type flagInfo struct {
@@ -210,9 +207,7 @@ func initializeFlag(flag flagInterface, name string, isInitialized *bool) {
 	}
 	registeredFlags[name] = flag
 
-	if value, exists := cmdlineFlags[name]; exists {
-		flag.setFromString(value)
-	} else if value, exists := configFileFlags[name]; exists {
+	if value, exists := flagValues[name]; exists {
 		flag.setFromString(value)
 	} else if !flag.setToDefault() {
 		Fatal("flag '%s' has no value", name)
@@ -243,17 +238,16 @@ func lockAndGetFlags() map[string]flagInfo {
 		flagStrings = append(flagStrings, fmt.Sprintf("%s=%s", name, info.Value))
 	}
 
-	// Compute hash for the build directory.
-	sort.Strings(flagStrings)
-	buildDirHash := crc32.ChecksumIEEE([]byte(strings.Join(flagStrings, "#")))
-	buildDirSuffix = fmt.Sprintf("-%08X", buildDirHash)
-
-	// Store config flag values in file.
+	// Store current flag values in FLAGS.json file.
 	data, err := json.Marshal(flagValues)
 	if err != nil {
 		Fatal("failed to marshal config flag values: %s", err)
 	}
-	err = ioutil.WriteFile(configFilePath, data, fileMode)
+	flagsFilePath := path.Join(input.OutputDir, flagsFileName)
+	if err := os.MkdirAll(filepath.Dir(flagsFilePath), os.ModePerm); err != nil {
+		Fatal("Failed to create directory for flags file: %s", err)
+	}
+	err = ioutil.WriteFile(flagsFilePath, data, fileMode)
 	if err != nil {
 		Fatal("failed to write config flag values: %s", err)
 	}
@@ -261,25 +255,35 @@ func lockAndGetFlags() map[string]flagInfo {
 	return flagInfo
 }
 
-func getCmdlineFlags() map[string]string {
-	loadInput()
-	return input.BuildFlags
-}
+func getFlagValues() map[string]string {
+	mergedFlags := map[string]string{}
 
-func getConfigFileFlags() map[string]string {
-	flags := map[string]string{}
-
-	data, err := ioutil.ReadFile(configFilePath)
-	if os.IsNotExist(err) {
-		return flags
+	// Copy over flags from the workspace MODULE file.
+	for name, value := range input.WorkspaceFlags {
+		mergedFlags[name] = value
 	}
-	if err != nil {
+
+	// Read flags from the FLAGS.json file. Flags from that file will override
+	// flags from the workspace MODULE file.
+	persistedFlags := map[string]string{}
+	data, err := ioutil.ReadFile(path.Join(input.OutputDir, flagsFileName))
+	if err == nil {
+		err = json.Unmarshal(data, &persistedFlags)
+		if err != nil {
+			Fatal("failed to unmarshall config flags: %s", err)
+		}
+
+		for name, value := range persistedFlags {
+			mergedFlags[name] = value
+		}
+	} else if !os.IsNotExist(err) {
 		Fatal("failed to read config flags: %s", err)
 	}
-	err = json.Unmarshal(data, &flags)
-	if err != nil {
-		Fatal("failed to unmarshall config flags: %s", err)
+
+	// Command-line flags have the highest priority and will override all other flags.
+	for name, value := range input.CmdlineFlags {
+		mergedFlags[name] = value
 	}
 
-	return flags
+	return mergedFlags
 }

@@ -51,15 +51,15 @@ type BuildStep struct {
 }
 
 type BuildRule struct {
-	Name string
+	Name      string
 	Variables map[string]string
 }
 
 type BuildStepWithRule struct {
-	Outs []OutPath
-	Ins  []Path
+	Outs      []OutPath
+	Ins       []Path
 	Variables map[string]string
-	Rule BuildRule 
+	Rule      BuildRule
 }
 
 func (step *BuildStep) outs() []OutPath {
@@ -107,8 +107,8 @@ type context struct {
 	bashFile     strings.Builder
 	nextRuleID   int
 
-	trace    []string
-	seenOnce map[string]bool
+	trace     []string
+	seenOnce  map[string]bool
 	seenRules map[string]bool
 }
 
@@ -122,7 +122,7 @@ func newContext(vars map[string]interface{}) *context {
 		ninjaFile:    strings.Builder{},
 		bashFile:     strings.Builder{},
 		seenOnce:     map[string]bool{},
-		seenRules:     map[string]bool{},
+		seenRules:    map[string]bool{},
 	}
 
 	for name := range vars {
@@ -201,7 +201,7 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 		buffer := []byte(data)
 		hash := crc32.ChecksumIEEE([]byte(buffer))
 		dataFileName := fmt.Sprintf("%08X", hash)
-		dataFilePath = path.Join(filepath.Dir(buildDir()), "DATA", dataFileName)
+		dataFilePath = path.Join(filepath.Dir(input.OutputDir), "DATA", dataFileName)
 		if err := os.MkdirAll(filepath.Dir(dataFilePath), os.ModePerm); err != nil {
 			Fatal("Failed to create directory for data files: %s", err)
 		}
@@ -254,7 +254,7 @@ func (ctx *context) AddBuildStepWithRule(step BuildStepWithRule) {
 	if !ctx.seenRules[step.Rule.Name] {
 		ctx.seenRules[step.Rule.Name] = true
 		fmt.Fprintf(&ctx.ninjaFile, "rule %s\n", step.Rule.Name)
-		for name,value := range step.Rule.Variables {
+		for name, value := range step.Rule.Variables {
 			fmt.Fprintf(&ctx.ninjaFile, "  %s = %s\n", name, value)
 		}
 		fmt.Fprint(&ctx.ninjaFile, "\n")
@@ -262,7 +262,7 @@ func (ctx *context) AddBuildStepWithRule(step BuildStepWithRule) {
 
 	fmt.Fprintf(&ctx.ninjaFile, "# trace: %s\n", strings.Join(ctx.Trace(), " // "))
 	fmt.Fprintf(&ctx.ninjaFile, "build %s: %s %s\n", strings.Join(outs, " "), step.Rule.Name, strings.Join(ins, " "))
-	for name,value := range step.Variables {
+	for name, value := range step.Variables {
 		fmt.Fprintf(&ctx.ninjaFile, "  %s = %s\n", name, value)
 	}
 	fmt.Fprint(&ctx.ninjaFile, "\n\n")

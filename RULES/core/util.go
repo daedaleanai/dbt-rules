@@ -12,29 +12,26 @@ import (
 	"text/template"
 )
 
+type version [3]uint
+
+func (v version) String() string {
+	return fmt.Sprintf("v%d.%d.%d", v[0], v[1], v[2])
+}
+
 const fileMode = 0755
 
-var (
-	currentTarget  = ""
-	buildDirSuffix = ""
-)
+var currentTarget = ""
 
-var outptuDir = StringFlag {
-	Name: "output-dir",
-	Description: "Output dir",
-	DefaultFn: func() string { return "" },
-}.Register()
+var minDbtVersion = version{1, 2, 9}
 
-func buildDir() string {
-	if !flagsLocked {
-		Fatal("cannot use build directory before all flag values are known")
+func checkVersion(curVersion, minVersion version) bool {
+	if curVersion[0] != minVersion[0] {
+		return curVersion[0] > minVersion[0]
 	}
-
-	if outptuDir.Value() != "" {
-		return outptuDir.Value()
+	if curVersion[1] != minVersion[1] {
+		return curVersion[1] > minVersion[1]
 	}
-
-	return input.BuildDirPrefix + buildDirSuffix
+	return curVersion[2] >= minVersion[2]
 }
 
 func loadInput() generatorInput {
@@ -43,15 +40,18 @@ func loadInput() generatorInput {
 		fmt.Fprintf(os.Stderr, "Error: Could not read DBT input file: %s.\n", err)
 		os.Exit(1)
 	}
+
 	var input generatorInput
 	if err := json.Unmarshal(data, &input); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: Could not parse DBT input: %s.\n", err)
 		os.Exit(1)
 	}
-	if input.Version != buildProtocolVersion {
-		fmt.Fprintf(os.Stderr, "Error: Unexpected version of DBT input: %d. Expected %d.\n", input.Version, buildProtocolVersion)
+
+	if !checkVersion(input.DbtVersion, minDbtVersion) {
+		fmt.Fprintf(os.Stderr, "Error: dbt-rules require dbt >= %s, but have been called from dbt %s.\n", minDbtVersion, input.DbtVersion)
 		os.Exit(1)
 	}
+
 	return input
 }
 
