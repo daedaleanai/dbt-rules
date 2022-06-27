@@ -14,6 +14,7 @@ import (
 type objectFile struct {
 	Out       core.OutPath
 	Src       core.Path
+	OrderDeps []core.Path
 	Includes  []core.Path
 	CFlags    []string
 	CxxFlags  []string
@@ -86,9 +87,10 @@ func (obj objectFile) Build(ctx core.Context) {
 
 	ctx.WithTrace("obj:"+obj.Out.Relative(), func(ctx core.Context) {
 		ctx.AddBuildStepWithRule(core.BuildStepWithRule{
-			Outs: []core.OutPath{obj.Out},
-			Ins:  []core.Path{obj.Src},
-			Rule: rule,
+			Outs:      []core.OutPath{obj.Out},
+			Ins:       []core.Path{obj.Src},
+			OrderDeps: obj.OrderDeps,
+			Rule:      rule,
 			Variables: map[string]string{
 				"flags": strings.Join(flags, " "),
 			},
@@ -197,9 +199,10 @@ func includesForSoruces(srcs []core.Path, private bool) []core.Path {
 	return result
 }
 
-func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, includes []core.Path, toolchain Toolchain) []core.Path {
+func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, includes []core.Path, toolchain Toolchain, orderDeps []core.Path) []core.Path {
 	for _, dep := range deps {
 		includes = append(includes, dep.Includes...)
+		orderDeps = append(orderDeps, dep.GeneratedSrcs...)
 	}
 
 	includes = append(includes, includesForSoruces(srcs, true)...)
@@ -211,6 +214,7 @@ func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags
 		obj := objectFile{
 			Out:       out.WithSuffix("_o/" + src.Relative()).WithExt("o"),
 			Src:       src,
+			OrderDeps: orderDeps,
 			Includes:  includes,
 			CFlags:    cFlags,
 			CxxFlags:  cxxFlags,
@@ -236,18 +240,19 @@ type Dep interface {
 // Toolchain or for the DefaultToolchain in case user didn't specify a Toolchain.
 // In all other cases, user-specified Out path is directory-prefixed with the Toolchain name.
 type Library struct {
-	Out        core.OutPath
-	Srcs       []core.Path
-	Blobs      []core.Path
-	Objs       []core.Path
-	Includes   []core.Path
-	CFlags     []string
-	CxxFlags   []string
-	AsFlags    []string
-	Deps       []Dep
-	Shared     bool
-	AlwaysLink bool
-	Toolchain  Toolchain
+	Out           core.OutPath
+	Srcs          []core.Path
+	GeneratedSrcs []core.Path
+	Blobs         []core.Path
+	Objs          []core.Path
+	Includes      []core.Path
+	CFlags        []string
+	CxxFlags      []string
+	AsFlags       []string
+	Deps          []Dep
+	Shared        bool
+	AlwaysLink    bool
+	Toolchain     Toolchain
 
 	// Extra fields for handling multi-toolchain logic.
 	userOut       core.OutPath
@@ -300,7 +305,7 @@ func (lib Library) build(ctx core.Context) {
 		d.Build(ctx)
 	}
 
-	objs := compileSources(lib.Out, ctx, lib.Srcs, lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, lib.Includes, toolchain)
+	objs := compileSources(lib.Out, ctx, append(lib.Srcs, lib.GeneratedSrcs...), lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, lib.Includes, toolchain, lib.GeneratedSrcs)
 	objs = append(objs, lib.Objs...)
 
 	for _, blob := range lib.Blobs {
@@ -406,7 +411,7 @@ func (bin Binary) build(ctx core.Context) {
 	for _, d := range deps {
 		d.Build(ctx)
 	}
-	objs := compileSources(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, bin.Includes, toolchain)
+	objs := compileSources(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, bin.Includes, toolchain, []core.Path{})
 
 	objsToLink := []string{}
 
