@@ -159,6 +159,7 @@ func includesForSoruces(srcs []core.Path, private bool) []core.Path {
 
 	depsDir := core.SourcePath("").Absolute()
 	workspaceDir := path.Dir(depsDir)
+	depsDir = depsDir + "/"
 
 	for _, src := range srcs {
 		srcPath := src.Absolute()
