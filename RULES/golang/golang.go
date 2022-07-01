@@ -15,13 +15,21 @@ import (
 type Binary struct {
 	Out     core.OutPath
 	Package core.Path
+	Env     map[string]string
+	Flags   []string
 }
 
 func (bin Binary) Build(ctx core.Context) {
+	env := ""
+	if bin.Env != nil {
+		for key, value := range bin.Env {
+			env = fmt.Sprintf("%s %s=%q", env, key, value)
+		}
+	}
 	ctx.AddBuildStep(core.BuildStep{
 		Out: bin.Out,
 		Ins: bin.getInputs(),
-		Cmd: fmt.Sprintf("cd %q && go build -o %q", bin.Package, bin.Out),
+		Cmd: fmt.Sprintf("cd %q && %s go build %s -o %q", bin.Package, env, strings.Join(bin.Flags, " "), bin.Out),
 	})
 }
 
