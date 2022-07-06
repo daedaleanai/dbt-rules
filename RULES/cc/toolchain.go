@@ -8,6 +8,13 @@ import (
 	"dbt-rules/RULES/core"
 )
 
+type ToolchainFlavor int
+
+const (
+	Linux ToolchainFlavor = iota
+	Windows
+)
+
 type Toolchain interface {
 	Name() string
 
@@ -26,6 +33,8 @@ type Toolchain interface {
 
 	StdDeps() []Dep
 	Script() core.Path
+
+	Flavor() ToolchainFlavor
 }
 
 type Architecture string
@@ -123,7 +132,7 @@ func (gcc GccToolchain) ObjcopyCommand() string {
 
 func (gcc GccToolchain) CFlags() []string {
 	result := gcc.CCompilerFlags
-	for _,inc := range(gcc.Includes) {
+	for _, inc := range gcc.Includes {
 		result = append(result, "-isystem", fmt.Sprintf("%q", inc))
 	}
 	return result
@@ -131,7 +140,7 @@ func (gcc GccToolchain) CFlags() []string {
 
 func (gcc GccToolchain) CxxFlags() []string {
 	result := gcc.CxxCompilerFlags
-	for _,inc := range(gcc.Includes) {
+	for _, inc := range gcc.Includes {
 		result = append(result, "-isystem", fmt.Sprintf("%q", inc))
 	}
 	return result
@@ -162,6 +171,10 @@ func (gcc GccToolchain) Script() core.Path {
 }
 func (gcc GccToolchain) Name() string {
 	return gcc.ToolchainName
+}
+
+func (gcc GccToolchain) Flavor() ToolchainFlavor {
+	return Linux
 }
 
 func joinQuoted(paths []core.Path) string {
