@@ -269,24 +269,52 @@ func (lib Library) arRule() core.BuildRule {
 	// There is no option to ar to always force creation of a new archive; the "c"
 	// modifier simply suppresses a warning if the archive doesn't already
 	// exist. So instead we delete the target (out) if it already exists.
-	return core.BuildRule{
-		Name: toolchain.Name() + "-ar",
-		Variables: map[string]string{
-			"command":     fmt.Sprintf("rm -f $out 2> /dev/null; %s rcs $out $in", ninjaEscape(toolchain.Archiver())),
-			"description": fmt.Sprintf("AR (toolchain: %s) $out", toolchain.Name()),
-		},
+	switch toolchain.Flavor() {
+	case Windows:
+		return core.BuildRule{
+			Name: toolchain.Name() + "-lib",
+			Variables: map[string]string{
+				"command":     fmt.Sprintf("rm -f $out 2> /dev/null; %s /out:$out $in", ninjaEscape(toolchain.Archiver())),
+				"description": fmt.Sprintf("AR (toolchain: %s) $out", toolchain.Name()),
+			},
+		}
+	case Linux:
+		return core.BuildRule{
+			Name: toolchain.Name() + "-ar",
+			Variables: map[string]string{
+				"command":     fmt.Sprintf("rm -f $out 2> /dev/null; %s rcs $out $in", ninjaEscape(toolchain.Archiver())),
+				"description": fmt.Sprintf("AR (toolchain: %s) $out", toolchain.Name()),
+			},
+		}
+	default:
+		core.Fatal("Unsupported Flavor")
 	}
+	return core.BuildRule{}
 }
 
 func (lib Library) soRule() core.BuildRule {
 	toolchain := toolchainOrDefault(lib.Toolchain)
-	return core.BuildRule{
-		Name: toolchain.Name() + "-so",
-		Variables: map[string]string{
-			"command":     fmt.Sprintf("%s -shared %s -o $out $in", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
-			"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
-		},
+	switch toolchain.Flavor() {
+	case Windows:
+		return core.BuildRule{
+			Name: toolchain.Name() + "-dll",
+			Variables: map[string]string{
+				"command":     fmt.Sprintf("%s -shared %s /out:$out $in", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
+				"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
+			},
+		}
+	case Linux:
+		return core.BuildRule{
+			Name: toolchain.Name() + "-so",
+			Variables: map[string]string{
+				"command":     fmt.Sprintf("%s -shared %s -o $out $in", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
+				"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
+			},
+		}
+	default:
+		core.Fatal("Unsupported Flavor")
 	}
+	return core.BuildRule{}
 }
 
 // Build a Library.
@@ -396,13 +424,28 @@ func (bin Binary) Build(ctx core.Context) {
 
 func (bin Binary) ldRule() core.BuildRule {
 	toolchain := toolchainOrDefault(bin.Toolchain)
-	return core.BuildRule{
-		Name: toolchain.Name() + "-ld",
-		Variables: map[string]string{
-			"command":     fmt.Sprintf("%s %s $flags -o $out $objs $libs", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
-			"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
-		},
+
+	switch toolchain.Flavor() {
+	case Windows:
+		return core.BuildRule{
+			Name: toolchain.Name() + "-link",
+			Variables: map[string]string{
+				"command":     fmt.Sprintf("%s %s $flags /out:$out $objs $libs", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
+				"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
+			},
+		}
+	case Linux:
+		return core.BuildRule{
+			Name: toolchain.Name() + "-ld",
+			Variables: map[string]string{
+				"command":     fmt.Sprintf("%s %s $flags -o $out $objs $libs", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
+				"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
+			},
+		}
+	default:
+		core.Fatal("Unsupported Flavor")
 	}
+	return core.BuildRule{}
 }
 
 func (bin Binary) build(ctx core.Context) {
@@ -438,14 +481,27 @@ func (bin Binary) build(ctx core.Context) {
 	}
 
 	libsToLink := []string{}
+	libsToAlwaysLink := []string{}
 
 	for _, dep := range deps {
 		ins = append(ins, dep.Out)
 		if dep.AlwaysLink {
-			libsToLink = append(libsToLink, "-whole-archive", fmt.Sprintf("%q", dep.Out), "-no-whole-archive")
+			libsToAlwaysLink = append(libsToAlwaysLink, fmt.Sprintf("%q", dep.Out))
 		} else {
 			libsToLink = append(libsToLink, fmt.Sprintf("%q", dep.Out))
 		}
+	}
+
+	switch toolchain.Flavor() {
+	case Windows:
+		libsToLink = append(libsToLink, "-wholearchive")
+		libsToLink = append(libsToLink, libsToAlwaysLink...)
+	case Linux:
+		libsToAlwaysLink = append([]string{"-whole-archive"}, libsToAlwaysLink...)
+		libsToAlwaysLink = append(libsToAlwaysLink, "-no-whole-archive")
+		libsToLink = append(libsToAlwaysLink, libsToLink...)
+	default:
+		core.Fatal("Unsupported Flavor")
 	}
 
 	if bin.Script != nil {
