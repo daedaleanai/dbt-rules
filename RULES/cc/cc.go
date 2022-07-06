@@ -486,7 +486,7 @@ func (bin Binary) build(ctx core.Context) {
 	for _, dep := range deps {
 		ins = append(ins, dep.Out)
 		if dep.AlwaysLink {
-			libsToAlwaysLink = append(libsToLink, fmt.Sprintf("%q", dep.Out))
+			libsToAlwaysLink = append(libsToAlwaysLink, fmt.Sprintf("%q", dep.Out))
 		} else {
 			libsToLink = append(libsToLink, fmt.Sprintf("%q", dep.Out))
 		}
@@ -502,15 +502,6 @@ func (bin Binary) build(ctx core.Context) {
 		libsToLink = append(libsToAlwaysLink, libsToLink...)
 	default:
 		core.Fatal("Unsupported Flavor")
-	}
-
-	for _, dep := range deps {
-		ins = append(ins, dep.Out)
-		if dep.AlwaysLink && !strings.HasSuffix(toolchain.Name(), "efi") {
-			libsToLink = append(libsToLink, "-whole-archive", fmt.Sprintf("%q", dep.Out), "-no-whole-archive")
-		} else {
-			libsToLink = append(libsToLink, fmt.Sprintf("%q", dep.Out))
-		}
 	}
 
 	if bin.Script != nil {
