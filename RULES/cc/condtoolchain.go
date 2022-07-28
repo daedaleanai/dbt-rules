@@ -11,7 +11,7 @@ type CondToolchainLibrary func(tc Toolchain) Library
 
 // CcLibrary returns the toolchain-specific library.
 func (ctl CondToolchainLibrary) CcLibrary(tc Toolchain) Library {
-	return ctl(tc)
+	return ctl(tc).CcLibrary(tc)
 }
 
 // Build builds the library with the default toolchain.

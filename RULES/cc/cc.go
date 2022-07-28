@@ -220,7 +220,7 @@ func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags
 
 	for _, src := range srcs {
 		obj := objectFile{
-			Out:       src.WithExt("o"),
+			Out:       src.WithExt(toolchain.Name() + ".o"),
 			Src:       src,
 			OrderDeps: orderDeps,
 			Includes:  includes,
@@ -393,6 +393,7 @@ func (inputLibrary Library) CcLibrary(toolchain Toolchain) Library {
 	}
 
 	lib.Out = lib.userOut.WithPrefix(toolchain.Name() + "/")
+
 	lib.Toolchain = toolchain
 	return lib
 }
