@@ -220,7 +220,7 @@ func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags
 
 	for _, src := range srcs {
 		obj := objectFile{
-			Out:       src.WithExt(toolchain.Name() + ".o"),
+			Out:       out.WithSuffix(src.WithSuffix(".o").Relative()),
 			Src:       src,
 			OrderDeps: orderDeps,
 			Includes:  includes,
