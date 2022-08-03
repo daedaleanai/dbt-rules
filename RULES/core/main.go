@@ -15,6 +15,7 @@ type targetInfo struct {
 	Description string
 	Runnable    bool
 	Testable    bool
+	Report		bool
 }
 
 type generatorInput struct {
@@ -27,6 +28,8 @@ type generatorInput struct {
 	CompletionsOnly bool
 	RunArgs         []string
 	TestArgs        []string
+	Layout          string
+	SelectedTargets        []string
 }
 
 type generatorOutput struct {
@@ -36,6 +39,8 @@ type generatorOutput struct {
 }
 
 var input = loadInput()
+
+
 
 func GeneratorMain(vars map[string]interface{}) {
 	output := generatorOutput{
@@ -61,6 +66,9 @@ func GeneratorMain(vars map[string]interface{}) {
 		if _, ok := variable.(testInterface); ok {
 			info.Testable = true
 		}
+		if _, ok := variable.(coverageReportInterface); ok {
+			info.Report = true
+		}
 		output.Targets[targetPath] = info
 	}
 
@@ -75,8 +83,32 @@ func GeneratorMain(vars map[string]interface{}) {
 		}
 		sort.Strings(targetPaths)
 
+		var targetsForCoverage = []CoverageInterface{}
+
 		for _, targetPath := range targetPaths {
-			if build, ok := vars[targetPath].(buildInterface); ok {
+			tgt := vars[targetPath]
+			if cov, ok := tgt.(CoverageInterface); ok {
+				var selected = false
+				for _,path := range input.SelectedTargets {
+					if path == targetPath {
+						selected = true
+						break
+					}
+				}
+				if !selected {
+					continue
+				}
+				targetsForCoverage = append(targetsForCoverage, cov)
+			}
+		}
+
+		for _, targetPath := range targetPaths {
+			tgt := vars[targetPath]
+			if build, ok := tgt.(coverageReportInterface); ok {
+				tgt = build.CoverageReport(targetsForCoverage)
+			}
+
+			if build, ok := tgt.(buildInterface); ok {
 				ctx.handleTarget(targetPath, build)
 			}
 		}

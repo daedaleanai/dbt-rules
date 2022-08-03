@@ -94,6 +94,17 @@ type testInterface interface {
 	Test(args []string) string
 }
 
+type CoverageInterface interface {
+	Test(args []string) string
+	Binaries() []Path
+	CoverageData() []OutPath
+}
+
+type coverageReportInterface interface {
+	CoverageReport(targetsForCoverage []CoverageInterface) interface{}
+	Build(ctx Context)
+}
+
 type context struct {
 	cwd         OutPath
 	nextRuleID  int
