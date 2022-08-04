@@ -47,6 +47,23 @@ var ShowTestCasesFile = core.BoolFlag{
 	Description: "Enable output of the file where testcases were found",
 }.Register()
 
+// DumpVcd enables outputting of all signals in the design to a VCD file
+var DumpVcd = core.BoolFlag{
+	Name: "hdl-dump-vcd",
+	DefaultFn: func() bool {
+		return false
+	},
+	Description: "Enable output of signals to a VCD file",
+}.Register()
+
+var DumpVcdFile = core.StringFlag{
+	Name:        "hdl-dump-vcd-file",
+	Description: "Path to the VCD file",
+	DefaultFn: func() string {
+		return "dump.vcd.gz"
+	},
+}.Register()
+
 type ParamMap map[string]map[string]string
 
 type Simulation struct {

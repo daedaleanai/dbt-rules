@@ -117,6 +117,8 @@ const common_flags = "-nologo -quiet"
 type DoFileParams struct {
 	Lib          string
 	WaveformInit string
+	DumpVcd      bool
+	DumpVcdFile  string
 }
 
 // Do-file template
@@ -137,7 +139,16 @@ if {$gui} {
 }
 {{ end }}
 
+{{ if .DumpVcd }}
+vcd file {{ .DumpVcdFile }}
+vcd add -r *
+{{ end }}
+
 run -all
+
+{{ if .DumpVcd }}
+vcd flush
+{{ end }}
 
 if {$coverage} {
 	coverage save -assert -directive -cvg -codeall -testname $testcase $coverage_db.ucdb
@@ -210,11 +221,14 @@ func compileSrcs(ctx core.Context, rule Simulation,
 			// Remove the log file if the command fails to ensure we can recompile it
 			cmd = cmd + " || { rm " + log.String() + " && exit 1; }"
 
+			// Add the source file to the dependencies
+			deps = append(deps, src)
+
 			// Add the compilation command as a build step with the log file as the
 			// generated output
 			ctx.AddBuildStep(core.BuildStep{
 				Out:   log,
-				Ins:   append(deps, src),
+				Ins:   deps,
 				Cmd:   cmd,
 				Descr: fmt.Sprintf("%s: %s", tool, src.Relative()),
 			})
@@ -368,6 +382,8 @@ func doFile(ctx core.Context, rule Simulation) {
 	// Do-file script
 	params := DoFileParams{
 		Lib: rule.Lib(),
+		DumpVcd: DumpVcd.Value(),
+		DumpVcdFile: DumpVcdFile.Value(),
 	}
 
 	if rule.WaveformInit != nil {
