@@ -219,6 +219,11 @@ func (ctx *context) AddBuildStepWithRule(step BuildStepWithRule) {
 	} else {
 		step.traces = append(step.traces, ctx.Trace())
 
+		// Force a copy of step.Outs and step.Ins since changes to these inside build
+		// rule code could otherwise corrupt the stored build step.
+		step.Outs = append([]OutPath(nil), step.Outs...)
+		step.Ins = append([]Path(nil), step.Ins...)
+
 		for _, out := range step.Outs {
 			ctx.buildSteps[out.Absolute()] = &step
 		}
