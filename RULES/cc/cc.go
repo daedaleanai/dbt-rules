@@ -61,6 +61,26 @@ func (obj objectFile) asRule() core.BuildRule {
 	}
 }
 
+func (obj objectFile) flags(tc Toolchain) []string {
+	flags := []string{}
+	switch filepath.Ext(obj.Src.Absolute()) {
+	case ".cc":
+		flags = append(tc.CxxFlags(), obj.CxxFlags...)
+	case ".c":
+		flags = append(tc.CFlags(), obj.CFlags...)
+	case ".S":
+		flags = append(tc.AsFlags(), obj.AsFlags...)
+	default:
+		core.Fatal("Unknown source extension for cc toolchain '" + filepath.Ext(obj.Src.Absolute()) + "'")
+	}
+
+	for _,inc := range obj.Includes {
+		flags = append(flags, fmt.Sprintf("-I%s", inc.Absolute()))
+	}
+
+	return flags
+}
+
 // Build an objectFile.
 func (obj objectFile) Build(ctx core.Context) {
 	rule := core.BuildRule{}
@@ -207,7 +227,7 @@ func includesForSoruces(srcs []core.Path, private bool) []core.Path {
 	return result
 }
 
-func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, includes []core.Path, toolchain Toolchain, orderDeps []core.Path) []core.Path {
+func getObjs(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, includes []core.Path, toolchain Toolchain, orderDeps []core.Path) []objectFile {
 	for _, dep := range deps {
 		includes = append(includes, dep.Includes...)
 		orderDeps = append(orderDeps, dep.GeneratedSrcs...)
@@ -216,10 +236,10 @@ func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags
 	includes = append(includes, includesForSoruces(srcs, true)...)
 	includes = append(includes, core.SourcePath(""))
 
-	objs := []core.Path{}
+	objs := []objectFile{}
 
 	for _, src := range srcs {
-		obj := objectFile{
+		objs = append(objs, objectFile{
 			Out:       out.WithSuffix(src.WithSuffix(".o").Relative()),
 			Src:       src,
 			OrderDeps: orderDeps,
@@ -228,7 +248,15 @@ func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags
 			CxxFlags:  cxxFlags,
 			AsFlags:   asFlags,
 			Toolchain: toolchain,
-		}
+		})
+	}
+
+	return objs
+}
+
+func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, includes []core.Path, toolchain Toolchain, orderDeps []core.Path) []core.Path {
+	objs := []core.Path{}
+	for _, obj := range getObjs(out, ctx, srcs, cFlags, cxxFlags, asFlags, deps, includes, toolchain, orderDeps) {
 		obj.Build(ctx)
 		objs = append(objs, obj.Out)
 	}
@@ -265,6 +293,35 @@ type Library struct {
 	// Extra fields for handling multi-toolchain logic.
 	userOut       core.OutPath
 	userToolchain Toolchain
+}
+
+func (lib Library) Units(ctx core.Context) []core.TranslationUnit {
+	result := []core.TranslationUnit{}
+
+	toolchain := toolchainOrDefault(lib.Toolchain)
+	deps := collectDepsWithToolchain(toolchain, append(lib.Deps, toolchain.StdDeps()...))
+
+	objs := getObjs(lib.Out, ctx, append(lib.Srcs, lib.GeneratedSrcs...), lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, lib.Includes, toolchain, lib.GeneratedSrcs)
+
+	for _,obj := range objs {
+		result = append(result, core.TranslationUnit{
+			Source: obj.Src,
+			Object: obj.Out,
+			Flags: obj.flags(toolchain),
+		})
+
+	}
+
+	return result
+}
+
+func (lib Library) EnumerateDeps(ctx core.Context) []core.AnalyzeInterface {
+	result := []core.AnalyzeInterface{}
+	toolchain := toolchainOrDefault(lib.Toolchain)
+	for _,dep := range lib.Deps {
+		result = append(result, dep.CcLibrary(toolchain))
+	}
+	return result
 }
 
 func (lib Library) arRule() core.BuildRule {
@@ -412,6 +469,36 @@ type Binary struct {
 	Script      core.Path
 	Toolchain   Toolchain
 	Includes    []core.Path
+}
+
+
+func (bin Binary) Units(ctx core.Context) []core.TranslationUnit {
+	result := []core.TranslationUnit{}
+
+	toolchain := toolchainOrDefault(bin.Toolchain)
+	deps := collectDepsWithToolchain(toolchain, append(bin.Deps, toolchain.StdDeps()...))
+
+	objs := getObjs(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, bin.Includes, toolchain, []core.Path{})
+
+	for _,obj := range objs {
+		result = append(result, core.TranslationUnit{
+			Source: obj.Src,
+			Object: obj.Out,
+			Flags: obj.flags(toolchain),
+		})
+
+	}
+
+	return result
+}
+
+func (bin Binary) EnumerateDeps(ctx core.Context) []core.AnalyzeInterface {
+	result := []core.AnalyzeInterface{}
+	toolchain := toolchainOrDefault(bin.Toolchain)
+	for _,dep := range bin.Deps {
+		result = append(result, dep.CcLibrary(toolchain))
+	}
+	return result
 }
 
 // Build a Binary.

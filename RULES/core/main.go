@@ -84,6 +84,7 @@ func GeneratorMain(vars map[string]interface{}) {
 		sort.Strings(targetPaths)
 
 		var targetsForCoverage = []CoverageInterface{}
+		var targetsForAnalyze = []AnalyzeInterface{}
 
 		for _, targetPath := range targetPaths {
 			tgt := vars[targetPath]
@@ -100,12 +101,18 @@ func GeneratorMain(vars map[string]interface{}) {
 				}
 				targetsForCoverage = append(targetsForCoverage, cov)
 			}
+			if sa, ok := tgt.(AnalyzeInterface); ok {
+				targetsForAnalyze = append(targetsForAnalyze, sa)
+			}
 		}
 
 		for _, targetPath := range targetPaths {
 			tgt := vars[targetPath]
 			if build, ok := tgt.(coverageReportInterface); ok {
 				tgt = build.CoverageReport(targetsForCoverage)
+			}
+			if build, ok := tgt.(analyzeReportInterface); ok {
+				tgt = build.AnalyzeReport(targetsForAnalyze)
 			}
 
 			if build, ok := tgt.(buildInterface); ok {
