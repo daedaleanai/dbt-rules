@@ -88,11 +88,14 @@ func xsimCompileSrcs(ctx core.Context, rule Simulation,
 			cmd = tool + " " + cmd + " " + src.String() + " > /dev/null" +
 				" || { cat " + log.String() + "; rm " + log.String() + "; exit 1; }"
 
+			// Add the source file to the dependencies
+			deps = append(deps, src)
+
 			// Add the compilation command as a build step with the log file as the
 			// generated output
 			ctx.AddBuildStep(core.BuildStep{
 				Out:   log,
-				Ins:   append(deps, src),
+				Ins:   deps,
 				Cmd:   cmd,
 				Descr: fmt.Sprintf("%s: %s", tool, src.Relative()),
 			})
