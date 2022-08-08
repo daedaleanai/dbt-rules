@@ -471,6 +471,36 @@ type Binary struct {
 	Includes    []core.Path
 }
 
+
+func (bin Binary) Units(ctx core.Context) []core.TranslationUnit {
+	result := []core.TranslationUnit{}
+
+	toolchain := toolchainOrDefault(bin.Toolchain)
+	deps := collectDepsWithToolchain(toolchain, append(bin.Deps, toolchain.StdDeps()...))
+
+	objs := getObjs(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, bin.Includes, toolchain, []core.Path{})
+
+	for _,obj := range objs {
+		result = append(result, core.TranslationUnit{
+			Source: obj.Src,
+			Object: obj.Out,
+			Flags: obj.flags(toolchain),
+		})
+
+	}
+
+	return result
+}
+
+func (bin Binary) EnumerateDeps(ctx core.Context) []core.AnalyzeInterface {
+	result := []core.AnalyzeInterface{}
+	toolchain := toolchainOrDefault(bin.Toolchain)
+	for _,dep := range bin.Deps {
+		result = append(result, dep.CcLibrary(toolchain))
+	}
+	return result
+}
+
 // Build a Binary.
 func (bin Binary) Build(ctx core.Context) {
 	if bin.Out == nil {
