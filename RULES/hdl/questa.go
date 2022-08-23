@@ -184,7 +184,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				continue
 			}
 
-			cmd := fmt.Sprintf("%s %s -work %s -l %s", common_flags, rule.libFlags(), rule.Lib(), log.String())
+			cmd := fmt.Sprintf("%s -work %s -l %s", common_flags, rule.Lib(), log.String())
 
 			// tool will point to the tool to execute (also used for logging below)
 			var tool string
@@ -193,6 +193,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				cmd = cmd + " " + VlogFlags.Value()
 				cmd = cmd + " -suppress 2583 -svinputport=net"
 				cmd = cmd + fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
+				cmd = cmd + rule.libFlags()
 				for _, inc := range incs {
 					cmd = cmd + fmt.Sprintf(" +incdir+%s", path.Dir(inc.Absolute()))
 				}
