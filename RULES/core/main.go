@@ -15,7 +15,7 @@ type targetInfo struct {
 	Description string
 	Runnable    bool
 	Testable    bool
-	Report		bool
+	Report      bool
 }
 
 type generatorInput struct {
@@ -29,7 +29,7 @@ type generatorInput struct {
 	RunArgs         []string
 	TestArgs        []string
 	Layout          string
-	SelectedTargets        []string
+	SelectedTargets []string
 }
 
 type generatorOutput struct {
@@ -39,8 +39,6 @@ type generatorOutput struct {
 }
 
 var input = loadInput()
-
-
 
 func GeneratorMain(vars map[string]interface{}) {
 	output := generatorOutput{
@@ -84,12 +82,13 @@ func GeneratorMain(vars map[string]interface{}) {
 		sort.Strings(targetPaths)
 
 		var targetsForCoverage = []CoverageInterface{}
+		var targetsForAnalyze = []AnalyzeInterface{}
 
 		for _, targetPath := range targetPaths {
 			tgt := vars[targetPath]
 			if cov, ok := tgt.(CoverageInterface); ok {
 				var selected = false
-				for _,path := range input.SelectedTargets {
+				for _, path := range input.SelectedTargets {
 					if path == targetPath {
 						selected = true
 						break
@@ -100,12 +99,18 @@ func GeneratorMain(vars map[string]interface{}) {
 				}
 				targetsForCoverage = append(targetsForCoverage, cov)
 			}
+			if sa, ok := tgt.(AnalyzeInterface); ok {
+				targetsForAnalyze = append(targetsForAnalyze, sa)
+			}
 		}
 
 		for _, targetPath := range targetPaths {
 			tgt := vars[targetPath]
 			if build, ok := tgt.(coverageReportInterface); ok {
 				tgt = build.CoverageReport(targetsForCoverage)
+			}
+			if build, ok := tgt.(analyzerReportInterface); ok {
+				tgt = build.AnalyzerReport(targetsForAnalyze)
 			}
 
 			if build, ok := tgt.(buildInterface); ok {

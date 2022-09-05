@@ -105,6 +105,23 @@ type coverageReportInterface interface {
 	Build(ctx Context)
 }
 
+type TranslationUnit struct {
+	Source Path
+	Object OutPath
+	Flags  []string
+}
+
+// AnalyzeInterface is an interface for targets compatible with static analisys
+type AnalyzeInterface interface {
+	TranslationUnits(ctx Context) []TranslationUnit
+	AnalysisDeps(ctx Context) []AnalyzeInterface
+}
+
+type analyzerReportInterface interface {
+	AnalyzerReport(targets []AnalyzeInterface) interface{}
+	Build(ctx Context)
+}
+
 type context struct {
 	cwd         OutPath
 	nextRuleID  int
