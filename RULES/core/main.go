@@ -15,7 +15,7 @@ type targetInfo struct {
 	Description string
 	Runnable    bool
 	Testable    bool
-	Report		bool
+	Report      bool
 }
 
 type generatorInput struct {
@@ -29,7 +29,7 @@ type generatorInput struct {
 	RunArgs         []string
 	TestArgs        []string
 	Layout          string
-	SelectedTargets        []string
+	SelectedTargets []string
 }
 
 type generatorOutput struct {
@@ -39,8 +39,6 @@ type generatorOutput struct {
 }
 
 var input = loadInput()
-
-
 
 func GeneratorMain(vars map[string]interface{}) {
 	output := generatorOutput{
@@ -90,7 +88,7 @@ func GeneratorMain(vars map[string]interface{}) {
 			tgt := vars[targetPath]
 			if cov, ok := tgt.(CoverageInterface); ok {
 				var selected = false
-				for _,path := range input.SelectedTargets {
+				for _, path := range input.SelectedTargets {
 					if path == targetPath {
 						selected = true
 						break
