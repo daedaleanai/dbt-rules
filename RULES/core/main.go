@@ -110,7 +110,7 @@ func GeneratorMain(vars map[string]interface{}) {
 				tgt = build.CoverageReport(targetsForCoverage)
 			}
 			if build, ok := tgt.(analyzerReportInterface); ok {
-				tgt = build.AnalyzeReport(targetsForAnalyze)
+				tgt = build.AnalyzerReport(targetsForAnalyze)
 			}
 
 			if build, ok := tgt.(buildInterface); ok {

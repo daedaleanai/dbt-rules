@@ -118,7 +118,7 @@ type AnalyzeInterface interface {
 }
 
 type analyzerReportInterface interface {
-	AnalyzeReport(targets []AnalyzeInterface) interface{}
+	AnalyzerReport(targets []AnalyzeInterface) interface{}
 	Build(ctx Context)
 }
 
