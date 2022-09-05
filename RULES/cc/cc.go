@@ -74,7 +74,7 @@ func (obj objectFile) flags(tc Toolchain) []string {
 		core.Fatal("Unknown source extension for cc toolchain '" + filepath.Ext(obj.Src.Absolute()) + "'")
 	}
 
-	for _,inc := range obj.Includes {
+	for _, inc := range obj.Includes {
 		flags = append(flags, fmt.Sprintf("-I%s", inc.Absolute()))
 	}
 
@@ -295,7 +295,7 @@ type Library struct {
 	userToolchain Toolchain
 }
 
-func (lib Library) Units(ctx core.Context) []core.TranslationUnit {
+func (lib Library) TranslationUnits(ctx core.Context) []core.TranslationUnit {
 	result := []core.TranslationUnit{}
 
 	toolchain := toolchainOrDefault(lib.Toolchain)
@@ -303,11 +303,11 @@ func (lib Library) Units(ctx core.Context) []core.TranslationUnit {
 
 	objs := getObjs(lib.Out, ctx, append(lib.Srcs, lib.GeneratedSrcs...), lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, lib.Includes, toolchain, lib.GeneratedSrcs)
 
-	for _,obj := range objs {
+	for _, obj := range objs {
 		result = append(result, core.TranslationUnit{
 			Source: obj.Src,
 			Object: obj.Out,
-			Flags: obj.flags(toolchain),
+			Flags:  obj.flags(toolchain),
 		})
 
 	}
@@ -315,10 +315,10 @@ func (lib Library) Units(ctx core.Context) []core.TranslationUnit {
 	return result
 }
 
-func (lib Library) EnumerateDeps(ctx core.Context) []core.AnalyzeInterface {
+func (lib Library) AnalysisDeps(ctx core.Context) []core.AnalyzeInterface {
 	result := []core.AnalyzeInterface{}
 	toolchain := toolchainOrDefault(lib.Toolchain)
-	for _,dep := range lib.Deps {
+	for _, dep := range lib.Deps {
 		result = append(result, dep.CcLibrary(toolchain))
 	}
 	return result
@@ -471,8 +471,7 @@ type Binary struct {
 	Includes    []core.Path
 }
 
-
-func (bin Binary) Units(ctx core.Context) []core.TranslationUnit {
+func (bin Binary) TranslationUnits(ctx core.Context) []core.TranslationUnit {
 	result := []core.TranslationUnit{}
 
 	toolchain := toolchainOrDefault(bin.Toolchain)
@@ -480,11 +479,11 @@ func (bin Binary) Units(ctx core.Context) []core.TranslationUnit {
 
 	objs := getObjs(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, bin.Includes, toolchain, []core.Path{})
 
-	for _,obj := range objs {
+	for _, obj := range objs {
 		result = append(result, core.TranslationUnit{
 			Source: obj.Src,
 			Object: obj.Out,
-			Flags: obj.flags(toolchain),
+			Flags:  obj.flags(toolchain),
 		})
 
 	}
@@ -492,10 +491,10 @@ func (bin Binary) Units(ctx core.Context) []core.TranslationUnit {
 	return result
 }
 
-func (bin Binary) EnumerateDeps(ctx core.Context) []core.AnalyzeInterface {
+func (bin Binary) AnalysisDeps(ctx core.Context) []core.AnalyzeInterface {
 	result := []core.AnalyzeInterface{}
 	toolchain := toolchainOrDefault(bin.Toolchain)
-	for _,dep := range bin.Deps {
+	for _, dep := range bin.Deps {
 		result = append(result, dep.CcLibrary(toolchain))
 	}
 	return result

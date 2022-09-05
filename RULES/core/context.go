@@ -108,16 +108,16 @@ type coverageReportInterface interface {
 type TranslationUnit struct {
 	Source Path
 	Object OutPath
-	Flags []string
+	Flags  []string
 }
 
-// AnalyzeInterface is an interface for targets cpmpatible with static analisys
+// AnalyzeInterface is an interface for targets compatible with static analisys
 type AnalyzeInterface interface {
-	Units(ctx Context) []TranslationUnit
-	EnumerateDeps(ctx Context) []AnalyzeInterface
+	TranslationUnits(ctx Context) []TranslationUnit
+	AnalysisDeps(ctx Context) []AnalyzeInterface
 }
 
-type analyzeReportInterface interface {
+type analyzerReportInterface interface {
 	AnalyzeReport(targets []AnalyzeInterface) interface{}
 	Build(ctx Context)
 }
