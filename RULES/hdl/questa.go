@@ -195,7 +195,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 			if IsVerilog(src.String()) {
 				tool = "vlog"
 				cmd = cmd + " " + VlogFlags.Value()
-				cmd = cmd + " -suppress 2583 -svinputport=net"
+				cmd = cmd + " -suppress 2583 -svinputport=net -define SIMULATION"
 				cmd = cmd + fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
 				for _, inc := range incs {
 					cmd = cmd + fmt.Sprintf(" +incdir+%s", path.Dir(inc.Absolute()))
@@ -393,7 +393,7 @@ func doFile(ctx core.Context, rule Simulation) {
 	params := DoFileParams{
 		Lib: rule.Lib(),
 		DumpVcd: DumpVcd.Value(),
-		DumpVcdFile: DumpVcdFile.Value(),
+		DumpVcdFile: fmt.Sprintf("%s.vcd.gz", rule.Name),
 	}
 
 	if rule.WaveformInit != nil {
