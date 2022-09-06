@@ -144,7 +144,11 @@ vcd file {{ .DumpVcdFile }}
 vcd add -r *
 {{ end }}
 
-run -all
+if [info exists until] {
+	run $until
+} else {
+	run -all
+}
 
 {{ if .DumpVcd }}
 vcd flush
@@ -512,6 +516,14 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 			} else {
 				log.Fatal("-verbosity expects an argument of 'low', 'medium', 'high' or 'none'!")
 			}
+		} else if strings.HasPrefix(arg, "-until=") {
+				// Define how long to run
+				var until string
+				if _, err := fmt.Sscanf(arg, "-until=%s", &until); err == nil {
+					do_flags = append(do_flags, fmt.Sprintf("\"set until %s\""), until)
+				} else {
+					log.Fatal("-until expects an argument of '<timesteps>[<time units>]'!")
+				}
 		} else if strings.HasPrefix(arg, "+") {
 			// All '+' arguments go directly to the simulator
 			plusargs_flag = plusargs_flag + " " + arg

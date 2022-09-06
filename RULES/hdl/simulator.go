@@ -65,6 +65,7 @@ var DumpVcdFile = core.StringFlag{
 }.Register()
 
 type ParamMap map[string]map[string]string
+type DefineMap map[string]string
 
 type Simulation struct {
 	Name                   string
