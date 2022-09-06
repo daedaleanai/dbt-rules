@@ -73,6 +73,7 @@ type Simulation struct {
 	Ips                    []Ip
 	Libs                   []string
 	Params                 ParamMap
+	Defines                DefineMap
 	ToolFlags              FlagMap
 	Top                    string
 	Tops                   []string

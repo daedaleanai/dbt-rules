@@ -205,6 +205,12 @@ func compileSrcs(ctx core.Context, rule Simulation,
 						cmd = cmd + " " + vlog_flags
 					}
 				}
+				for key, value := rule.Defines {
+					cmd = cmd + fmt.Sprintf(" -define %s", key)
+					if value != "" {
+						cmd = cmd + fmt.Sprintf("=%s", value)
+					}
+				}
 			} else if IsVhdl(src.String()) {
 				tool = "vcom"
 				cmd = cmd + " " + VcomFlags.Value()
