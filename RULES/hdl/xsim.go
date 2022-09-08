@@ -79,7 +79,7 @@ func xsimCompileSrcs(ctx core.Context, rule Simulation,
 				for _, inc := range incs {
 					cmd = cmd + fmt.Sprintf(" -i %s", path.Dir(inc.Absolute()))
 				}
-				for key, value := rule.Defines {
+				for key, value := range rule.Defines {
 					cmd = cmd + fmt.Sprintf(" --define %s", key)
 					if value != "" {
 						cmd = cmd + fmt.Sprintf("=%s", value)

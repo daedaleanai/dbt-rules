@@ -205,7 +205,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 						cmd = cmd + " " + vlog_flags
 					}
 				}
-				for key, value := rule.Defines {
+				for key, value := range rule.Defines {
 					cmd = cmd + fmt.Sprintf(" -define %s", key)
 					if value != "" {
 						cmd = cmd + fmt.Sprintf("=%s", value)
@@ -526,7 +526,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 				// Define how long to run
 				var until string
 				if _, err := fmt.Sscanf(arg, "-until=%s", &until); err == nil {
-					do_flags = append(do_flags, fmt.Sprintf("\"set until %s\""), until)
+					do_flags = append(do_flags, fmt.Sprintf("\"set until %s\"", until))
 				} else {
 					log.Fatal("-until expects an argument of '<timesteps>[<time units>]'!")
 				}
