@@ -133,19 +133,23 @@ proc reload {} {
 }
 
 {{ if .WaveformInit }}
-if {$gui} {
+if [info exists gui] {
 	source {{ .WaveformInit }}
 	assertion fail -action break
 }
 {{ end }}
+
+if [info exists from] {
+	run $from
+}
 
 {{ if .DumpVcd }}
 vcd file {{ .DumpVcdFile }}
 vcd add -r *
 {{ end }}
 
-if [info exists until] {
-	run $until
+if [info exists to] {
+	run $to
 } else {
 	run -all
 }
@@ -154,21 +158,26 @@ if [info exists until] {
 vcd flush
 {{ end }}
 
-if {$coverage} {
+if [info exists coverage] {
+	# Create coverage database
 	coverage save -assert -directive -cvg -codeall -testname $testcase $coverage_db.ucdb
+	# Optionally merge coverage databases
 	if {$main_coverage_db != $coverage_db} {
 		puts "Writing merged coverage database to [pwd]/$main_coverage_db.ucdb"
 		vcover merge -testassociated -output $main_coverage_db.ucdb $main_coverage_db.ucdb $coverage_db.ucdb
 	}
+	# Create HTML coverage report
 	vcover report -html -output ${main_coverage_db}_covhtml \
 		-testdetails -details -assert -directive -cvg -codeAll $main_coverage_db.ucdb
+	# Create textual coverage report
 	puts "Writing coverage report to [pwd]/${main_coverage_db}_cover.txt"
 	vcover report -output ${main_coverage_db}_cover.txt -flat -directive -cvg $main_coverage_db.ucdb
+	# Create textural assertion report
 	puts "Writing assertion report to [pwd]/${main_coverage_db}_cover.txt"
 	vcover report -output ${main_coverage_db}_assert.txt -flat -assert $main_coverage_db.ucdb
 }
 
-if {!$gui} {
+if ![info exists gui] {
 	quit -code [coverage attribute -name TESTSTATUS -concise]
 }
 `
@@ -490,8 +499,6 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	if Coverage.Value() {
 		coverage_flag = " -coverage -assertdebug"
 		do_flags = append(do_flags, "\"set coverage 1\"")
-	} else {
-		do_flags = append(do_flags, "\"set coverage 0\"")
 	}
 
 	// Determine the names of the coverage databases, this one will hold merged
@@ -522,14 +529,22 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 			} else {
 				log.Fatal("-verbosity expects an argument of 'low', 'medium', 'high' or 'none'!")
 			}
-		} else if strings.HasPrefix(arg, "-until=") {
-				// Define how long to run
-				var until string
-				if _, err := fmt.Sscanf(arg, "-until=%s", &until); err == nil {
-					do_flags = append(do_flags, fmt.Sprintf("\"set until %s\"", until))
-				} else {
-					log.Fatal("-until expects an argument of '<timesteps>[<time units>]'!")
-				}
+		} else if strings.HasPrefix(arg, "-from=") {
+			// Define how long to run
+			var from string
+			if _, err := fmt.Sscanf(arg, "-from=%s", &from); err == nil {
+				do_flags = append(do_flags, fmt.Sprintf("\"set from %s\"", from))
+			} else {
+				log.Fatal("-from expects an argument of '<timesteps>[<time units>]'!")
+			}
+		} else if strings.HasPrefix(arg, "-to=") {
+			// Define how long to run
+			var to string
+			if _, err := fmt.Sscanf(arg, "-to=%s", &to); err == nil {
+				do_flags = append(do_flags, fmt.Sprintf("\"set to %s\"", to))
+			} else {
+				log.Fatal("-to expects an argument of '<timesteps>[<time units>]'!")
+			}
 		} else if strings.HasPrefix(arg, "+") {
 			// All '+' arguments go directly to the simulator
 			plusargs_flag = plusargs_flag + " " + arg
@@ -579,8 +594,6 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	if gui {
 		mode_flag = " -gui"
 		do_flags = append(do_flags, "\"set gui 1\"")
-	} else {
-		do_flags = append(do_flags, "\"set gui 0\"")
 	}
 
 	if !print_output && !gui {
