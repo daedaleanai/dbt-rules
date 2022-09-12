@@ -149,7 +149,7 @@ vcd add -r *
 {{ end }}
 
 if [info exists to] {
-	run $to
+	run @$to
 } else {
 	run -all
 }
