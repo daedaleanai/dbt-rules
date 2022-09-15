@@ -133,38 +133,51 @@ proc reload {} {
 }
 
 {{ if .WaveformInit }}
-if {$gui} {
+if [info exists gui] {
 	source {{ .WaveformInit }}
 	assertion fail -action break
 }
 {{ end }}
+
+if [info exists from] {
+	run $from
+}
 
 {{ if .DumpVcd }}
 vcd file {{ .DumpVcdFile }}
 vcd add -r *
 {{ end }}
 
-run -all
+if [info exists to] {
+	run @$to
+} else {
+	run -all
+}
 
 {{ if .DumpVcd }}
 vcd flush
 {{ end }}
 
-if {$coverage} {
+if [info exists coverage] {
+	# Create coverage database
 	coverage save -assert -directive -cvg -codeall -testname $testcase $coverage_db.ucdb
+	# Optionally merge coverage databases
 	if {$main_coverage_db != $coverage_db} {
 		puts "Writing merged coverage database to [pwd]/$main_coverage_db.ucdb"
 		vcover merge -testassociated -output $main_coverage_db.ucdb $main_coverage_db.ucdb $coverage_db.ucdb
 	}
+	# Create HTML coverage report
 	vcover report -html -output ${main_coverage_db}_covhtml \
 		-testdetails -details -assert -directive -cvg -codeAll $main_coverage_db.ucdb
+	# Create textual coverage report
 	puts "Writing coverage report to [pwd]/${main_coverage_db}_cover.txt"
 	vcover report -output ${main_coverage_db}_cover.txt -flat -directive -cvg $main_coverage_db.ucdb
+	# Create textural assertion report
 	puts "Writing assertion report to [pwd]/${main_coverage_db}_cover.txt"
 	vcover report -output ${main_coverage_db}_assert.txt -flat -assert $main_coverage_db.ucdb
 }
 
-if {!$gui} {
+if ![info exists gui] {
 	quit -code [coverage attribute -name TESTSTATUS -concise]
 }
 `
@@ -191,7 +204,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 			if IsVerilog(src.String()) {
 				tool = "vlog"
 				cmd = cmd + " " + VlogFlags.Value()
-				cmd = cmd + " -suppress 2583 -svinputport=net"
+				cmd = cmd + " -suppress 2583 -svinputport=net -define SIMULATION"
 				cmd = cmd + fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
 				for _, inc := range incs {
 					cmd = cmd + fmt.Sprintf(" +incdir+%s", path.Dir(inc.Absolute()))
@@ -199,6 +212,12 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				if flags != nil {
 					if vlog_flags, ok := flags["vlog"]; ok {
 						cmd = cmd + " " + vlog_flags
+					}
+				}
+				for key, value := range rule.Defines {
+					cmd = cmd + fmt.Sprintf(" -define %s", key)
+					if value != "" {
+						cmd = cmd + fmt.Sprintf("=%s", value)
 					}
 				}
 			} else if IsVhdl(src.String()) {
@@ -383,7 +402,7 @@ func doFile(ctx core.Context, rule Simulation) {
 	params := DoFileParams{
 		Lib: rule.Lib(),
 		DumpVcd: DumpVcd.Value(),
-		DumpVcdFile: DumpVcdFile.Value(),
+		DumpVcdFile: fmt.Sprintf("%s.vcd.gz", rule.Name),
 	}
 
 	if rule.WaveformInit != nil {
@@ -480,8 +499,6 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	if Coverage.Value() {
 		coverage_flag = " -coverage -assertdebug"
 		do_flags = append(do_flags, "\"set coverage 1\"")
-	} else {
-		do_flags = append(do_flags, "\"set coverage 0\"")
 	}
 
 	// Determine the names of the coverage databases, this one will hold merged
@@ -511,6 +528,22 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 				verbosity_flag, print_output = verbosityLevelToFlag(level)
 			} else {
 				log.Fatal("-verbosity expects an argument of 'low', 'medium', 'high' or 'none'!")
+			}
+		} else if strings.HasPrefix(arg, "-from=") {
+			// Define how long to run
+			var from string
+			if _, err := fmt.Sscanf(arg, "-from=%s", &from); err == nil {
+				do_flags = append(do_flags, fmt.Sprintf("\"set from %s\"", from))
+			} else {
+				log.Fatal("-from expects an argument of '<timesteps>[<time units>]'!")
+			}
+		} else if strings.HasPrefix(arg, "-to=") {
+			// Define how long to run
+			var to string
+			if _, err := fmt.Sscanf(arg, "-to=%s", &to); err == nil {
+				do_flags = append(do_flags, fmt.Sprintf("\"set to %s\"", to))
+			} else {
+				log.Fatal("-to expects an argument of '<timesteps>[<time units>]'!")
 			}
 		} else if strings.HasPrefix(arg, "+") {
 			// All '+' arguments go directly to the simulator
@@ -561,8 +594,6 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	if gui {
 		mode_flag = " -gui"
 		do_flags = append(do_flags, "\"set gui 1\"")
-	} else {
-		do_flags = append(do_flags, "\"set gui 0\"")
 	}
 
 	if !print_output && !gui {

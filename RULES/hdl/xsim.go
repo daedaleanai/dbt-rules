@@ -74,10 +74,16 @@ func xsimCompileSrcs(ctx core.Context, rule Simulation,
 			var tool string
 			if IsVerilog(src.String()) {
 				tool = "xvlog"
-				cmd = cmd + " --sv " + XvlogFlags.Value()
+				cmd = cmd + " --sv --define SIMULATION" + XvlogFlags.Value()
 				cmd = cmd + fmt.Sprintf(" -i %s", core.SourcePath("").String())
 				for _, inc := range incs {
 					cmd = cmd + fmt.Sprintf(" -i %s", path.Dir(inc.Absolute()))
+				}
+				for key, value := range rule.Defines {
+					cmd = cmd + fmt.Sprintf(" --define %s", key)
+					if value != "" {
+						cmd = cmd + fmt.Sprintf("=%s", value)
+					}
 				}
 			} else if IsVhdl(src.String()) {
 				tool = "xvhdl"

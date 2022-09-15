@@ -56,15 +56,8 @@ var DumpVcd = core.BoolFlag{
 	Description: "Enable output of signals to a VCD file",
 }.Register()
 
-var DumpVcdFile = core.StringFlag{
-	Name:        "hdl-dump-vcd-file",
-	Description: "Path to the VCD file",
-	DefaultFn: func() string {
-		return "dump.vcd.gz"
-	},
-}.Register()
-
 type ParamMap map[string]map[string]string
+type DefineMap map[string]string
 
 type Simulation struct {
 	Name                   string
@@ -72,6 +65,7 @@ type Simulation struct {
 	Ips                    []Ip
 	Libs                   []string
 	Params                 ParamMap
+	Defines                DefineMap
 	ToolFlags              FlagMap
 	Top                    string
 	Tops                   []string
