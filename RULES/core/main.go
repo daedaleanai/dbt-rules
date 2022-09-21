@@ -40,6 +40,19 @@ type generatorOutput struct {
 
 var input = loadInput()
 
+func hasAnySelectedTargets() bool {
+	return len(input.SelectedTargets) != 0
+}
+
+func isTargetSelected(targetPath string) bool {
+	for _, path := range input.SelectedTargets {
+		if path == targetPath {
+			return true
+		}
+	}
+	return false
+}
+
 func GeneratorMain(vars map[string]interface{}) {
 	output := generatorOutput{
 		Targets: map[string]targetInfo{},
@@ -87,20 +100,14 @@ func GeneratorMain(vars map[string]interface{}) {
 		for _, targetPath := range targetPaths {
 			tgt := vars[targetPath]
 			if cov, ok := tgt.(CoverageInterface); ok {
-				var selected = false
-				for _, path := range input.SelectedTargets {
-					if path == targetPath {
-						selected = true
-						break
-					}
+				if !hasAnySelectedTargets() || isTargetSelected(targetPath) {
+					targetsForCoverage = append(targetsForCoverage, cov)
 				}
-				if !selected {
-					continue
-				}
-				targetsForCoverage = append(targetsForCoverage, cov)
 			}
 			if sa, ok := tgt.(AnalyzeInterface); ok {
-				targetsForAnalyze = append(targetsForAnalyze, sa)
+				if !hasAnySelectedTargets() || isTargetSelected(targetPath) {
+					targetsForAnalyze = append(targetsForAnalyze, sa)
+				}
 			}
 		}
 
