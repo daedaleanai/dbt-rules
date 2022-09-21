@@ -40,8 +40,18 @@ type generatorOutput struct {
 
 var input = loadInput()
 
-func hasAnySelectedTargets() bool {
-	return len(input.SelectedTargets) != 0
+func checkHasAnySelectedTargetsOtherThanReports(vars map[string]interface{}) bool {
+	for _, targetPath := range input.SelectedTargets {
+		tgt := vars[targetPath]
+		if _, ok := tgt.(coverageReportInterface); ok {
+			continue
+		}
+		if _, ok := tgt.(analyzerReportInterface); ok {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 func isTargetSelected(targetPath string) bool {
@@ -83,6 +93,8 @@ func GeneratorMain(vars map[string]interface{}) {
 		output.Targets[targetPath] = info
 	}
 
+	hasAnySelectedTargetsOtherThanReports := checkHasAnySelectedTargetsOtherThanReports(vars)
+
 	// Create build files.
 	if !input.CompletionsOnly {
 		ctx := newContext(vars)
@@ -100,12 +112,12 @@ func GeneratorMain(vars map[string]interface{}) {
 		for _, targetPath := range targetPaths {
 			tgt := vars[targetPath]
 			if cov, ok := tgt.(CoverageInterface); ok {
-				if !hasAnySelectedTargets() || isTargetSelected(targetPath) {
+				if !hasAnySelectedTargetsOtherThanReports || isTargetSelected(targetPath) {
 					targetsForCoverage = append(targetsForCoverage, cov)
 				}
 			}
 			if sa, ok := tgt.(AnalyzeInterface); ok {
-				if !hasAnySelectedTargets() || isTargetSelected(targetPath) {
+				if !hasAnySelectedTargetsOtherThanReports || isTargetSelected(targetPath) {
 					targetsForAnalyze = append(targetsForAnalyze, sa)
 				}
 			}
