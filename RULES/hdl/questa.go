@@ -119,6 +119,7 @@ type DoFileParams struct {
 	WaveformInit string
 	DumpVcd      bool
 	DumpVcdFile  string
+	CovFiles     string
 }
 
 // Do-file template
@@ -169,7 +170,15 @@ if [info exists coverage] {
 	# Create HTML coverage report
 	vcover report -html -output ${main_coverage_db}_covhtml \
 		-testdetails -details -assert -directive -cvg -codeAll $main_coverage_db.ucdb
-	# Create textual coverage report
+	# Create textual code coverage report
+	{{ if .CovFiles }}
+	vcover report -output ${main_coverage_db}_covcode.txt -srcfile={{ .CovFiles }}\
+		-codeAll $main_coverage_db.ucdb
+	{{ else }}
+	vcover report -output ${main_coverage_db}_covcode.txt\
+		-codeAll $main_coverage_db.ucdb
+	{{ end }}
+	# Create textual assertion coverage report
 	puts "Writing coverage report to [pwd]/${main_coverage_db}_cover.txt"
 	vcover report -output ${main_coverage_db}_cover.txt -flat -directive -cvg $main_coverage_db.ucdb
 	# Create textural assertion report
@@ -403,6 +412,7 @@ func doFile(ctx core.Context, rule Simulation) {
 		Lib: rule.Lib(),
 		DumpVcd: DumpVcd.Value(),
 		DumpVcdFile: fmt.Sprintf("%s.vcd.gz", rule.Name),
+		CovFiles: strings.Join(rule.ReportCovFiles(), "+"),
 	}
 
 	if rule.WaveformInit != nil {

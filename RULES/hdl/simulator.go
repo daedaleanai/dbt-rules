@@ -253,3 +253,11 @@ func Preamble(rule Simulation, testcase string) (string, string) {
 
 	return preamble, testcase
 }
+
+func (rule Simulation) ReportCovFiles() []string {
+	files := []string{}
+	for _, ip := range rule.Ips {
+		files = append(files, ip.ReportCovFiles()...)
+	}
+	return files
+}
