@@ -16,13 +16,18 @@ func IsVerilog(path string) bool {
 		strings.HasSuffix(path, ".sv")
 }
 
+func IsSystemVerilog(path string) bool {
+	return strings.HasSuffix(path, ".sv")
+}
+
 func IsVhdl(path string) bool {
 	return strings.HasSuffix(path, ".vhdl") ||
 		strings.HasSuffix(path, ".vhd")
 }
 
 func IsHeader(path string) bool {
-	return strings.HasSuffix(path, ".svh")
+	return strings.HasSuffix(path, ".vh") ||
+		strings.HasSuffix(path, ".svh")
 }
 
 func IsConstraint(path string) bool {

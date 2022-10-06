@@ -35,7 +35,8 @@ type ExportSimulatorIp struct {
 
 func (rule ExportSimulatorIp) Build(ctx core.Context) {
 	if hdl.Simulator.Value() != "questa" {
-		core.Fatal("Simulator %s not supported!", hdl.Simulator.Value())
+		return
+		//core.Fatal("Simulator %s not supported!", hdl.Simulator.Value())
 	}
 
 	simLibs := hdl.SimulatorLibDir.Value()
