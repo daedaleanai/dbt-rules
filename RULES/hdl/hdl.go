@@ -1,6 +1,8 @@
 package hdl
 
 import (
+	"reflect"
+
 	"dbt-rules/RULES/core"
 )
 
@@ -63,5 +65,19 @@ func (lib Library) ReportCovFiles() []string {
 	for _, ip := range lib.IpDeps {
 		files = append(files, ip.ReportCovFiles()...)
 	}
-	return files
+
+	// Remove duplicates
+	set := make(map[string]bool)
+	for _, file := range files {
+		set[file] = true
+	}
+
+	// Convert back to string list
+	keys := reflect.ValueOf(set).MapKeys()
+	str_keys := make([]string, len(keys))
+	for i := 0; i < len(keys); i++ {
+		str_keys[i] = keys[i].String()
+	}
+
+	return str_keys
 }
