@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"reflect"
 	"strings"
 )
 
@@ -75,6 +76,7 @@ type Simulation struct {
 	TestCaseElf            core.Path
 	TestCasesDir           core.Path
 	WaveformInit           core.Path
+	ReportCovIps           []Ip
 }
 
 // Lib returns the standard library name defined for this rule.
@@ -201,6 +203,31 @@ func (rule Simulation) Description() string {
 	return description
 }
 
+func (rule Simulation) ReportCovFiles() []string {
+	files := []string{}
+
+	for _, ip := range rule.ReportCovIps {
+		for _, src := range ip.Sources() {
+			files = append(files, src.String())
+		}
+	}
+
+	// Remove duplicates
+	set := make(map[string]bool)
+	for _, file := range files {
+		set[file] = true
+	}
+
+	// Convert back to string list
+	keys := reflect.ValueOf(set).MapKeys()
+	str_keys := make([]string, len(keys))
+	for i := 0; i < len(keys); i++ {
+		str_keys[i] = keys[i].String()
+	}
+
+	return str_keys
+}
+
 // Preamble creates a preamble for the simulation command for the purpose of generating
 // a testcase.
 func Preamble(rule Simulation, testcase string) (string, string) {
@@ -252,12 +279,4 @@ func Preamble(rule Simulation, testcase string) (string, string) {
 	}
 
 	return preamble, testcase
-}
-
-func (rule Simulation) ReportCovFiles() []string {
-	files := []string{}
-	for _, ip := range rule.Ips {
-		files = append(files, ip.ReportCovFiles()...)
-	}
-	return files
 }

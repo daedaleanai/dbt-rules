@@ -1,8 +1,6 @@
 package hdl
 
 import (
-	"reflect"
-
 	"dbt-rules/RULES/core"
 )
 
@@ -27,7 +25,6 @@ type Ip interface {
 	Data() []core.Path
 	Ips() []Ip
 	Flags() FlagMap
-	ReportCovFiles() []string
 }
 
 type Library struct {
@@ -36,7 +33,6 @@ type Library struct {
 	DataFiles []core.Path
 	IpDeps    []Ip
 	ToolFlags FlagMap
-	ReportCov bool
 }
 
 func (lib Library) Sources() []core.Path {
@@ -53,31 +49,4 @@ func (lib Library) Ips() []Ip {
 
 func (lib Library) Flags() FlagMap {
 	return lib.ToolFlags
-}
-
-func (lib Library) ReportCovFiles() []string {
-	files := []string{}
-	if lib.ReportCov {
-		for _, src := range lib.Srcs {
-			files = append(files, src.Absolute())
-		}
-	}
-	for _, ip := range lib.IpDeps {
-		files = append(files, ip.ReportCovFiles()...)
-	}
-
-	// Remove duplicates
-	set := make(map[string]bool)
-	for _, file := range files {
-		set[file] = true
-	}
-
-	// Convert back to string list
-	keys := reflect.ValueOf(set).MapKeys()
-	str_keys := make([]string, len(keys))
-	for i := 0; i < len(keys); i++ {
-		str_keys[i] = keys[i].String()
-	}
-
-	return str_keys
 }
