@@ -105,17 +105,6 @@ func addToPrjFile(ctx core.Context, prj prjFile, ips []Ip, srcs []core.Path) prj
 				prj.Incs = append(prj.Incs, new_path)
 				xsim_rules[new_path] = true
 			}
-			/*
-			gotit := false
-			for _, old_path := range prj.Incs {
-				if new_path == old_path {
-					gotit = true
-					break
-				}
-			}
-			if !gotit {
-			}
-			*/
 		} else if IsRtl(src.String()) {
 			if xsim_rules[src.String()] {
 				continue
@@ -354,7 +343,6 @@ func xsimCmd(rule Simulation, args []string, gui bool, testcase string, params s
 	xsim_cmd := []string{
 		"xsim",
 		"--log", log_file.String(),
-		"--wdb", wdb_file.String(),
 		"--tclbatch", do_file.String(),
 		XsimFlags.Value()}
 	verbosity_level := "none"
@@ -428,6 +416,11 @@ func xsimCmd(rule Simulation, args []string, gui bool, testcase string, params s
 		} else {
 			testcase = "default"
 		}
+	}
+
+	// Optionally specify waveform data file
+	if gui || XsimDumpWdb.Value() {
+		xsim_cmd = append(xsim_cmd, "--wdb", wdb_file.String())
 	}
 
 	cmd_postamble := ""
