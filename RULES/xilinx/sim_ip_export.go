@@ -34,8 +34,10 @@ type ExportSimulatorIp struct {
 }
 
 func (rule ExportSimulatorIp) Build(ctx core.Context) {
-	if hdl.Simulator.Value() != "questa" {
-		core.Fatal("Simulator %s not supported!", hdl.Simulator.Value())
+	if hdl.Simulator.Value() == "xsim" {
+		// The simulation libraries do not have to be compiled for the xsim simulator
+		// as they are part of the tool installation directory
+		return
 	}
 
 	simLibs := hdl.SimulatorLibDir.Value()

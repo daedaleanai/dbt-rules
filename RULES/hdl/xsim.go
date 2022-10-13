@@ -10,31 +10,22 @@ import (
 	"dbt-rules/RULES/core"
 )
 
-// XvlogFlags enables the user to specify additional flags for the 'vlog' command.
-var XvlogFlags = core.StringFlag{
-	Name: "xsim-xvlog-flags",
-	DefaultFn: func() string {
-		return ""
+// XsimDumpWdb enables the user to dump all signals to a .wdb file
+var XsimDumpWdb = core.BoolFlag{
+	Name: "xsim-dump-wdb",
+	DefaultFn: func() bool {
+		return false
 	},
-	Description: "Extra flags for the xvlog command",
+	Description: "Enable output of signals to a WDB file",
 }.Register()
 
-// XvhdlFlags enables the user to specify additional flags for the 'vcom' command.
-var XvhdlFlags = core.StringFlag{
-	Name: "xsim-xvhdl-flags",
+// XelabFlags enables the user to specify additional flags for the 'xelab' command.
+var XelabFlags = core.StringFlag{
+	Name: "xsim-xelab-flags",
 	DefaultFn: func() string {
 		return ""
 	},
-	Description: "Extra flags for the xvhdl command",
-}.Register()
-
-// XsimFlags enables the user to specify additional flags for the 'vsim' command.
-var XsimFlags = core.StringFlag{
-	Name: "xsim-xsim-flags",
-	DefaultFn: func() string {
-		return ""
-	},
-	Description: "Extra flags for the xsim command",
+	Description: "Extra flags for the xelab command",
 }.Register()
 
 // XelabDebug enables the user to control the accessibility in the compiled design for
@@ -48,128 +39,195 @@ var XelabDebug = core.StringFlag{
 	AllowedValues: []string{"line", "wave", "drivers", "readers", "xlibs", "all", "typical", "subprogram", "off"},
 }.Register()
 
+// XsimFlags enables the user to specify additional flags for the 'xsim' command.
+var XsimFlags = core.StringFlag{
+	Name: "xsim-xsim-flags",
+	DefaultFn: func() string {
+		return ""
+	},
+	Description: "Extra flags for the xsim command",
+}.Register()
+
 // xsim_rules holds a map of all defined rules to prevent defining the same rule
 // multiple times.
-var xsim_rules = make(map[string]bool)
+var xsim_rules map[string]bool
 
-// xsimCompileSrcs compiles a list of sources using the specified context ctx, rule,
-// dependencies and include paths. It returns the resulting dependencies and include paths
-// that result from compiling the source files.
-func xsimCompileSrcs(ctx core.Context, rule Simulation,
-	deps []core.Path, incs []core.Path, srcs []core.Path) ([]core.Path, []core.Path) {
+// Parameters of the do-file
+type tclFileParams struct {
+	DumpWdb      bool
+	DumpVcd      bool
+	DumpVcdFile  string
+}
+
+// Do-file template
+const xsim_tcl_file_template = `
+if [info exists ::env(from)] {
+	run $::env(from)
+}
+
+{{ if .DumpVcd }}
+open_vcd {{ .DumpVcdFile }}
+log_vcd [get_objects -r]
+{{ end }}
+
+{{ if .DumpWdb }}
+log_wave [get_objects -r]
+{{ end }}
+
+if [info exists ::env(duration)] {
+	run $::env(duration)
+} else {
+	run -all
+}
+
+{{ if .DumpVcd }}
+close_vcd
+{{ end }}
+`
+
+type prjFile struct {
+	Rule   Simulation
+	Macros []string
+	Incs   []string
+	Deps   []core.Path
+	Data   []string
+}
+
+func addToPrjFile(ctx core.Context, prj prjFile, ips []Ip, srcs []core.Path) prjFile {
+	for _, ip := range ips {
+		prj = addToPrjFile(ctx, prj, ip.Ips(), ip.Sources())
+	}
+
 	for _, src := range srcs {
-		if IsRtl(src.String()) {
-			// log will point to the log file to be generated when compiling the code
-			log := rule.Path().WithSuffix("/" + src.Relative() + ".log")
-
-			// If we already have a rule for this file, skip it.
-			if xsim_rules[log.String()] {
+		if IsHeader(src.String()) {
+			new_path := path.Dir(src.Absolute())
+			if !xsim_rules[new_path] {
+				prj.Incs = append(prj.Incs, new_path)
+				xsim_rules[new_path] = true
+			}
+		} else if IsRtl(src.String()) {
+			if xsim_rules[src.String()] {
 				continue
 			}
 
-			// Holds common flags for both 'vlog' and 'vcom' commands
-			cmd := fmt.Sprintf("-work %s --log %s", strings.ToLower(rule.Lib()), log.String())
-
-			// tool will point to the tool to execute (also used for logging below)
-			var tool string
-			if IsVerilog(src.String()) {
-				tool = "xvlog"
-				cmd = cmd + " --sv --define SIMULATION" + XvlogFlags.Value()
-				cmd = cmd + fmt.Sprintf(" -i %s", core.SourcePath("").String())
-				for _, inc := range incs {
-					cmd = cmd + fmt.Sprintf(" -i %s", path.Dir(inc.Absolute()))
-				}
-				for key, value := range rule.Defines {
-					cmd = cmd + fmt.Sprintf(" --define %s", key)
-					if value != "" {
-						cmd = cmd + fmt.Sprintf("=%s", value)
-					}
-				}
+			prefix := ""
+			if IsSystemVerilog(src.String()) {
+				prefix = "sv"
+			} else if IsVerilog(src.String()) {
+				prefix  = "verilog"
 			} else if IsVhdl(src.String()) {
-				tool = "xvhdl"
-				cmd = cmd + " " + XvhdlFlags.Value()
+				prefix  = "vhdl"
 			}
 
-			// Remove the log file if the command fails to ensure we can recompile it
-			cmd = tool + " " + cmd + " " + src.String() + " > /dev/null" +
-				" || { cat " + log.String() + "; rm " + log.String() + "; exit 1; }"
+			entry := fmt.Sprintf("%s %s %s", prefix, strings.ToLower(prj.Rule.Lib()), src.String())
 
-			// Add the source file to the dependencies
-			deps = append(deps, src)
-
-			// Add the compilation command as a build step with the log file as the
-			// generated output
-			ctx.AddBuildStep(core.BuildStep{
-				Out:   log,
-				Ins:   deps,
-				Cmd:   cmd,
-				Descr: fmt.Sprintf("%s: %s", tool, src.Relative()),
-			})
-
-			// Add the log file to the dependencies of the next files
-			deps = append(deps, log)
-
-			// Note down the created rule
-			xsim_rules[log.String()] = true
-		} else {
-			// We handle header files separately from other source files
-			if IsHeader(src.String()) {
-				incs = append(incs, src)
+			for _, inc_path := range prj.Incs {
+				entry = entry + " -i " + inc_path
 			}
-			// Add the file to the dependencies of the next one (including header files)
-			deps = append(deps, src)
+
+			if len(prj.Macros) > 0 {
+				entry = entry + " -d " + strings.Join(prj.Macros, " -d ")
+			}
+
+			prj.Data = append(prj.Data, entry)
+
+			xsim_rules[src.String()] = true
 		}
+
+		prj.Deps = append(prj.Deps, src)
 	}
 
-	return deps, incs
+	return prj
 }
 
-// xsimCompileIp compiles the IP dependencies and the source files and an IP.
-func xsimCompileIp(ctx core.Context, rule Simulation, ip Ip,
-	deps []core.Path, incs []core.Path) ([]core.Path, []core.Path) {
-	for _, sub_ip := range ip.Ips() {
-		deps, incs = xsimCompileIp(ctx, rule, sub_ip, deps, incs)
-	}
-	deps, incs = xsimCompileSrcs(ctx, rule, deps, incs, ip.Sources())
+func createPrjFile(ctx core.Context, rule Simulation) core.Path {
+	// Clear the rules map
+	xsim_rules = make(map[string]bool)
 
-	return deps, incs
+	// Setup macros
+	macros := []string{"SIMULATION"}
+	for key, value := range rule.Defines {
+		macro := key
+		if value != "" {
+			macro = fmt.Sprintf("%s=%s", key, value)
+		}
+		macros = append(macros, macro)
+	}
+	prjFilePath := rule.Path().WithSuffix("/" + "xsim.prj")
+	prjFileContents := addToPrjFile(
+		ctx,
+		prjFile{
+			Rule: rule,
+			Macros: macros,
+			Incs: []string{core.SourcePath("").String()},
+		}, rule.Ips, rule.Srcs)
+	ctx.AddBuildStep(core.BuildStep{
+		Out:   prjFilePath,
+		Ins:   prjFileContents.Deps,
+		Data:  strings.Join(prjFileContents.Data, "\n"),
+		Descr: fmt.Sprintf("xsim project: %s", prjFilePath.Relative()),
+	})
+
+	return prjFilePath
 }
 
-// xsimCompile compiles the IP dependencies and source files of a simulation rule.
-func xsimCompile(ctx core.Context, rule Simulation) []core.Path {
-	incs := []core.Path{}
-	deps := []core.Path{}
-
-	for _, ip := range rule.Ips {
-		deps, incs = xsimCompileIp(ctx, rule, ip, deps, incs)
+// Create a simulation script
+func tclFile(ctx core.Context, rule Simulation) {
+	// Do-file script
+	params := tclFileParams{
+		DumpWdb: XsimDumpWdb.Value(),
+		DumpVcd: DumpVcd.Value(),
+		DumpVcdFile: rule.Path().WithSuffix(fmt.Sprintf("/%s.vcd", rule.Name)).String(),
 	}
-	deps, incs = xsimCompileSrcs(ctx, rule, deps, incs, rule.Srcs)
 
-	return deps
+	tclFile := rule.Path().WithSuffix("/xsim.tcl")
+	ctx.AddBuildStep(core.BuildStep{
+		Out:   tclFile,
+		Data:  core.CompileTemplate(xsim_tcl_file_template, "tcl", params),
+		Descr: fmt.Sprintf("xsim: %s", tclFile.Relative()),
+	})
 }
 
 // elaborate creates and optimized version of the design optionally including
 // coverage recording functionality. The optimized design unit can then conveniently
 // be simulated using 'xsim'.
-func elaborate(ctx core.Context, rule Simulation, deps []core.Path) {
-	top := "board"
+func elaborate(ctx core.Context, rule Simulation, prj_file core.Path) {
+	xelab_base_cmd := []string{
+		"xelab",
+		"--timescale",
+		"1ns/1ps",
+		"--debug", XelabDebug.Value(),
+		"--prj", prj_file.String(),
+		XelabFlags.Value(),
+	}
+
+	for _, lib := range rule.Libs {
+		xelab_base_cmd = append(xelab_base_cmd, "--lib", lib)
+	}
+
+	tops := []string{"board"}
 	if rule.Top != "" {
-		top = rule.Top
+		tops = []string{rule.Top}
+	} else if len(rule.Tops) > 0 {
+		tops = rule.Tops
+	}
+
+	for _, top := range tops {
+		xelab_base_cmd = append(xelab_base_cmd, strings.ToLower(rule.Lib()) + "." + top)
 	}
 
 	log_file_suffix := "xelab.log"
-
 	log_files := []core.OutPath{}
 	targets := []string{}
 	params := []string{}
 	if rule.Params != nil {
 		for key, _ := range rule.Params {
-			log_files = append(log_files, rule.Path().WithSuffix("/"+key+"_"+log_file_suffix))
-			targets = append(targets, rule.Name+key)
+			log_files = append(log_files, rule.Path().WithSuffix("/" + key + "_" + log_file_suffix))
+			targets = append(targets, rule.Name + "_" + key)
 			params = append(params, key)
 		}
 	} else {
-		log_files = append(log_files, rule.Path().WithSuffix("/"+log_file_suffix))
+		log_files = append(log_files, rule.Path().WithSuffix("/" + log_file_suffix))
 		targets = append(targets, rule.Name)
 		params = append(params, "")
 	}
@@ -179,13 +237,8 @@ func elaborate(ctx core.Context, rule Simulation, deps []core.Path) {
 		target := targets[i]
 		param_set := params[i]
 
-		// Skip if we already have a rule
-		if xsim_rules[log_file.String()] {
-			return
-		}
-
-		cmd := fmt.Sprintf("xelab --timescale 1ns/1ps --debug %s --log %s %s.%s -s %s",
-			XelabDebug.Value(), log_file.String(), strings.ToLower(rule.Lib()), top, target)
+		// Build up command using base command plus additional variable arguments
+		xelab_cmd := append(xelab_base_cmd, "--log", log_file.String(), "--snapshot", target)
 
 		// Set up parameters
 		if param_set != "" {
@@ -193,7 +246,7 @@ func elaborate(ctx core.Context, rule Simulation, deps []core.Path) {
 			if params, ok := rule.Params[param_set]; ok {
 				// Add parameters for all generics
 				for param, value := range params {
-					cmd = fmt.Sprintf("%s -generic_top \"%s=%s\"", cmd, param, value)
+					xelab_cmd = append(xelab_cmd, "-generic_top", fmt.Sprintf("\"%s=%s\"", param, value))
 				}
 			} else {
 				log.Fatal(fmt.Sprintf("parameter set '%s' not defined for Simulation target '%s'!",
@@ -201,10 +254,11 @@ func elaborate(ctx core.Context, rule Simulation, deps []core.Path) {
 			}
 		}
 
-		cmd = cmd + " > /dev/null || { cat " + log_file.String() +
+		cmd := strings.Join(xelab_cmd, " ") + " > /dev/null || { cat " + log_file.String() +
 			"; rm " + log_file.String() + "; exit 1; }"
 
 		// Hack: Add testcase generator as an optional dependency
+		deps := []core.Path{prj_file}
 		if rule.TestCaseGenerator != nil {
 			deps = append(deps, rule.TestCaseGenerator)
 		}
@@ -214,22 +268,21 @@ func elaborate(ctx core.Context, rule Simulation, deps []core.Path) {
 			Out:   log_file,
 			Ins:   deps,
 			Cmd:   cmd,
-			Descr: fmt.Sprintf("xelab: %s %s", rule.Lib()+"."+top, target),
+			Descr: fmt.Sprintf("xelab: %s %s", strings.Join(tops, " "), target),
 		})
-
-		// Note that we created this rule
-		xsim_rules[log_file.String()] = true
 	}
 }
 
 // BuildXsim will compile and elaborate the source and IPs associated with the given
 // rule.
 func BuildXsim(ctx core.Context, rule Simulation) {
-	// compile the code
-	deps := xsimCompile(ctx, rule)
+	prj := createPrjFile(ctx, rule)
 
-	// elaborate the code
-	elaborate(ctx, rule, deps)
+	// compile and elaborate the code
+	elaborate(ctx, rule, prj)
+
+	// Create simulation script
+	tclFile(ctx, rule)
 }
 
 // xsimVerbosityLevelToFlag takes a verbosity level of none, low, medium or high and
@@ -258,58 +311,84 @@ func xsimVerbosityLevelToFlag(level string) (string, bool) {
 	return verbosity_flag, print_output
 }
 
-// xsimCmd will create a command for starting 'vsim' on the compiled and optimized design with flags
+// xsimCmd will create a command for starting 'xsim' on the compiled and optimized design with flags
 // set in accordance with what is specified on the command line.
 func xsimCmd(rule Simulation, args []string, gui bool, testcase string, params string) string {
-	// Prefix the vsim command with this
+	// Prefix the xsim command with this
 	cmd_preamble := ""
 
-	// Default log file
-	log_file_suffix := "xsim.log"
+	// Default log and wdb file names
+	file_suffix := ""
+	file_spacer := ""
 	if testcase != "" {
-		log_file_suffix = testcase + "_" + log_file_suffix
+		file_suffix = testcase
+		file_spacer = "_"
 	}
 	if params != "" {
-		log_file_suffix = params + "_" + log_file_suffix
+		if file_suffix != "" {
+			file_suffix = "_" + file_suffix
+		}
+		file_suffix = params + file_suffix
+		file_spacer = "_"
 	}
-	log_file := rule.Path().WithSuffix("/" + log_file_suffix)
+
+	log_file := rule.Path().WithSuffix("/" + file_suffix + file_spacer + "xsim.log")
+	wdb_file := rule.Path().WithSuffix("/" + file_suffix + ".wdb")
+
+	// Script to execute
+	do_file := rule.Path().WithSuffix("/" + "xsim.tcl")
 
 	// Default flag values
-	vsim_flags := " --onfinish quit --log " + log_file.String()
-	seed_flag := " --sv_seed 1"
-	verbosity_flag := " --testplusarg verbosity=DVM_VERB_NONE"
-	mode_flag := ""
-	plusargs_flag := ""
-
-	// Collect do-files here
-	var do_flags []string
-
-	// Turn off output unless verbosity is activated
-	print_output := false
+	seed := int64(1)
+	xsim_cmd := []string{
+		"xsim",
+		"--log", log_file.String(),
+		"--tclbatch", do_file.String(),
+		XsimFlags.Value()}
+	verbosity_level := "none"
 
 	// Parse additional arguments
 	for _, arg := range args {
 		if strings.HasPrefix(arg, "-seed=") {
 			// Define simulator seed
-			var seed int64
-			if _, err := fmt.Sscanf(arg, "-seed=%d", &seed); err == nil {
-				seed_flag = fmt.Sprintf(" --sv_seed %d", seed)
+			var seed_flag int64
+			if _, err := fmt.Sscanf(arg, "-seed=%d", &seed_flag); err == nil {
+				seed = seed_flag
 			} else {
 				log.Fatal("-seed expects an integer argument!")
+			}
+		} else if strings.HasPrefix(arg, "-from=") {
+			// Define how long to run
+			var from string
+			if _, err := fmt.Sscanf(arg, "-from=%s", &from); err == nil {
+				xsim_cmd = append([]string{fmt.Sprintf("export from=%s &&", from)}, xsim_cmd...)
+			} else {
+				log.Fatal("-from expects an argument of '<timesteps>[<time units>]'!")
+			}
+		} else if strings.HasPrefix(arg, "-duration=") {
+			// Define how long to run
+			var to string
+			if _, err := fmt.Sscanf(arg, "-duration=%s", &to); err == nil {
+				xsim_cmd = append([]string{fmt.Sprintf("export duration=%s &&", to)}, xsim_cmd...)
+			} else {
+				log.Fatal("-duration expects an argument of '<timesteps>[<time units>]'!")
 			}
 		} else if strings.HasPrefix(arg, "-verbosity=") {
 			// Define verbosity level
 			var level string
 			if _, err := fmt.Sscanf(arg, "-verbosity=%s", &level); err == nil {
-				verbosity_flag, print_output = xsimVerbosityLevelToFlag(level)
+				verbosity_level = level
 			} else {
 				log.Fatal("-verbosity expects an argument of 'low', 'medium', 'high' or 'none'!")
 			}
 		} else if strings.HasPrefix(arg, "+") {
 			// All '+' arguments go directly to the simulator
-			plusargs_flag = plusargs_flag + " --testplusarg " + strings.TrimPrefix(arg, "+")
+			xsim_cmd = append(xsim_cmd, "--testplusarg", strings.TrimPrefix(arg, "+"))
 		}
 	}
+
+	// Add seed flag
+	xsim_cmd = append(xsim_cmd, "--sv_seed", fmt.Sprintf("%d", seed))
 
 	// Create optional command preamble
 	cmd_preamble, testcase = Preamble(rule, testcase)
@@ -339,14 +418,19 @@ func xsimCmd(rule Simulation, args []string, gui bool, testcase string, params s
 		}
 	}
 
+	// Optionally specify waveform data file
+	if gui || XsimDumpWdb.Value() {
+		xsim_cmd = append(xsim_cmd, "--wdb", wdb_file.String())
+	}
+
 	cmd_postamble := ""
 	if gui {
-		mode_flag = " --gui"
-		if rule.WaveformInit != nil {
-			do_flags = append(do_flags, rule.WaveformInit.String())
+		xsim_cmd = append(xsim_cmd, "--gui")
+		if rule.WaveformInit != nil && strings.HasSuffix(rule.WaveformInit.String(), ".tcl") {
+			xsim_cmd = append(xsim_cmd, "--tclbatch", rule.WaveformInit.String())
 		}
 	} else {
-		mode_flag = " --runall"
+		xsim_cmd = append(xsim_cmd, "--onfinish quit")
 		cmd_newline := ":"
 		if cmd_echo != "" {
 			cmd_newline = "echo"
@@ -355,12 +439,16 @@ func xsimCmd(rule Simulation, args []string, gui bool, testcase string, params s
 		cmd_postamble = fmt.Sprintf("|| { %s; cat %s; exit 1; }", cmd_newline, log_file.String())
 	}
 
-	vsim_flags = vsim_flags + mode_flag + seed_flag +
-		verbosity_flag + plusargs_flag + XsimFlags.Value()
+	// Convert verbosity flag to string and append to command
+	verbosity_flag, print_output := xsimVerbosityLevelToFlag(verbosity_level)
+	xsim_cmd = append(xsim_cmd, verbosity_flag)
 
-	for _, do_flag := range do_flags {
-		vsim_flags = vsim_flags + " --tclbatch " + do_flag
+	//Finally, add the snapshot to the command as the last element
+	snapshot := rule.Name
+	if params != "" {
+		snapshot = snapshot + "_" + params
 	}
+	xsim_cmd = append(xsim_cmd, snapshot)
 
 	// Using this part of the command we send the stdout into a black hole to
 	// keep the output clean
@@ -369,9 +457,9 @@ func xsimCmd(rule Simulation, args []string, gui bool, testcase string, params s
 		cmd_devnull = "> /dev/null"
 	}
 
-	cmd := fmt.Sprintf("{ echo -n %s && xsim %s %s %s && "+
-		"{ { ! grep -q FAILURE %s; } && echo PASS; } }",
-		cmd_echo, vsim_flags, rule.Name+params, cmd_devnull, log_file.String())
+	cmd := fmt.Sprintf("{ echo -n %s && %s %s && "+
+		"{ { ! grep -q FAIL %s; } && echo PASS; } }",
+		cmd_echo, strings.Join(xsim_cmd, " "), cmd_devnull, log_file.String())
 	if cmd_preamble == "" {
 		cmd = cmd + " " + cmd_postamble
 	} else {
@@ -384,7 +472,7 @@ func xsimCmd(rule Simulation, args []string, gui bool, testcase string, params s
 	return cmd
 }
 
-// simulateXsim will create a command to start 'vsim' on the compiled design
+// simulateXsim will create a command to start 'xsim' on the compiled design
 // with flags set in accordance with what is specified on the command line. It will
 // optionally build a chain of commands in case the rule has parameters, but
 // no parameters are specified on the command line
