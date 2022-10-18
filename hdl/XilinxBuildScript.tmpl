@@ -11,6 +11,7 @@ set out_path "{{ .ReportDir }}/\$current_time"
 
 exec mkdir -p \$out_path
 exec mkdir -p \$out_path/checkpoints
+exec mkdir -p \$out_path/snapshot
 
 proc main {out_path} {
 
@@ -21,9 +22,9 @@ proc main {out_path} {
 	set_part "{{ .PartName }}"
 	set_property "target_language"    "Verilog"        [current_project]
 
-	{{ if not .OutOfContext }}
+	{{- if not .OutOfContext }}
 		set_property "board_part"         "{{ .BoardName}}"       [current_project]
-	{{ end }}
+	{{- end }}
 
 	# Number of timing paths to report
 	set npaths 10
@@ -62,44 +63,82 @@ proc main {out_path} {
 
 	report_ip_status
 
-	{{ range .Rtls }}
-	    {{ if hasSuffix .String ".vhd" }}
+	exec mkdir -p \$out_path/snapshot/rtl
+	{{- range .Rtls }}
+	    {{- if hasSuffix .String ".vhd" }}
 		read_vhdl "{{ . }}"
-	    {{ else }}
+	    {{- else }}
 		read_verilog -sv "{{ . }}"
-	    {{ end }}
-	{{ end }}
+	    {{- end }}
+	    exec cp {{ . }} \$out_path/snapshot/rtl
+	{{- end }}
 
 	puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Reading constraints..."
-	{{ range .Constrs }}
+	exec mkdir -p \$out_path/snapshot/constraints
+	{{- range .Constrs }}
 		read_xdc {{ if $outOfContext }} -mode out_of_context {{ end }} "{{ . }}"
-	{{ end }}
+	        exec cp {{ . }} \$out_path/snapshot/constraints
+	{{- end }}
 
+	exec mkdir -p \$out_path/snapshot/pre_synth
+	{{ range .PreSynthTcl -}}
+		puts "INFO: Running pre-synth tcl scripts"
+		source {{ . }}
+	        exec cp {{ . }} \$out_path/snapshot/pre_synth
+	{{- end }}
 
 	puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Running synthesis..."
-	synth_design -top {{ .Name }} -include_dirs {{ .IncDir }} {{ if .OutOfContext }} -mode out_of_context {{ end }} -flatten_hierarchy {{ .FlattenStrategy }} > \$out_path/synth.log
+	synth_design -top {{ .Name }} -include_dirs {{ .IncDir }} {{ if .OutOfContext }} -mode out_of_context {{ end }} -flatten_hierarchy {{ .FlattenStrategy }} {{ range .SynthOptions }} {{ . }} {{ end }} > \$out_path/synth.log
 	write_checkpoint -force \$out_path/checkpoints/post_synth
 	exec mkdir -p \$out_path/post_synth
 	generate_reports \$out_path/post_synth
 
-	opt_design > \$out_path/opt.log
+	exec mkdir -p \$out_path/snapshot/pre_opt
+	{{ range .PreOptTcl -}}
+		puts "INFO: Running pre-opt tcl scripts"
+		source {{ . }}
+	        exec cp {{ . }} \$out_path/snapshot/pre_opt
+	{{- end }}
+
+	opt_design {{  range .OptOptions }} {{ . }} {{ end }} > \$out_path/opt.log
 	write_checkpoint -force \$out_path/checkpoints/post_opt
 	exec mkdir -p \$out_path/post_opt
 	generate_reports \$out_path/post_opt
 
+	exec mkdir -p \$out_path/snapshot/pre_place
+	{{ range .PrePlaceTcl -}}
+		puts "INFO: Running pre-place tcl scripts"
+		source {{ . }}
+	        exec cp {{ . }} \$out_path/snapshot/pre_place
+	{{- end }}
+
 	puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Running placement..."
-	place_design > \$out_path/place.log
+	place_design {{ range .PlaceOptions }} {{ . }} {{ end }} > \$out_path/place.log
 	write_checkpoint -force \$out_path/checkpoints/post_place
 	exec mkdir -p \$out_path/post_place
 	generate_reports \$out_path/post_place
 
-	phys_opt_design > \$out_path/phys_opt.log
+	exec mkdir -p \$out_path/snapshot/pre_phys_opt
+	{{ range .PrePhysOptTcl -}}
+		puts "INFO: Running pre-phys_opt tcl scripts"
+		source {{ . }}
+	        exec cp {{ . }} \$out_path/snapshot/pre_phys_opt
+	{{- end }}
+
+	phys_opt_design {{ range .PhysOptOptions }} {{ . }} {{ end }} > \$out_path/phys_opt.log
 	write_checkpoint -force \$out_path/checkpoints/post_phys_opt
 	exec mkdir -p \$out_path/post_phys_opt
 	generate_reports \$out_path/post_phys_opt
 
+	exec mkdir -p \$out_path/snapshot/pre_route
+	{{ range .PreRouteTcl -}}
+		puts "INFO: Running pre-route tcl scripts"
+		source {{ . }}
+	        exec cp {{ . }} \$out_path/snapshot/pre_route
+	{{- end }}
+
 	puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Running routing..."
-	route_design > \$out_path/route.log
+	route_design {{ range .RouteOptions }} {{ . }} {{ end }} > \$out_path/route.log
 	write_checkpoint -force \$out_path/checkpoints/post_route
 	exec mkdir -p \$out_path/post_route
 	generate_reports \$out_path/post_route

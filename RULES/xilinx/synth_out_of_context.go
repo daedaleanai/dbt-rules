@@ -32,6 +32,36 @@ type SynthOutOfContext struct {
 
 	// List of directories with board definitions
 	BoardFiles []core.Path
+
+	// TCL to run pre-synthesis
+	PreSynthTcl []core.Path
+
+	// Additional synth_design options
+	SynthOptions []string
+
+	// TCL scripts to run pre-optimization
+	PreOptTcl []core.Path
+
+	// Additional opt_design options
+	OptOptions []string
+
+	// TCL scripts to run pre-placement
+	PrePlaceTcl []core.Path
+
+	// Additional place_design options
+	PlaceOptions []string
+
+	// TCL scripts to run pre-phys_opt
+	PrePhysOptTcl []core.Path
+
+	// Additional phys_opt options
+	PhysOptOptions []string
+
+	// TCL scripts to run pre-phys_opt
+	PreRouteTcl []core.Path
+
+	// Additional route_design options
+	RouteOptions []string
 }
 
 func (rule SynthOutOfContext) Build(ctx core.Context) {
@@ -104,6 +134,16 @@ func (rule SynthOutOfContext) Build(ctx core.Context) {
 		Ips:             ips,
 		Rtls:            rtls,
 		Constrs:         constrs,
+		PreSynthTcl:     rule.PreSynthTcl,
+		PreOptTcl:       rule.PreOptTcl,
+		PrePlaceTcl:     rule.PrePlaceTcl,
+		PrePhysOptTcl:   rule.PrePhysOptTcl,
+		PreRouteTcl:     rule.PreRouteTcl,
+		SynthOptions:    rule.SynthOptions,
+		OptOptions:      rule.OptOptions,
+		PlaceOptions:    rule.PlaceOptions,
+		PhysOptOptions:  rule.PhysOptOptions,
+		RouteOptions:    rule.RouteOptions,
 		ReportDir:       outReportDir,
 		FlattenStrategy: SynthFlattenStrategy.Value(),
 	}
