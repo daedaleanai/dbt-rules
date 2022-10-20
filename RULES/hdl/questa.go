@@ -272,7 +272,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 			if IsHeader(src.String()) {
 				foundit := false
 				for _, value := range incs {
-					if value == src {
+					if value.String() == src.String() {
 						foundit = true
 						break
 					}
