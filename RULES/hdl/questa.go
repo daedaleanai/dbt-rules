@@ -195,7 +195,7 @@ if ![info exists gui] {
 // dependencies and include paths. It returns the resulting dependencies and include paths
 // that result from compiling the source files.
 func compileSrcs(ctx core.Context, rule Simulation,
-	deps []core.Path, incs []core.Path, srcs []core.Path, flags FlagMap) ([]core.Path, []core.Path) {
+	deps []core.Path, incs []string, srcs []core.Path, flags FlagMap) ([]core.Path, []string) {
 	for _, src := range srcs {
 		if IsRtl(src.String()) {
 			// log will point to the log file to be generated when compiling the code
@@ -216,7 +216,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				cmd = cmd + " -suppress 2583 -svinputport=net -define SIMULATION"
 				cmd = cmd + fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
 				for _, inc := range incs {
-					cmd = cmd + fmt.Sprintf(" +incdir+%s", path.Dir(inc.Absolute()))
+					cmd = cmd + fmt.Sprintf(" +incdir+%s", inc)
 				}
 				if flags != nil {
 					if vlog_flags, ok := flags["vlog"]; ok {
@@ -271,15 +271,16 @@ func compileSrcs(ctx core.Context, rule Simulation,
 			// We handle header files separately from other source files
 			if IsHeader(src.String()) {
 				foundit := false
-				for _, value := range incs {
-					if value.String() == src.String() {
+				dir := path.Dir(src.Absolute())
+				for _, inc := range incs {
+					if inc == dir {
 						foundit = true
 						break
 					}
 				}
 
 				if !foundit {
-					incs = append(incs, src)
+					incs = append(incs, dir)
 				}
 			}
 
@@ -293,7 +294,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 
 // compileIp compiles the IP dependencies and the source files and an IP.
 func compileIp(ctx core.Context, rule Simulation, ip Ip,
-	deps []core.Path, incs []core.Path) ([]core.Path, []core.Path) {
+	deps []core.Path, incs []string) ([]core.Path, []string) {
 	for _, sub_ip := range ip.Ips() {
 		deps, incs = compileIp(ctx, rule, sub_ip, deps, incs)
 	}
@@ -304,8 +305,8 @@ func compileIp(ctx core.Context, rule Simulation, ip Ip,
 
 // compile compiles the IP dependencies and source files of a simulation rule.
 func compile(ctx core.Context, rule Simulation) []core.Path {
-	incs := []core.Path{}
 	deps := []core.Path{}
+	incs := []string{}
 
 	for _, ip := range rule.Ips {
 		deps, incs = compileIp(ctx, rule, ip, deps, incs)
