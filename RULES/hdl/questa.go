@@ -267,9 +267,20 @@ func compileSrcs(ctx core.Context, rule Simulation,
 			// Note down the created rule
 			rules[log.String()] = true
 		} else {
+
 			// We handle header files separately from other source files
 			if IsHeader(src.String()) {
-				incs = append(incs, src)
+				foundit := false
+				for _, value := range incs {
+					if value == src {
+						foundit = true
+						break
+					}
+				}
+
+				if !foundit {
+					incs = append(incs, src)
+				}
 			}
 
 			// Just add the file to the dependencies of the next one (including header files)
