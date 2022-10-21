@@ -33,8 +33,8 @@ type SynthOutOfContext struct {
 	// List of directories with board definitions
 	BoardFiles []core.Path
 
-  // TCL to run pre-synthesis
-  PreTcl core.Path
+	// TCL to run pre-synthesis
+	PreTcl core.Path
 
 	// TCL to run synthesis
 	SynthTcl core.Path
@@ -51,8 +51,8 @@ type SynthOutOfContext struct {
 	// TCL scripts to run phys_opt
 	RouteTcl core.Path
 
-  // Custom step reporting script
-  ReportTcl core.Path
+	// Custom step reporting script
+	ReportTcl core.Path
 }
 
 func (rule SynthOutOfContext) Build(ctx core.Context) {
