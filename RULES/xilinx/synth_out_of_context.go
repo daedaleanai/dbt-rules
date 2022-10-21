@@ -33,35 +33,26 @@ type SynthOutOfContext struct {
 	// List of directories with board definitions
 	BoardFiles []core.Path
 
-	// TCL to run pre-synthesis
-	PreSynthTcl []core.Path
+  // TCL to run pre-synthesis
+  PreTcl core.Path
 
-	// Additional synth_design options
-	SynthOptions []string
+	// TCL to run synthesis
+	SynthTcl core.Path
 
-	// TCL scripts to run pre-optimization
-	PreOptTcl []core.Path
+	// TCL scripts to run optimization
+	OptTcl core.Path
 
-	// Additional opt_design options
-	OptOptions []string
+	// TCL scripts to run placement
+	PlaceTcl core.Path
 
-	// TCL scripts to run pre-placement
-	PrePlaceTcl []core.Path
+	// TCL scripts to run phys_opt
+	PhysOptTcl core.Path
 
-	// Additional place_design options
-	PlaceOptions []string
+	// TCL scripts to run phys_opt
+	RouteTcl core.Path
 
-	// TCL scripts to run pre-phys_opt
-	PrePhysOptTcl []core.Path
-
-	// Additional phys_opt options
-	PhysOptOptions []string
-
-	// TCL scripts to run pre-phys_opt
-	PreRouteTcl []core.Path
-
-	// Additional route_design options
-	RouteOptions []string
+  // Custom step reporting script
+  ReportTcl core.Path
 }
 
 func (rule SynthOutOfContext) Build(ctx core.Context) {
@@ -134,16 +125,13 @@ func (rule SynthOutOfContext) Build(ctx core.Context) {
 		Ips:             ips,
 		Rtls:            rtls,
 		Constrs:         constrs,
-		PreSynthTcl:     rule.PreSynthTcl,
-		PreOptTcl:       rule.PreOptTcl,
-		PrePlaceTcl:     rule.PrePlaceTcl,
-		PrePhysOptTcl:   rule.PrePhysOptTcl,
-		PreRouteTcl:     rule.PreRouteTcl,
-		SynthOptions:    rule.SynthOptions,
-		OptOptions:      rule.OptOptions,
-		PlaceOptions:    rule.PlaceOptions,
-		PhysOptOptions:  rule.PhysOptOptions,
-		RouteOptions:    rule.RouteOptions,
+		PreTcl:          rule.PreTcl,
+		SynthTcl:        rule.SynthTcl,
+		OptTcl:          rule.OptTcl,
+		PlaceTcl:        rule.PlaceTcl,
+		PhysOptTcl:      rule.PhysOptTcl,
+		RouteTcl:        rule.RouteTcl,
+		ReportTcl:       rule.ReportTcl,
 		ReportDir:       outReportDir,
 		FlattenStrategy: SynthFlattenStrategy.Value(),
 	}

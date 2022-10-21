@@ -13,151 +13,201 @@ exec mkdir -p \$out_path
 exec mkdir -p \$out_path/checkpoints
 exec mkdir -p \$out_path/snapshot
 
-proc main {out_path} {
+#proc main {out_path} {
 
-	{{range .BoardFiles}}
-	set_param board.repoPaths [lappend board.repoPaths "{{ . }}"]
-	{{end}}
+  {{range .BoardFiles}}
+    set_param board.repoPaths [lappend board.repoPaths "{{ . }}"]
+  {{end}}
 
-	set_part "{{ .PartName }}"
-	set_property "target_language"    "Verilog"        [current_project]
+  set_part "{{ .PartName }}"
+  set_property "target_language"    "Verilog"        [current_project]
 
-	{{- if not .OutOfContext }}
-		set_property "board_part"         "{{ .BoardName}}"       [current_project]
-	{{- end }}
+  {{- if not .OutOfContext }}
+    set_property "board_part"         "{{ .BoardName}}"       [current_project]
+  {{- end }}
 
-	# Number of timing paths to report
-	set npaths 10
+  # Number of timing paths to report
+  set npaths 10
 
-	proc generate_reports {path {npaths 10}} {
-		# Timing
-		report_timing -from [all_registers -output_pins] -to [all_registers -data_pins] -max_paths \$npaths > \$path/datapath_tss.rpt
-		report_timing -from [all_inputs] -to [all_registers -data_pins] -max_paths \$npaths > \$path/datapath_tis.rpt
-		report_timing -from [all_registers -output_pins] -to [all_outputs] -max_paths \$npaths > \$path/datapath_tso.rpt
-		report_timing -from [all_inputs] -to [all_outputs] -max_paths \$npaths > \$path/datapath_tio.rpt
-		report_timing_summary > \$path/timing_summary.rpt
+  # Set design variablses
+  set name {{ .Name }}
+  set inc_dirs {{ .IncDir }}
+  set mode {{ if .OutOfContext }} out_of_context {{ else }} default {{ end }}
+  set flatten_strategy {{ .FlattenStrategy }}
 
-		# Design analysis
-		report_design_analysis -extend -setup -congestion -complexity -timing -file \$path/design_analysis.rpt
-		report_pipeline_analysis -file \$path/pipeline_analysis.rpt
+  proc generate_reports {path {npaths 10}} {
+    # Timing
+    report_timing -from [all_registers -output_pins] -to [all_registers -data_pins] -max_paths \$npaths > \$path/datapath_tss.rpt
+    report_timing -from [all_inputs] -to [all_registers -data_pins] -max_paths \$npaths > \$path/datapath_tis.rpt
+    report_timing -from [all_registers -output_pins] -to [all_outputs] -max_paths \$npaths > \$path/datapath_tso.rpt
+    report_timing -from [all_inputs] -to [all_outputs] -max_paths \$npaths > \$path/datapath_tio.rpt
+    report_timing_summary > \$path/timing_summary.rpt
 
-		# Utilization
-		report_utilization -hierarchical_depth 4 -hierarchical > \$path/util_hierarchical.rpt
-		report_utilization > \$path/util_summary.rpt
-	}
+    # Design analysis
+    report_design_analysis -extend -setup -congestion -complexity -timing -file \$path/design_analysis.rpt
+    report_pipeline_analysis -file \$path/pipeline_analysis.rpt
 
-	puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Reading source code..."
-	{{ range .Ips }}
-	set path "{{ . }}"
-	set normalized [file normalize [string range \$path 1 [string length \$path]]]
-	set dir [file join [pwd] [file dirname \$normalized]]
-	set filename [file tail \$normalized]
-	file mkdir \$dir
-	file copy "{{ . }}" \$dir
-	set ip [file join \$dir \$filename]
-	read_ip \$ip
-	generate_target all [get_files \$ip]
-	set_property GENERATE_SYNTH_CHECKPOINT true [get_files \$ip]
-	synth_ip [get_files \$ip]
-	{{ end }}
+    # Utilization
+    report_utilization -hierarchical_depth 4 -hierarchical > \$path/util_hierarchical.rpt
+    report_utilization > \$path/util_summary.rpt
+  }
 
-	report_ip_status
+  puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Reading source code..."
+  {{ range .Ips }}
+    set path "{{ . }}"
+    set normalized [file normalize [string range \$path 1 [string length \$path]]]
+    set dir [file join [pwd] [file dirname \$normalized]]
+    set filename [file tail \$normalized]
+    file mkdir \$dir
+    file copy "{{ . }}" \$dir
+    set ip [file join \$dir \$filename]
+    read_ip \$ip
+    generate_target all [get_files \$ip]
+    set_property GENERATE_SYNTH_CHECKPOINT true [get_files \$ip]
+    synth_ip [get_files \$ip]
+  {{ end }}
 
-	exec mkdir -p \$out_path/snapshot/rtl
-	{{- range .Rtls }}
-	    {{- if hasSuffix .String ".vhd" }}
-		read_vhdl "{{ . }}"
-	    {{- else }}
-		read_verilog -sv "{{ . }}"
-	    {{- end }}
-	    exec cp {{ . }} \$out_path/snapshot/rtl
-	{{- end }}
+  report_ip_status
 
-	puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Reading constraints..."
-	exec mkdir -p \$out_path/snapshot/constraints
-	{{- range .Constrs }}
-		read_xdc {{ if $outOfContext }} -mode out_of_context {{ end }} "{{ . }}"
-	        exec cp {{ . }} \$out_path/snapshot/constraints
-	{{- end }}
+  exec mkdir -p \$out_path/snapshot/rtl
+  {{- range .Rtls }}
+    {{- if hasSuffix .String ".vhd" }}
+      read_vhdl "{{ . }}"
+    {{- else }}
+      read_verilog -sv "{{ . }}"
+    {{- end }}
+  exec cp {{ . }} \$out_path/snapshot/rtl
+  {{- end }}
 
-	exec mkdir -p \$out_path/snapshot/pre_synth
-	{{ range .PreSynthTcl -}}
-		puts "INFO: Running pre-synth tcl scripts"
-		source {{ . }}
-	        exec cp {{ . }} \$out_path/snapshot/pre_synth
-	{{- end }}
+  puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Reading constraints..."
+  exec mkdir -p \$out_path/snapshot/constraints
+  {{- range .Constrs }}
+    exec cp {{ . }} \$out_path/snapshot/constraints
+  {{- end }}
+  read_xdc {{ if .OutOfContext }} -mode out_of_context {{ end }} [glob -nocomplain \$out_path/snapshot/constraints/*.xdc]
 
-	puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Running synthesis..."
-	synth_design -top {{ .Name }} -include_dirs {{ .IncDir }} {{ if .OutOfContext }} -mode out_of_context {{ end }} -flatten_hierarchy {{ .FlattenStrategy }} {{ range .SynthOptions }} {{ . }} {{ end }} > \$out_path/synth.log
-	write_checkpoint -force \$out_path/checkpoints/post_synth
-	exec mkdir -p \$out_path/post_synth
-	generate_reports \$out_path/post_synth
+  exec mkdir -p \$out_path/snapshot/scripts
 
-	exec mkdir -p \$out_path/snapshot/pre_opt
-	{{ range .PreOptTcl -}}
-		puts "INFO: Running pre-opt tcl scripts"
-		source {{ . }}
-	        exec cp {{ . }} \$out_path/snapshot/pre_opt
-	{{- end }}
+  {{- if  .PreTcl }}
+    source {{ .PreTcl }}
+  {{- else }}
+    set synth_reporting true
+    set opt_reporting true
+    set place_reporting true
+    set phys_opt_reporting true
+    set route_reporting true
+  {{- end }}
 
-	opt_design {{  range .OptOptions }} {{ . }} {{ end }} > \$out_path/opt.log
-	write_checkpoint -force \$out_path/checkpoints/post_opt
-	exec mkdir -p \$out_path/post_opt
-	generate_reports \$out_path/post_opt
+  puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Running synthesis..."
+  {{- if .SynthTcl }}
+    exec cp {{ .SynthTcl }} \$out_path/snapshot/scripts/synth.tcl
+    source {{ .SynthTcl }} > \$out_path/synth.log
+  {{- else }}
+    synth_design -top \$name -include_dirs \$inc_dirs -mode \$mode -flatten_hierarchy \$flatten_strategy > \$out_path/synth.log
+  {{- end }}
 
-	exec mkdir -p \$out_path/snapshot/pre_place
-	{{ range .PrePlaceTcl -}}
-		puts "INFO: Running pre-place tcl scripts"
-		source {{ . }}
-	        exec cp {{ . }} \$out_path/snapshot/pre_place
-	{{- end }}
+  write_checkpoint -force \$out_path/checkpoints/post_synth
 
-	puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Running placement..."
-	place_design {{ range .PlaceOptions }} {{ . }} {{ end }} > \$out_path/place.log
-	write_checkpoint -force \$out_path/checkpoints/post_place
-	exec mkdir -p \$out_path/post_place
-	generate_reports \$out_path/post_place
+  if { \$synth_reporting } {
+    set report_dir \$out_path/post_synth
+    exec mkdir -p \$report_dir
+    {{- if .ReportTcl }}
+      source {{ .ReportTcl }}
+    {{- else }}
+      generate_reports \$report_dir
+    {{- end }}
+  }
 
-	exec mkdir -p \$out_path/snapshot/pre_phys_opt
-	{{ range .PrePhysOptTcl -}}
-		puts "INFO: Running pre-phys_opt tcl scripts"
-		source {{ . }}
-	        exec cp {{ . }} \$out_path/snapshot/pre_phys_opt
-	{{- end }}
+  {{- if .OptTcl }}
+    exec cp {{ .OptTcl }} \$out_path/snapshot/scripts/opt.tcl
+    source {{ .OptTcl }} > \$out_path/opt.log
+  {{- else }}
+    opt_design > \$out_path/opt.log
+  {{- end }}
+  write_checkpoint -force \$out_path/checkpoints/post_opt
 
-	phys_opt_design {{ range .PhysOptOptions }} {{ . }} {{ end }} > \$out_path/phys_opt.log
-	write_checkpoint -force \$out_path/checkpoints/post_phys_opt
-	exec mkdir -p \$out_path/post_phys_opt
-	generate_reports \$out_path/post_phys_opt
+  if { \$opt_reporting } {
+    set report_dir \$out_path/post_opt
+    exec mkdir -p  \$report_dir
+    {{- if .ReportTcl }}
+      source {{ .ReportTcl }}
+    {{- else }}
+      generate_reports \$report_dir
+    {{- end }}
+  }
 
-	exec mkdir -p \$out_path/snapshot/pre_route
-	{{ range .PreRouteTcl -}}
-		puts "INFO: Running pre-route tcl scripts"
-		source {{ . }}
-	        exec cp {{ . }} \$out_path/snapshot/pre_route
-	{{- end }}
+  puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Running placement..."
+  {{- if .PlaceTcl }}
+    exec cp {{ .PlaceTcl }} \$out_path/snapshot/scripts/place.tcl
+    source {{ .PlaceTcl }} > \$out_path/place.log
+  {{- else }}
+    place_design > \$out_path/place.log
+  {{- end }}
+  write_checkpoint -force \$out_path/checkpoints/post_place
 
-	puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Running routing..."
-	route_design {{ range .RouteOptions }} {{ . }} {{ end }} > \$out_path/route.log
-	write_checkpoint -force \$out_path/checkpoints/post_route
-	exec mkdir -p \$out_path/post_route
-	generate_reports \$out_path/post_route
+  if { \$place_reporting } {
+    set report_dir \$out_path/post_place
+    exec mkdir -p \$report_dir
+    {{- if .ReportTcl }}
+      source {{ .ReportTcl }}
+    {{- else }}
+      generate_reports \$report_dir
+    {{- end }}
+  }
 
-	{{ if not .OutOfContext }}
-		write_bitstream -force bitstream.bit
-		write_debug_probes -force bitstream.ltx
-	{{ end }}
-}
+  puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Running phys_opt..."
+  {{- if .PhysOptTcl }}
+    exec cp {{ .PhysOptTcl }} \$out_path/snapshot/scripts/phys_opt.tcl
+    source {{ .PhysOptTcl }} > \$out_path/phys_opt.log
+  {{- else }}
+    phys_opt_design > \$out_path/phys_opt.log
+  {{- end }}
+  write_checkpoint -force \$out_path/checkpoints/post_phys_opt
 
-if {[catch {main \$out_path}]} {
-	set status 1
-	puts "ERROR: ([clock format [clock seconds] -format %H:%M:%S]) Run failed."
-	puts "INFO: Report directory: \$out_path"
-} else {
-	set status 0
-	puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Run successful."
-	puts "INFO: Report directory: \$out_path"
-}
-exit \$status
+  if { \$phys_opt_reporting } {
+    set report_dir \$out_path/post_phys_opt
+    exec mkdir -p \$report_dir
+    {{- if .ReportTcl }}
+      source {{ .ReportTcl }}
+    {{- else }}
+      generate_reports \$report_dir
+    {{- end }}
+  }
+
+  puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Running routing..."
+  {{- if .RouteTcl }}
+    exec cp {{ .RouteTcl }} \$out_path/snapshot/scripts/route.tcl
+    source {{ .RouteTcl }} > \$out_path/route.log
+  {{- else }}
+    route_design > \$out_path/route.log
+  {{- end }}
+  write_checkpoint -force \$out_path/checkpoints/post_route
+
+  if { \$route_reporting } {
+    set report_dir \$out_path/post_route
+    exec mkdir -p \$report_dir
+    {{- if .ReportTcl }}
+      source {{ .ReportTcl }}
+    {{- else }}
+      generate_reports \$report_dir
+    {{- end }}
+  }
+
+  {{- if not .OutOfContext }}
+    write_bitstream -force bitstream.bit
+    write_debug_probes -force bitstream.ltx
+  {{- end }}
+#}
+
+#if {[catch {main \$out_path}]} {
+  #set status 1
+  #puts "ERROR: ([clock format [clock seconds] -format %H:%M:%S]) Run failed."
+  #puts "INFO: Report directory: \$out_path"
+#} else {
+  #set status 0
+  #puts "INFO: ([clock format [clock seconds] -format %H:%M:%S]) Run successful."
+  #puts "INFO: Report directory: \$out_path"
+#}
+#exit \$status
 
 EOF

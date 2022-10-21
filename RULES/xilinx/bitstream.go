@@ -30,16 +30,13 @@ type BuildFileScriptParams struct {
 	OutOfContext    bool
 	ReportDir       core.Path
 	FlattenStrategy string
-	PreSynthTcl     []core.Path
-	PreOptTcl       []core.Path
-	PrePlaceTcl     []core.Path
-	PrePhysOptTcl   []core.Path
-	PreRouteTcl     []core.Path
-	SynthOptions    []string
-	OptOptions      []string
-	PlaceOptions    []string
-	PhysOptOptions  []string
-	RouteOptions    []string
+  PreTcl       core.Path
+	SynthTcl     core.Path
+	OptTcl       core.Path
+	PlaceTcl     core.Path
+	PhysOptTcl   core.Path
+	RouteTcl     core.Path
+  ReportTcl    core.Path
 }
 
 type RunSynthesisScriptParams struct {
