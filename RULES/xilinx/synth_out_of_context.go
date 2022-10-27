@@ -27,8 +27,11 @@ type SynthOutOfContext struct {
 	// Target clock period (ns)
 	ClockPeriod float32
 
-	// Constraint definitions file for the design.
-	Constraints core.Path
+	// Override default OOC timing constraints
+	TimingConstraints core.Path
+
+	// Additional constraint definitions file for the design.
+	Constraints []core.Path
 
 	// List of directories with board definitions
 	BoardFiles []core.Path
@@ -86,11 +89,12 @@ func (rule SynthOutOfContext) Build(ctx core.Context) {
 		clockPeriod = rule.ClockPeriod
 	}
 
-	if rule.Constraints != nil {
-		ins = append(ins, rule.Constraints)
-		constrs = append(constrs, rule.Constraints)
+	if rule.TimingConstraints != nil {
+		ins = append(ins, rule.TimingConstraints)
+		constrs = append(constrs, rule.TimingConstraints)
+
 	} else {
-		// Use default out-of-context constraints - Meant for module analysis, NOT hierarchical design.
+		// Generate and use default out-of-context constraints - Meant for module analysis, NOT hierarchical design.
 		outConstr := ctx.Cwd().WithSuffix("/" + rule.Name + "_constraints.xdc")
 
 		cfData := ConstraintsFileScriptParams{
@@ -107,6 +111,11 @@ func (rule SynthOutOfContext) Build(ctx core.Context) {
 
 		ins = append(ins, outConstr)
 		constrs = append(constrs, outConstr)
+	}
+
+	if rule.Constraints != nil {
+		ins = append(ins, rule.Constraints...)
+		constrs = append(constrs, rule.Constraints...)
 	}
 
 	outBf := ctx.Cwd().WithSuffix("/" + rule.Name + "_synth.tcl")
