@@ -33,9 +33,10 @@ type generatorInput struct {
 }
 
 type generatorOutput struct {
-	NinjaFile string
-	Targets   map[string]targetInfo
-	Flags     map[string]flagInfo
+	NinjaFile   string
+	Targets     map[string]targetInfo
+	Flags       map[string]flagInfo
+	CompDbRules []string
 }
 
 var input = loadInput()
@@ -137,6 +138,11 @@ func GeneratorMain(vars map[string]interface{}) {
 			}
 		}
 		output.NinjaFile = ctx.ninjaFile()
+
+		output.CompDbRules = []string{}
+		for name := range ctx.compDbBuildRules {
+			output.CompDbRules = append(output.CompDbRules, name)
+		}
 	}
 
 	// Serialize generator output.

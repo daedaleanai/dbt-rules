@@ -26,39 +26,63 @@ func ninjaEscape(s string) string {
 	return strings.ReplaceAll(s, " ", "$ ")
 }
 
-func (obj objectFile) cxxRule() core.BuildRule {
+func (obj objectFile) cxxRule(ctx core.Context) core.BuildRule {
 	toolchain := toolchainOrDefault(obj.Toolchain)
-	return core.BuildRule{
-		Name: toolchain.Name() + "-cxx",
+	name := toolchain.Name() + "-cxx"
+
+	if rule, ok := ctx.GetCompDbRule(name); ok {
+		return *rule
+	}
+
+	rule := core.BuildRule{
+		Name: name,
 		Variables: map[string]string{
 			"depfile":     "$out.d",
 			"command":     fmt.Sprintf("%s %s $flags -pipe -c -MD -MF $out.d -o $out $in", ninjaEscape(toolchain.CxxCompiler()), strings.Join(toolchain.CxxFlags(), " ")),
 			"description": fmt.Sprintf("CXX (toolchain: %s) $out", toolchain.Name()),
 		},
 	}
+	ctx.RegisterCompDbRule(&rule)
+	return rule
 }
 
-func (obj objectFile) ccRule() core.BuildRule {
+func (obj objectFile) ccRule(ctx core.Context) core.BuildRule {
 	toolchain := toolchainOrDefault(obj.Toolchain)
-	return core.BuildRule{
-		Name: toolchain.Name() + "-cc",
+	name := toolchain.Name() + "-cc"
+
+	if rule, ok := ctx.GetCompDbRule(name); ok {
+		return *rule
+	}
+
+	rule := core.BuildRule{
+		Name: name,
 		Variables: map[string]string{
 			"depfile":     "$out.d",
 			"command":     fmt.Sprintf("%s %s $flags -pipe -c -MD -MF $out.d -o $out $in", ninjaEscape(toolchain.CCompiler()), strings.Join(toolchain.CFlags(), " ")),
 			"description": fmt.Sprintf("CC (toolchain: %s) $out", toolchain.Name()),
 		},
 	}
+	ctx.RegisterCompDbRule(&rule)
+	return rule
 }
 
-func (obj objectFile) asRule() core.BuildRule {
+func (obj objectFile) asRule(ctx core.Context) core.BuildRule {
 	toolchain := toolchainOrDefault(obj.Toolchain)
-	return core.BuildRule{
-		Name: toolchain.Name() + "-as",
+	name := toolchain.Name() + "-as"
+
+	if rule, ok := ctx.GetCompDbRule(name); ok {
+		return *rule
+	}
+
+	rule := core.BuildRule{
+		Name: name,
 		Variables: map[string]string{
 			"command":     fmt.Sprintf("%s %s $flags -c -o $out $in", ninjaEscape(toolchain.Assembler()), strings.Join(toolchain.AsFlags(), " ")),
 			"description": fmt.Sprintf("AS (toolchain: %s) $out", toolchain.Name()),
 		},
 	}
+	ctx.RegisterCompDbRule(&rule)
+	return rule
 }
 
 func (obj objectFile) flags(tc Toolchain) []string {
@@ -89,13 +113,13 @@ func (obj objectFile) Build(ctx core.Context) {
 
 	switch filepath.Ext(obj.Src.Absolute()) {
 	case ".cc":
-		rule = obj.cxxRule()
+		rule = obj.cxxRule(ctx)
 		flags = obj.CxxFlags
 	case ".c":
-		rule = obj.ccRule()
+		rule = obj.ccRule(ctx)
 		flags = obj.CFlags
 	case ".S":
-		rule = obj.asRule()
+		rule = obj.asRule(ctx)
 		flags = obj.AsFlags
 	default:
 		core.Fatal("Unknown source extension for cc toolchain '" + filepath.Ext(obj.Src.Absolute()) + "'")
