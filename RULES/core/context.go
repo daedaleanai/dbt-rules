@@ -23,6 +23,12 @@ type Context interface {
 
 	// Trace returns the strings in the current trace (most recent last).
 	Trace() []string
+
+	// Rules to be collected in a compilation database. Their name must be unique
+	RegisterCompDbRule(rule *BuildRule)
+
+	// Obtains a registered rule (if it exists). The boolean is true if it exists
+	GetCompDbRule(name string) (*BuildRule, bool)
 }
 
 // BuildStep represents one build step (i.e., one build command).
@@ -123,19 +129,21 @@ type analyzerReportInterface interface {
 }
 
 type context struct {
-	cwd         OutPath
-	nextRuleID  int
-	trace       []string
-	leafOutputs map[Path]bool
-	buildSteps  map[string]*BuildStepWithRule
-	targetRules []TargetRule
+	cwd              OutPath
+	nextRuleID       int
+	trace            []string
+	leafOutputs      map[Path]bool
+	buildSteps       map[string]*BuildStepWithRule
+	targetRules      []TargetRule
+	compDbBuildRules map[string]*BuildRule
 }
 
 func newContext(vars map[string]interface{}) *context {
 	ctx := &context{
-		cwd:         outPath{""},
-		leafOutputs: map[Path]bool{},
-		buildSteps:  map[string]*BuildStepWithRule{},
+		cwd:              outPath{""},
+		leafOutputs:      map[Path]bool{},
+		buildSteps:       map[string]*BuildStepWithRule{},
+		compDbBuildRules: map[string]*BuildRule{},
 	}
 	return ctx
 }
@@ -451,6 +459,15 @@ func (ctx *context) ninjaFile() string {
 	}
 
 	return ninjaFile.String()
+}
+
+func (ctx *context) RegisterCompDbRule(rule *BuildRule) {
+	ctx.compDbBuildRules[rule.Name] = rule
+}
+
+func (ctx *context) GetCompDbRule(name string) (*BuildRule, bool) {
+	buildRule, ok := ctx.compDbBuildRules[name]
+	return buildRule, ok
 }
 
 func ninjaEscape(s string) string {
