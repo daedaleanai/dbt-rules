@@ -191,6 +191,26 @@ if ![info exists gui] {
 }
 `
 
+func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []core.Path {
+	if SimulatorLibDir.Value() != "" {
+		cmds := []string{}
+		for _, lib := range rule.Libs {
+			cmds = append(cmds, fmt.Sprintf("vmap %s %s/%s", lib, SimulatorLibDir.Value(), lib))
+		}
+
+		if len(cmds) > 0 {
+			modelsim_ini := rule.Path().WithSuffix("/modelsim.ini")
+			ctx.AddBuildStep(core.BuildStep{
+				Out:   modelsim_ini,
+				Cmd:   strings.Join(cmds, " && "),
+				Descr: fmt.Sprintf("vmap: %s", modelsim_ini.Absolute()),
+			})
+			deps = append(deps, modelsim_ini)
+		}
+	}
+	return deps
+}
+
 // compileSrcs compiles a list of sources using the specified context ctx, rule,
 // dependencies and include paths. It returns the resulting dependencies and include paths
 // that result from compiling the source files.
@@ -206,7 +226,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				continue
 			}
 
-			cmd := fmt.Sprintf("%s %s -work %s -l %s", common_flags, rule.libFlags(), rule.Lib(), log.String())
+			cmd := fmt.Sprintf("%s -work %s -l %s", common_flags, rule.Lib(), log.String())
 
 			// tool will point to the tool to execute (also used for logging below)
 			var tool string
@@ -214,6 +234,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				tool = "vlog"
 				cmd = cmd + " " + VlogFlags.Value()
 				cmd = cmd + " -suppress 2583 -svinputport=net -define SIMULATION"
+				cmd = cmd + fmt.Sprintf(" %s", rule.libFlags())
 				cmd = cmd + fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
 				for _, inc := range incs {
 					cmd = cmd + fmt.Sprintf(" +incdir+%s", path.Dir(inc.Absolute()))
@@ -295,6 +316,8 @@ func compileIp(ctx core.Context, rule Simulation, ip Ip,
 func compile(ctx core.Context, rule Simulation) []core.Path {
 	incs := []core.Path{}
 	deps := []core.Path{}
+
+	deps = createModelsimIni(ctx, rule, deps)
 
 	for _, ip := range rule.Ips {
 		deps, incs = compileIp(ctx, rule, ip, deps, incs)
