@@ -303,9 +303,12 @@ func xsimVerbosityLevelToFlag(level string) (string, bool) {
 	case "high":
 		verbosity_flag = " --testplusarg verbosity=DVM_VERB_HIGH"
 		print_output = true
+	case "all":
+		verbosity_flag = "--testplusarg verbosity=DVM_VERB_ALL"
+		print_output = true
 	default:
 		log.Fatal(fmt.Sprintf("invalid verbosity flag '%s', only 'low', 'medium',"+
-			" 'high' or 'none' allowed!", level))
+			" 'high', 'all' or 'none' allowed!", level))
 	}
 
 	return verbosity_flag, print_output
