@@ -41,7 +41,11 @@ func loadInput() generatorInput {
 		os.Exit(1)
 	}
 
-	var input generatorInput
+	input := generatorInput{
+		// If the dbt binary is too old and does not provide this value, we must default to true
+		// to keep the old behavior
+		PersistFlags: true,
+	}
 	if err := json.Unmarshal(data, &input); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: Could not parse DBT input: %s.\n", err)
 		os.Exit(1)
