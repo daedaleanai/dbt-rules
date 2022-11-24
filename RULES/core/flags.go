@@ -2,7 +2,6 @@ package core
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -225,31 +224,31 @@ func initializeFlag(flag flagInterface, name string, isInitialized *bool) {
 	Fatal("flag '%s' has disallowed value '%s'", name, info.Value)
 }
 
-func lockAndGetFlags() map[string]flagInfo {
+func lockAndGetFlags(storePersistedFlags bool) map[string]flagInfo {
 	flagsLocked = true
 
 	flagInfo := map[string]flagInfo{}
 	flagValues := map[string]string{}
-	flagStrings := []string{}
 	for name, flag := range registeredFlags {
 		info := flag.info()
 		flagInfo[name] = info
 		flagValues[name] = info.Value
-		flagStrings = append(flagStrings, fmt.Sprintf("%s=%s", name, info.Value))
 	}
 
-	// Store current flag values in FLAGS.json file.
-	data, err := json.Marshal(flagValues)
-	if err != nil {
-		Fatal("failed to marshal config flag values: %s", err)
-	}
-	flagsFilePath := path.Join(input.OutputDir, flagsFileName)
-	if err := os.MkdirAll(filepath.Dir(flagsFilePath), os.ModePerm); err != nil {
-		Fatal("Failed to create directory for flags file: %s", err)
-	}
-	err = ioutil.WriteFile(flagsFilePath, data, fileMode)
-	if err != nil {
-		Fatal("failed to write config flag values: %s", err)
+	if storePersistedFlags {
+		// Store current flag values in FLAGS.json file.
+		data, err := json.Marshal(flagValues)
+		if err != nil {
+			Fatal("failed to marshal config flag values: %s", err)
+		}
+		flagsFilePath := path.Join(input.OutputDir, flagsFileName)
+		if err := os.MkdirAll(filepath.Dir(flagsFilePath), os.ModePerm); err != nil {
+			Fatal("Failed to create directory for flags file: %s", err)
+		}
+		err = ioutil.WriteFile(flagsFilePath, data, fileMode)
+		if err != nil {
+			Fatal("failed to write config flag values: %s", err)
+		}
 	}
 
 	return flagInfo

@@ -31,6 +31,7 @@ type generatorInput struct {
 	Layout               string
 	SelectedTargets      []string
 	BuildAnalyzerTargets bool
+	PersistFlags         bool
 }
 
 type generatorOutput struct {
@@ -57,10 +58,8 @@ func checkHasAnySelectedTargetsOtherThanReports(vars map[string]interface{}) boo
 }
 
 func isAnalyzerReportTarget(target interface{}) bool {
-	if _, ok := target.(analyzerReportInterface); ok {
-		return true
-	}
-	return false
+	_, ok := target.(analyzerReportInterface)
+	return ok
 }
 
 func isTargetSelected(targetPath string) bool {
@@ -75,7 +74,7 @@ func isTargetSelected(targetPath string) bool {
 func GeneratorMain(vars map[string]interface{}) {
 	output := generatorOutput{
 		Targets: map[string]targetInfo{},
-		Flags:   lockAndGetFlags(),
+		Flags:   lockAndGetFlags(input.PersistFlags),
 	}
 
 	for targetPath, variable := range vars {
