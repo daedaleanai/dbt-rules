@@ -19,17 +19,18 @@ type targetInfo struct {
 }
 
 type generatorInput struct {
-	DbtVersion      version
-	SourceDir       string
-	WorkingDir      string
-	OutputDir       string
-	CmdlineFlags    map[string]string
-	WorkspaceFlags  map[string]string
-	CompletionsOnly bool
-	RunArgs         []string
-	TestArgs        []string
-	Layout          string
-	SelectedTargets []string
+	DbtVersion           version
+	SourceDir            string
+	WorkingDir           string
+	OutputDir            string
+	CmdlineFlags         map[string]string
+	WorkspaceFlags       map[string]string
+	CompletionsOnly      bool
+	RunArgs              []string
+	TestArgs             []string
+	Layout               string
+	SelectedTargets      []string
+	BuildAnalyzerTargets bool
 }
 
 type generatorOutput struct {
@@ -50,6 +51,13 @@ func checkHasAnySelectedTargetsOtherThanReports(vars map[string]interface{}) boo
 		if _, ok := tgt.(analyzerReportInterface); ok {
 			continue
 		}
+		return true
+	}
+	return false
+}
+
+func isAnalyzerReportTarget(target interface{}) bool {
+	if _, ok := target.(analyzerReportInterface); ok {
 		return true
 	}
 	return false
@@ -117,24 +125,27 @@ func GeneratorMain(vars map[string]interface{}) {
 					targetsForCoverage = append(targetsForCoverage, cov)
 				}
 			}
-			if sa, ok := tgt.(AnalyzeInterface); ok {
-				if !hasAnySelectedTargetsOtherThanReports || isTargetSelected(targetPath) {
-					targetsForAnalyze = append(targetsForAnalyze, sa)
+			if input.BuildAnalyzerTargets {
+				if sa, ok := tgt.(AnalyzeInterface); ok {
+					if !hasAnySelectedTargetsOtherThanReports || isTargetSelected(targetPath) {
+						targetsForAnalyze = append(targetsForAnalyze, sa)
+					}
 				}
 			}
 		}
 
 		for _, targetPath := range targetPaths {
 			tgt := vars[targetPath]
-			if build, ok := tgt.(coverageReportInterface); ok {
-				tgt = build.CoverageReport(targetsForCoverage)
-			}
-			if build, ok := tgt.(analyzerReportInterface); ok {
-				tgt = build.AnalyzerReport(targetsForAnalyze)
-			}
-
-			if build, ok := tgt.(buildInterface); ok {
-				ctx.handleTarget(targetPath, build)
+			if !isAnalyzerReportTarget(tgt) || input.BuildAnalyzerTargets {
+				if build, ok := tgt.(coverageReportInterface); ok {
+					tgt = build.CoverageReport(targetsForCoverage)
+				}
+				if build, ok := tgt.(analyzerReportInterface); ok {
+					tgt = build.AnalyzerReport(targetsForAnalyze)
+				}
+				if build, ok := tgt.(buildInterface); ok {
+					ctx.handleTarget(targetPath, build)
+				}
 			}
 		}
 		output.NinjaFile = ctx.ninjaFile()
