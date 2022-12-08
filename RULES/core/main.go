@@ -98,7 +98,9 @@ func GeneratorMain(vars map[string]interface{}) {
 		if _, ok := variable.(coverageReportInterface); ok {
 			info.Report = true
 		}
-		output.Targets[targetPath] = info
+		if !isAnalyzerReportTarget(variable) || input.BuildAnalyzerTargets {
+			output.Targets[targetPath] = info
+		}
 	}
 
 	hasAnySelectedTargetsOtherThanReports := checkHasAnySelectedTargetsOtherThanReports(vars)
