@@ -133,6 +133,9 @@ proc reload {} {
 
 }
 
+set StdArithNoWarnings 1
+set NumericStdNoWarnings 1
+
 {{ if .WaveformInit }}
 if [info exists gui] {
 	source {{ .WaveformInit }}
