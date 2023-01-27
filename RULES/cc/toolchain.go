@@ -195,35 +195,35 @@ func RegisterToolchain(toolchain Toolchain) Toolchain {
 	return toolchain
 }
 
-var NativeGcc = RegisterToolchain(GccToolchain{
-	Ar:      core.NewGlobalPath("ar"),
-	As:      core.NewGlobalPath("as"),
-	Cc:      core.NewGlobalPath("gcc"),
-	Cpp:     core.NewGlobalPath("gcc -E"),
-	Cxx:     core.NewGlobalPath("g++"),
-	Objcopy: core.NewGlobalPath("objcopy"),
-	Ld:      core.NewGlobalPath("ld"),
-
-	CCompilerFlags:   []string{"-O3", "-fdiagnostics-color=always"},
-	CxxCompilerFlags: []string{"-std=c++14", "-O3", "-fdiagnostics-color=always"},
-	LinkerFlags:      []string{"-fdiagnostics-color=always"},
-
-	ToolchainName: "native-gcc",
-	ArchName:      "x86_64", // TODO: don't hardcode this.
-})
-
 var defaultToolchainFlag = core.StringFlag{
 	Name:        "cc-toolchain",
-	Description: "Default toolchain to compile generic C/C++ targets",
-	DefaultFn:   func() string { return NativeGcc.Name() },
+	Description: "Overrides the default toolchain to compile generic C/C++ targets",
+	DefaultFn:   func() string { return "invalid-toolchain" },
 }.Register()
 
-// DefaultToolchain returns the default toolchain: either the native gcc
-// toolchain, or the toolchain specified on the command-line with the cc-toolchain flag.
+var defaultToolchain = ""
+
+// Registers a toolchain as the default toolchain.
+func RegisterToolchainAsDefault(toolchain Toolchain) Toolchain {
+	if defaultToolchain != "" {
+		core.Fatal("Default toolchain is already registered to ", defaultToolchain, ", but attempted to register: ", toolchain.Name())
+	}
+	defaultToolchain = toolchain.Name()
+	return RegisterToolchain(toolchain)
+}
+
+// DefaultToolchain returns the default toolchain: either the registered default toolchain
+// (via RegisterToolchainAsDefault) or the overriden default toolchain specified on the
+// command-line with the cc-toolchain flag.
 func DefaultToolchain() Toolchain {
-	if toolchain, ok := toolchains[defaultToolchainFlag.Value()]; ok {
+	if defaultToolchainFlag.Value() != "invalid-toolchain" {
+		if toolchain, ok := toolchains[defaultToolchainFlag.Value()]; ok {
+			return toolchain
+		}
+	} else if toolchain, ok := toolchains[defaultToolchain]; ok {
 		return toolchain
 	}
+
 	var all []string
 	for tc, _ := range toolchains {
 		all = append(all, fmt.Sprintf("%q", tc))
