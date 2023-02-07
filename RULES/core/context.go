@@ -96,8 +96,22 @@ type runInterface interface {
 	Run(args []string) string
 }
 
+// An interface for runnables that depend on some other set of targets to run, but not to build
+// For example, when using a test wrapper.
+type extendedRunInterface interface {
+	runInterface
+	RunDeps() []OutPath
+}
+
 type testInterface interface {
 	Test(args []string) string
+}
+
+// An interface for tests that depend on some other set of targets to run, but not to build
+// For example, when using a test wrapper.
+type extendedTestInterface interface {
+	testInterface
+	TestDeps() []OutPath
 }
 
 type CoverageInterface interface {
@@ -314,9 +328,17 @@ func (ctx *context) handleTarget(targetPath string, target buildInterface) {
 	})
 
 	if runIface, ok := target.(runInterface); ok {
+		deps := []string{}
+		if extendedRunIface, ok := target.(extendedRunInterface); ok {
+			depsPaths := extendedRunIface.RunDeps()
+			for _, dep := range depsPaths {
+				deps = append(deps, dep.Absolute())
+			}
+		}
+
 		ctx.targetRules = append(ctx.targetRules, TargetRule{
 			Target: fmt.Sprintf("%s#run", targetPath),
-			Ins:    []string{targetPath},
+			Ins:    append(deps, targetPath),
 			Variables: map[string]string{
 				"command":     runIface.Run(input.RunArgs),
 				"description": fmt.Sprintf("Running %s:", targetPath),
@@ -326,9 +348,17 @@ func (ctx *context) handleTarget(targetPath string, target buildInterface) {
 	}
 
 	if testIface, ok := target.(testInterface); ok {
+		deps := []string{}
+		if extendedTestIface, ok := target.(extendedTestInterface); ok {
+			depsPaths := extendedTestIface.TestDeps()
+			for _, dep := range depsPaths {
+				deps = append(deps, dep.Absolute())
+			}
+		}
+
 		ctx.targetRules = append(ctx.targetRules, TargetRule{
 			Target: fmt.Sprintf("%s#test", targetPath),
-			Ins:    []string{targetPath},
+			Ins:    append(deps, targetPath),
 			Variables: map[string]string{
 				"command":     testIface.Test(input.TestArgs),
 				"description": fmt.Sprintf("Testing %s:", targetPath),
