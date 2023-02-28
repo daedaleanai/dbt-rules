@@ -213,7 +213,7 @@ func RegisterToolchainAsDefault(toolchain Toolchain) Toolchain {
 }
 
 // DefaultToolchain returns the default toolchain: either the registered default toolchain
-// (via RegisterToolchainAsDefault) or the overriden default toolchain specified on the
+// (via RegisterToolchainAsDefault) or the overridden default toolchain specified on the
 // command-line with the cc-toolchain flag.
 func DefaultToolchain() Toolchain {
 	if defaultToolchainFlag.Value() != "invalid-toolchain" {

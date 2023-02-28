@@ -293,6 +293,20 @@ type Dep interface {
 	CcLibrary(toolchain Toolchain) Library
 }
 
+type ExternalLibrary struct {
+	Out      core.OutPath
+	Lib      core.Path
+	Includes []core.Path
+}
+
+func (lib ExternalLibrary) CcLibrary(toolchain Toolchain) Library {
+	return Library{
+		Out:      lib.Out,
+		Includes: lib.Includes,
+		external: lib.Lib,
+	}
+}
+
 // Library builds and links a static C++ library.
 // The same library can be build with multiple toolchains. Each Toolchain might
 // emit different outputs, therefore DBT needs to create unique locations for
@@ -317,6 +331,9 @@ type Library struct {
 	// Extra fields for handling multi-toolchain logic.
 	userOut       core.OutPath
 	userToolchain Toolchain
+
+	// Extra field for handling external libraries
+	external core.Path
 }
 
 func (lib Library) TranslationUnits(ctx core.Context) []core.TranslationUnit {
@@ -409,6 +426,16 @@ func (lib Library) soRule() core.BuildRule {
 func (lib Library) build(ctx core.Context) {
 	if lib.Out == nil {
 		core.Fatal("Out field is required for cc.Library")
+	}
+
+	if lib.external != nil {
+		ctx.AddBuildStep(core.BuildStep{
+			Out:   lib.Out,
+			In:    lib.external,
+			Cmd:   fmt.Sprintf("cp %q %q", lib.external, lib.Out),
+			Descr: fmt.Sprintf("COPY %s", lib.Out.Relative()),
+		})
+		return
 	}
 
 	toolchain := toolchainOrDefault(lib.Toolchain)
