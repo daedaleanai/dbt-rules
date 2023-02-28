@@ -13,6 +13,7 @@ type ToolchainFlavor int
 const (
 	Linux ToolchainFlavor = iota
 	Windows
+	LinuxCxx
 )
 
 type Toolchain interface {
