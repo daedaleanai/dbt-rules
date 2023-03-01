@@ -577,7 +577,7 @@ func (bin Binary) build(ctx core.Context) {
 		objsToLink = append(objsToLink, fmt.Sprintf("%q", obj))
 	}
 
-	ins := []core.Path{}
+	ins := objs
 
 	libsPre := []Library{}
 	for _, dep := range bin.DepsPre {
