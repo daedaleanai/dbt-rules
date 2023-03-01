@@ -357,8 +357,8 @@ func (lib Library) arRule() core.BuildRule {
 	// There is no option to ar to always force creation of a new archive; the "c"
 	// modifier simply suppresses a warning if the archive doesn't already
 	// exist. So instead we delete the target (out) if it already exists.
-	switch toolchain.Flavor() {
-	case Windows:
+	switch toolchain.LinkerFlavor() {
+	case LldLink:
 		return core.BuildRule{
 			Name: toolchain.Name() + "-lib",
 			Variables: map[string]string{
@@ -366,7 +366,7 @@ func (lib Library) arRule() core.BuildRule {
 				"description": fmt.Sprintf("AR (toolchain: %s) $out", toolchain.Name()),
 			},
 		}
-	case Linux:
+	case Ld, LdLld, Gcc, Clang:
 		return core.BuildRule{
 			Name: toolchain.Name() + "-ar",
 			Variables: map[string]string{
@@ -382,8 +382,8 @@ func (lib Library) arRule() core.BuildRule {
 
 func (lib Library) soRule() core.BuildRule {
 	toolchain := toolchainOrDefault(lib.Toolchain)
-	switch toolchain.Flavor() {
-	case Windows:
+	switch toolchain.LinkerFlavor() {
+	case LldLink:
 		return core.BuildRule{
 			Name: toolchain.Name() + "-dll",
 			Variables: map[string]string{
@@ -391,7 +391,7 @@ func (lib Library) soRule() core.BuildRule {
 				"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
 			},
 		}
-	case Linux:
+	case Ld, LdLld, Gcc, Clang:
 		return core.BuildRule{
 			Name: toolchain.Name() + "-so",
 			Variables: map[string]string{
@@ -481,18 +481,20 @@ func (inputLibrary Library) CcLibrary(toolchain Toolchain) Library {
 
 // Binary builds and links an executable.
 type Binary struct {
-	Out         core.OutPath
-	Srcs        []core.Path
-	CFlags      []string
-	CxxFlags    []string
-	AsFlags     []string
-	LinkerFlags []string
-	Deps        []Dep
-	DepsPre     []Dep
-	DepsPost    []Dep
-	Script      core.Path
-	Toolchain   Toolchain
-	Includes    []core.Path
+	Out             core.OutPath
+	Srcs            []core.Path
+	CFlags          []string
+	CxxFlags        []string
+	AsFlags         []string
+	LinkerFlags     []string
+	LinkerFlagsPost []string
+	Deps            []Dep
+	DepsPre         []Dep
+	DepsPost        []Dep
+	Script          core.Path
+	Toolchain       Toolchain
+	Includes        []core.Path
+	Objs            []core.Path
 }
 
 func (bin Binary) TranslationUnits(ctx core.Context) []core.TranslationUnit {
@@ -535,20 +537,20 @@ func (bin Binary) Build(ctx core.Context) {
 func (bin Binary) ldRule() core.BuildRule {
 	toolchain := toolchainOrDefault(bin.Toolchain)
 
-	switch toolchain.Flavor() {
-	case Windows:
+	switch toolchain.LinkerFlavor() {
+	case LldLink:
 		return core.BuildRule{
 			Name: toolchain.Name() + "-link",
 			Variables: map[string]string{
-				"command":     fmt.Sprintf("%s %s $flags /out:$out $objs $libs", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
+				"command":     fmt.Sprintf("%s %s $flags /out:$out $objs $libs $postFlags", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
 				"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
 			},
 		}
-	case Linux:
+	case Ld, LdLld, Gcc, Clang:
 		return core.BuildRule{
 			Name: toolchain.Name() + "-ld",
 			Variables: map[string]string{
-				"command":     fmt.Sprintf("%s %s $flags -o $out $objs $libs", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
+				"command":     fmt.Sprintf("%s %s $flags -o $out $objs $libs $postFlags", ninjaEscape(toolchain.Link()), strings.Join(toolchain.LdFlags(), " ")),
 				"description": fmt.Sprintf("LD (toolchain: %s) $out", toolchain.Name()),
 			},
 		}
@@ -566,6 +568,8 @@ func (bin Binary) build(ctx core.Context) {
 		d.Build(ctx)
 	}
 	objs := compileSources(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, bin.Includes, toolchain, []core.Path{})
+
+	objs = append(objs, bin.Objs...)
 
 	objsToLink := []string{}
 
@@ -602,13 +606,17 @@ func (bin Binary) build(ctx core.Context) {
 		}
 	}
 
-	switch toolchain.Flavor() {
-	case Windows:
+	switch toolchain.LinkerFlavor() {
+	case LldLink:
 		libsToLink = append(libsToLink, "-wholearchive")
 		libsToLink = append(libsToLink, libsToAlwaysLink...)
-	case Linux:
+	case Ld, LdLld:
 		libsToAlwaysLink = append([]string{"-whole-archive"}, libsToAlwaysLink...)
 		libsToAlwaysLink = append(libsToAlwaysLink, "-no-whole-archive")
+		libsToLink = append(libsToAlwaysLink, libsToLink...)
+	case Gcc, Clang:
+		libsToAlwaysLink = append([]string{"-Wl,-whole-archive"}, libsToAlwaysLink...)
+		libsToAlwaysLink = append(libsToAlwaysLink, "-Wl,-no-whole-archive")
 		libsToLink = append(libsToAlwaysLink, libsToLink...)
 	default:
 		core.Fatal("Unsupported Flavor")
@@ -630,9 +638,10 @@ func (bin Binary) build(ctx core.Context) {
 		Ins:  ins,
 		Rule: bin.ldRule(),
 		Variables: map[string]string{
-			"flags": strings.Join(flags, " "),
-			"libs":  strings.Join(libsToLink, " "),
-			"objs":  strings.Join(objsToLink, " "),
+			"flags":     strings.Join(flags, " "),
+			"libs":      strings.Join(libsToLink, " "),
+			"objs":      strings.Join(objsToLink, " "),
+			"postFlags": strings.Join(bin.LinkerFlagsPost, " "),
 		},
 	})
 }
