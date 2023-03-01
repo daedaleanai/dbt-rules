@@ -8,12 +8,14 @@ import (
 	"dbt-rules/RULES/core"
 )
 
-type ToolchainFlavor int
+type LinkerFlavor int
 
 const (
-	Linux ToolchainFlavor = iota
-	Windows
-	LinuxCxx
+	Ld LinkerFlavor = iota
+	LdLld
+	LdLink
+	Gcc
+	Clang
 )
 
 type Toolchain interface {
@@ -35,7 +37,7 @@ type Toolchain interface {
 	StdDeps() []Dep
 	Script() core.Path
 
-	Flavor() ToolchainFlavor
+	LinkerFlavor() LinkerFlavor
 }
 
 type Architecture string
@@ -174,8 +176,8 @@ func (gcc GccToolchain) Name() string {
 	return gcc.ToolchainName
 }
 
-func (gcc GccToolchain) Flavor() ToolchainFlavor {
-	return Linux
+func (gcc GccToolchain) LinkerFlavor() LinkerFlavor {
+	return Ld
 }
 
 func joinQuoted(paths []core.Path) string {
