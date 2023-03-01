@@ -494,7 +494,7 @@ type Binary struct {
 	Script          core.Path
 	Toolchain       Toolchain
 	Includes        []core.Path
-	Objects         []core.Path
+	Objs            []core.Path
 }
 
 func (bin Binary) TranslationUnits(ctx core.Context) []core.TranslationUnit {
