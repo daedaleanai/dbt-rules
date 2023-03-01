@@ -569,7 +569,7 @@ func (bin Binary) build(ctx core.Context) {
 	}
 	objs := compileSources(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, bin.Includes, toolchain, []core.Path{})
 
-	objs = append(objs, bin.Objects...)
+	objs = append(objs, bin.Objs...)
 
 	objsToLink := []string{}
 
