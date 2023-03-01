@@ -358,7 +358,7 @@ func (lib Library) arRule() core.BuildRule {
 	// modifier simply suppresses a warning if the archive doesn't already
 	// exist. So instead we delete the target (out) if it already exists.
 	switch toolchain.LinkerFlavor() {
-	case LdLink:
+	case LldLink:
 		return core.BuildRule{
 			Name: toolchain.Name() + "-lib",
 			Variables: map[string]string{
@@ -383,7 +383,7 @@ func (lib Library) arRule() core.BuildRule {
 func (lib Library) soRule() core.BuildRule {
 	toolchain := toolchainOrDefault(lib.Toolchain)
 	switch toolchain.LinkerFlavor() {
-	case LdLink:
+	case LldLink:
 		return core.BuildRule{
 			Name: toolchain.Name() + "-dll",
 			Variables: map[string]string{
@@ -538,7 +538,7 @@ func (bin Binary) ldRule() core.BuildRule {
 	toolchain := toolchainOrDefault(bin.Toolchain)
 
 	switch toolchain.LinkerFlavor() {
-	case LdLink:
+	case LldLink:
 		return core.BuildRule{
 			Name: toolchain.Name() + "-link",
 			Variables: map[string]string{
@@ -607,7 +607,7 @@ func (bin Binary) build(ctx core.Context) {
 	}
 
 	switch toolchain.LinkerFlavor() {
-	case LdLink:
+	case LldLink:
 		libsToLink = append(libsToLink, "-wholearchive")
 		libsToLink = append(libsToLink, libsToAlwaysLink...)
 	case Ld, LdLld:

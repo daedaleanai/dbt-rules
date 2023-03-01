@@ -13,7 +13,7 @@ type LinkerFlavor int
 const (
 	Ld LinkerFlavor = iota
 	LdLld
-	LdLink
+	LldLink
 	Gcc
 	Clang
 )
