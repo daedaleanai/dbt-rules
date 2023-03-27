@@ -370,7 +370,7 @@ func (lib Library) arRule() core.BuildRule {
 		return core.BuildRule{
 			Name: toolchain.Name() + "-ar",
 			Variables: map[string]string{
-				"command":     fmt.Sprintf("rm -f $out 2> /dev/null; %s rcs -T $out $in", ninjaEscape(toolchain.Archiver())),
+				"command":     fmt.Sprintf("rm -f $out 2> /dev/null; %s rcsT $out $in", ninjaEscape(toolchain.Archiver())),
 				"description": fmt.Sprintf("AR (toolchain: %s) $out", toolchain.Name()),
 			},
 		}
