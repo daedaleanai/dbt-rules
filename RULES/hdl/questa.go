@@ -239,8 +239,13 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				cmd = cmd + " -suppress 2583 -svinputport=net -define SIMULATION"
 				cmd = cmd + fmt.Sprintf(" %s", rule.libFlags())
 				cmd = cmd + fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
+				seen_incs := make(map[string]struct{})
 				for _, inc := range incs {
-					cmd = cmd + fmt.Sprintf(" +incdir+%s", path.Dir(inc.Absolute()))
+					inc_path := path.Dir(inc.Absolute())
+					if _, ok := seen_incs[inc_path]; !ok {
+						cmd = cmd + fmt.Sprintf(" +incdir+%s", inc_path)
+						seen_incs[inc_path] = struct{}{}
+					}
 				}
 				if flags != nil {
 					if vlog_flags, ok := flags["vlog"]; ok {
