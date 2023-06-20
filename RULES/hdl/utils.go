@@ -7,19 +7,17 @@ import (
 func IsRtl(path string) bool {
 	return strings.HasSuffix(path, ".v") ||
 		strings.HasSuffix(path, ".sv") ||
-		strings.HasSuffix(path, ".svp") ||
 		strings.HasSuffix(path, ".vhdl") ||
 		strings.HasSuffix(path, ".vhd")
 }
 
 func IsVerilog(path string) bool {
 	return strings.HasSuffix(path, ".v") ||
-		strings.HasSuffix(path, ".sv") ||
-		strings.HasSuffix(path, ".svp")
+		strings.HasSuffix(path, ".sv")
 }
 
 func IsSystemVerilog(path string) bool {
-	return strings.HasSuffix(path, ".sv") || strings.HasSuffix(path, ".svp")
+	return strings.HasSuffix(path, ".sv")
 }
 
 func IsVhdl(path string) bool {
@@ -29,7 +27,8 @@ func IsVhdl(path string) bool {
 
 func IsHeader(path string) bool {
 	return strings.HasSuffix(path, ".vh") ||
-		strings.HasSuffix(path, ".svh")
+		strings.HasSuffix(path, ".svh") ||
+		strings.HasSuffix(path, ".svp")
 }
 
 func IsConstraint(path string) bool {
