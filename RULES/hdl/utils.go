@@ -27,7 +27,8 @@ func IsVhdl(path string) bool {
 
 func IsHeader(path string) bool {
 	return strings.HasSuffix(path, ".vh") ||
-		strings.HasSuffix(path, ".svh")
+		strings.HasSuffix(path, ".svh") ||
+		strings.HasSuffix(path, ".svp")
 }
 
 func IsConstraint(path string) bool {
