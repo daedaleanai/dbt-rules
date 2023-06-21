@@ -29,6 +29,15 @@ var VcomFlags = core.StringFlag{
 }.Register()
 
 // VsimFlags enables the user to specify additional flags for the 'vsim' command.
+var VoptFlags = core.StringFlag{
+	Name: "questa-vopt-flags",
+	DefaultFn: func() string {
+		return "-fsmverbose"
+	},
+	Description: "Extra flags for the vopt command",
+}.Register()
+
+// VsimFlags enables the user to specify additional flags for the 'vsim' command.
 var VsimFlags = core.StringFlag{
 	Name: "questa-vsim-flags",
 	DefaultFn: func() string {
@@ -44,6 +53,15 @@ var Lint = core.BoolFlag{
 		return false
 	},
 	Description: "Enable additional lint information during compilation",
+}.Register()
+
+// Designfile enables the generation of a binary designfile for use with the visualizer
+var Designfile = core.BoolFlag{
+	Name: "questa-designfile",
+	DefaultFn: func() bool {
+		return false
+	},
+	Description: "Enable the creation of a binary designfile database for use with the visualizer",
 }.Register()
 
 // Access enables the user to control the accessibility in the compiled design for
@@ -63,6 +81,15 @@ var Coverage = core.BoolFlag{
 		return false
 	},
 	Description: "Enable code-coverage database generation",
+}.Register()
+
+// Coverage enables the user to run the simulation with code coverage.
+var Qwavedb = core.BoolFlag{
+	Name: "questa-dump-qwavedb",
+	DefaultFn: func() bool {
+		return false
+	},
+	Description: "Enable waveform dumping to qwavedb file",
 }.Register()
 
 // Target returns the optimization target name defined for this rule.
@@ -392,14 +419,30 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 		// Generate access flag
 		access_flag := ""
 		if Access.Value() == "debug" {
+			access_flag = "-debug"
+		} else if Access.Value() == "acc" {
 			access_flag = "+acc"
-		} else if Access.Value() != "" {
+		}  else if Access.Value() != "" {
 			access_flag = fmt.Sprintf("+acc=%s", Access.Value())
 		}
 
-		cmd := fmt.Sprintf("vopt %s %s %s -l %s -work %s %s %s -o %s %s",
-			common_flags, cover_flag, access_flag,
-			log_file.String(), rule.Lib(), top, additional_tops, target, rule.libFlags())
+		// Generate designfile flag
+		designfile_flag := ""
+		if Designfile.Value() {
+			designfile_flag = "-designfile " + target + ".bin"
+		}
+
+		cmd := "vopt " + common_flags 
+		cmd = cmd + " " + VoptFlags.Value()
+		cmd = cmd + " " + cover_flag
+		cmd = cmd + " " + access_flag
+		cmd = cmd + " " + designfile_flag
+		cmd = cmd + " -l " + log_file.String()
+		cmd = cmd + " -work " + rule.Lib()
+		cmd = cmd + " " + top
+		cmd = cmd + " " + additional_tops
+		cmd = cmd + " " + rule.libFlags()
+		cmd = cmd + " -o " + target
 
 		// Set up parameters
 		if param_set != "" {
@@ -545,6 +588,12 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 		do_flags = append(do_flags, "\"set coverage 1\"")
 	}
 
+	// Enable qwavedb dumping
+	qwavedb_flag := ""
+	if Qwavedb.Value() {
+		qwavedb_flag = " -qwavedb=+assertion+class+signal+wavefile=" + target + ".db"
+	}
+
 	// Determine the names of the coverage databases, this one will hold merged
 	// data from multiple testcases
 	main_coverage_db := rule.Name
@@ -658,7 +707,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 		cmd_postamble = fmt.Sprintf("|| { %s; cat %s; echo %s; exit 1; }", cmd_newline, log_file.String(), cmd_fail)
 	}
 
-	vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag +
+	vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag + qwavedb_flag +
 		verbosity_flag + plusargs_flag + " " + VsimFlags.Value()
 
 	// Add any extra flags specified with the rule
