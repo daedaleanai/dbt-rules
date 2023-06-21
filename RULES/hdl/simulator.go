@@ -262,9 +262,9 @@ func Preamble(rule Simulation, testcase string) (string, string) {
 			testCaseGeneratorFlags := rule.TestCaseGeneratorFlags
 			// Check format of the testcase file
 			if strings.HasSuffix(testcase, ".json") {
-				testCaseGeneratorFlags += " -testcase"
-			} else if strings.HasSuffix(testcase, ".onnx") {
-				testCaseGeneratorFlags += " -onnx"
+				testCaseGeneratorFlags += " -test"
+			} else {
+				log.Fatal(fmt.Sprintf("Unknown testcase file '%s'!", testcase))
 			}
 
 			// Create the preamble for testcase generator with arguments
