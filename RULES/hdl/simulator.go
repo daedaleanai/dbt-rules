@@ -77,6 +77,7 @@ type Simulation struct {
 	TestCasesDir           core.Path
 	WaveformInit           core.Path
 	ReportCovIps           []Ip
+	Memory                 core.Path
 }
 
 // Lib returns the standard library name defined for this rule.
@@ -90,6 +91,12 @@ func (rule Simulation) Path() core.Path {
 }
 
 func (rule Simulation) Build(ctx core.Context) {
+	if rule.Memory != nil {
+		var copyMemory core.CopyFile
+		copyMemory.From = rule.Memory
+		copyMemory.To = core.BuildPath("/")
+		copyMemory.Build(ctx)
+	}
 	switch Simulator.Value() {
 	case "xsim":
 		BuildXsim(ctx, rule)
