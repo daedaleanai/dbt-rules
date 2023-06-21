@@ -98,6 +98,7 @@ func (rule Simulation) Build(ctx core.Context) {
 	default:
 		log.Fatal(fmt.Sprintf("invalid value '%s' for hdl-simulator flag", Simulator.Value()))
 	}
+	rule.CopyBinaries(ctx)
 }
 
 func (rule Simulation) Run(args []string) string {
@@ -279,4 +280,30 @@ func Preamble(rule Simulation, testcase string) (string, string) {
 	}
 
 	return preamble, testcase
+}
+
+func copySrcsBinaries(ctx core.Context, srcs []core.Path) {
+	for _, src := range srcs {
+		if strings.HasSuffix(src.String(), ".hex") || strings.HasSuffix(src.String(), ".dat") {
+			copyMemory := core.CopyFile{
+				From: src,
+				To: core.BuildPath("/"),
+			}
+			copyMemory.Build(ctx)
+		}
+	}
+}
+
+func copyIpBinaries(ctx core.Context, ip Ip) {
+	for _, sub_ip := range ip.Ips() {
+		copyIpBinaries(ctx, sub_ip)
+	}
+	copySrcsBinaries(ctx, ip.Sources())
+}
+
+func (rule Simulation) CopyBinaries(ctx core.Context) {
+	for _, ip := range rule.Ips {
+		copyIpBinaries(ctx, ip)
+	}
+	copySrcsBinaries(ctx, rule.Srcs)
 }
