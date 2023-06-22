@@ -84,12 +84,21 @@ var Coverage = core.BoolFlag{
 }.Register()
 
 // Coverage enables the user to run the simulation with code coverage.
-var Qwavedb = core.BoolFlag{
+var DumpQwavedb = core.BoolFlag{
 	Name: "questa-dump-qwavedb",
 	DefaultFn: func() bool {
 		return false
 	},
 	Description: "Enable waveform dumping to qwavedb file",
+}.Register()
+
+var DumpQwavedbScope = core.StringFlag{
+	Name: "questa-dump-qwavedb-scope",
+	DefaultFn: func() string {
+		return "all"
+	},
+	Description: "Control the scope of data dumped to qwavedb file",
+	AllowedValues: []string{"all", "signals", "assertions", "memory", "queues"},
 }.Register()
 
 // Target returns the optimization target name defined for this rule.
@@ -165,7 +174,7 @@ set NumericStdNoWarnings 1
 
 {{ if .WaveformInit }}
 if [info exists gui] {
-	source {{ .WaveformInit }}
+	catch { source {{ .WaveformInit }} }
 	assertion fail -action break
 }
 {{ end }}
@@ -420,6 +429,8 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 		access_flag := ""
 		if Access.Value() == "debug" {
 			access_flag = "-debug"
+		} else if Access.Value() == "livesim" {
+			access_flag = "-debug,livesim"
 		} else if Access.Value() == "acc" {
 			access_flag = "+acc"
 		}  else if Access.Value() != "" {
@@ -590,8 +601,21 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 
 	// Enable qwavedb dumping
 	qwavedb_flag := ""
-	if Qwavedb.Value() {
-		qwavedb_flag = " -qwavedb=+assertion+class+signal+wavefile=" + target + ".db"
+	if DumpQwavedb.Value() {
+		qwavedb_flag = " -qwavedb="
+		switch DumpQwavedbScope.Value() {
+			case "signals":
+				qwavedb_flag += "+signal"
+			case "assertions":
+				qwavedb_flag += "+signal+assertions=pass,atv"
+			case "memory":
+				qwavedb_flag += "+signal+assertions=pass,atv+memory"
+			case "queues":
+				qwavedb_flag += "+signal+assertions=pass,atv+memory+queues"
+			case "all":
+				qwavedb_flag += "+signal+assertions=pass,atv+memory+queues+class+classmemory+classdynarray"
+		}
+		qwavedb_flag += "+wavefile=" + target + ".db"
 	}
 
 	// Determine the names of the coverage databases, this one will hold merged
@@ -685,8 +709,12 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	cmd_pass := "PASS"
 	cmd_fail := "FAIL"
 	if gui {
-		mode_flag = " -gui"
 		do_flags = append(do_flags, "\"set gui 1\"")
+		if Designfile.Value() {
+			mode_flag = " -visualizer=+designfile=" + target + ".bin"
+		} else {
+			mode_flag = " -gui"
+		}
 	}
 
 	if !print_output && !gui {
