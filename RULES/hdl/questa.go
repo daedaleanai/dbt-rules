@@ -69,7 +69,7 @@ var Designfile = core.BoolFlag{
 var Access = core.StringFlag{
 	Name: "questa-access",
 	DefaultFn: func() string {
-		return "debug"
+		return "acc"
 	},
 	Description: "Control access to simulation objects for debugging purposes",
 }.Register()
