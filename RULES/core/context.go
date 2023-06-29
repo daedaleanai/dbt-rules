@@ -57,6 +57,7 @@ type BuildStepWithRule struct {
 	OrderDeps []Path
 	Variables map[string]string
 	Rule      BuildRule
+	Phony     bool
 	traces    [][]string
 }
 
@@ -455,6 +456,9 @@ func (ctx *context) ninjaFile() string {
 		ins := []string{}
 		for _, in := range step.Ins {
 			ins = append(ins, ninjaEscape(in.Absolute()))
+		}
+		if step.Phony {
+			ins = append(ins, "__phony__")
 		}
 
 		orderDeps := []string{}
