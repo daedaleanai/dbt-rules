@@ -45,6 +45,10 @@ type Architecture string
 const (
 	ArchitectureX86_64  Architecture = "x86_64"
 	ArchitectureAArch64 Architecture = "aarch64"
+	ArchitectureArmv6m  Architecture = "armv6m"
+	ArchitectureArmv7m  Architecture = "armv7m"
+	ArchitectureArmv7em Architecture = "armv7em"
+	ArchitectureArmv8m  Architecture = "armv8m"
 	ArchitectureUnknown Architecture = "Unknown"
 )
 
