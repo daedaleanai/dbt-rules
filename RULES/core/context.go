@@ -44,6 +44,7 @@ type BuildStep struct {
 	Data         string
 	DataFileMode os.FileMode
 	Descr        string
+	Phony        bool
 }
 
 type BuildRule struct {
@@ -231,9 +232,10 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 	}
 
 	ctx.AddBuildStepWithRule(BuildStepWithRule{
-		Outs: step.outs(),
-		Ins:  step.ins(),
-		Rule: rule,
+		Outs:  step.outs(),
+		Ins:   step.ins(),
+		Rule:  rule,
+		Phony: step.Phony,
 	})
 }
 
