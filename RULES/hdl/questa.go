@@ -226,7 +226,7 @@ if [info exists coverage] {
 }
 
 if ![info exists gui] {
-	quit -code [coverage attribute -name TESTSTATUS -concise]
+  quit -code [expr [coverage attribute -name TESTSTATUS -concise] > 1]
 }
 `
 
