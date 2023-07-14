@@ -144,56 +144,21 @@ func (rule Simulation) Description() string {
 	}
 
 	// Collect testcases in case a test generator is used with a directory of test cases
-	if rule.TestCaseGenerator != nil && rule.TestCasesDir != nil {
-		// Collect testcases
-		testcases := []string{}
+	test_files := rule.TestFiles(false)
 
-		// Loop through all defined testcases in directory
-		if items, err := os.ReadDir(rule.TestCasesDir.String()); err == nil {
-			for _, item := range items {
-				testcases = append(testcases, item.Name())
-			}
-		} else {
-			log.Fatal(err)
-		}
-
-		// Append to description
-		if len(testcases) > 0 {
-			description = description + " -testcases=" + strings.Join(testcases, ",")
-		}
+	// Append to description
+	if len(test_files) > 0 {
+		description = description + " -testcases=" + strings.Join(test_files, ",")
 	}
 
-	// Scan source files for testcases
-	if FindTestCases.Value() {
-		re := regexp.MustCompile(`\s*` + "`" + `TEST_CASE\s*\(\s*"([^"]+)"\s*\)`)
-		re_file := regexp.MustCompile(`([^\/]+)\/DEPS\/([^\/]+)`)
-
-		for _, src := range rule.Srcs {
-			// Collect testcases
-			testcases := []string{}
-			// Read the source file
-			b, err := ioutil.ReadFile(src.Absolute())
-			if err == nil {
-				match := re.FindAllSubmatch(b, -1)
-				for _, submatch := range match {
-					testcases = append(testcases, string(submatch[1]))
-				}
-			} else {
-				log.Fatal(err)
+	test_cases := rule.TestCases()
+	for name, value := range test_cases {
+		// Append to description
+		if len(value) > 0 {
+			if ShowTestCasesFile.Value() {
+				description += " " + name
 			}
-
-			// Append to description
-			if len(testcases) > 0 {
-				if ShowTestCasesFile.Value() {
-					name := src.Absolute()
-					match := re_file.FindStringSubmatch(name)
-					if (len(match) > 0) && (match[1] == match[2]) {
-						name = re_file.ReplaceAllString(name, match[1])
-					}
-					description = description + " " + name
-				}
-				description = description + " +testcases=" + strings.Join(testcases, ",")
-			}
+			description += " +testcases=" + strings.Join(value, ",")
 		}
 	}
 
@@ -229,9 +194,61 @@ func (rule Simulation) ReportCovFiles() []string {
 	return str_keys
 }
 
+func (rule Simulation) TestFiles(absolute bool) []string {
+	test_files := []string{}
+
+	// Collect test files in case a test generator is used with a directory of test cases
+	if rule.TestCaseGenerator != nil && rule.TestCasesDir != nil {
+		// Loop through all defined test files in directory
+		if items, err := os.ReadDir(rule.TestCasesDir.String()); err == nil {
+			for _, item := range items {
+				name := item.Name()
+				if absolute && rule.TestCasesDir != nil {
+					name = rule.TestCasesDir.Absolute() + "/" + item.Name()
+				}
+				test_files = append(test_files, name)
+			}
+		} else {
+			log.Fatal(err)
+		}
+	}
+
+	return test_files
+}
+
+// Scan source files for testcases
+func (rule Simulation) TestCases() map[string][]string {
+	test_cases := map[string][]string{}
+
+	// Scan source files for testcases
+	re := regexp.MustCompile(`\s*` + "`" + `TEST_CASE\s*\(\s*"([^"]+)"\s*\)`)
+	re_file := regexp.MustCompile(`([^\/]+)\/DEPS\/([^\/]+)`)
+
+	for _, src := range rule.Srcs {
+		name := src.Absolute()
+		match := re_file.FindStringSubmatch(name)
+		if (len(match) > 0) && (match[1] == match[2]) {
+			name = re_file.ReplaceAllString(name, match[1])
+		}
+
+		// Read the source file
+		b, err := ioutil.ReadFile(src.Absolute())
+		if err == nil {
+			match := re.FindAllSubmatch(b, -1)
+			for _, submatch := range match {
+				test_cases[name] = append(test_cases[name], string(submatch[1]))
+			}
+		} else {
+			log.Fatal(err)
+		}
+	}
+
+	return test_cases
+}
+
 // Preamble creates a preamble for the simulation command for the purpose of generating
 // a testcase.
-func Preamble(rule Simulation, testcase string) (string, string) {
+func Preamble(rule Simulation, testcase string, as_script bool) (string, string) {
 	preamble := ""
 
 	// Create a testcase generation command if necessary
@@ -251,9 +268,10 @@ func Preamble(rule Simulation, testcase string) (string, string) {
 			testcase = rule.TestCasesDir.Absolute() + "/" + testcase
 		}
 
+		cmd := ""
 		if testcase == "" {
 			// Create the preamble for testcase generator without any argument
-			preamble = fmt.Sprintf("{ %s . ; }", rule.TestCaseGenerator.String())
+			cmd = fmt.Sprintf("%s .", rule.TestCaseGenerator.String())
 			testcase = "default"
 		} else {
 			// Check that the testcase exists
@@ -269,11 +287,15 @@ func Preamble(rule Simulation, testcase string) (string, string) {
 			}
 
 			// Create the preamble for testcase generator with arguments
-			preamble = fmt.Sprintf("{ %s %s %s -out %s ; }", rule.TestCaseGenerator.String(), testCaseGeneratorFlags, testcase, rule.TestCaseElf.String())
+			cmd = fmt.Sprintf("%s %s %s -out %s", rule.TestCaseGenerator.String(), testCaseGeneratorFlags, testcase, rule.TestCaseElf.String())
 		}
 
-		// Add information to command
-		preamble = fmt.Sprintf("{ echo Generating %s; } && ", testcase) + preamble
+		// Create the command
+		if as_script {
+			preamble = cmd
+		} else {
+			preamble = fmt.Sprintf("{ echo Generating %s; } && { %s; }", testcase, cmd)
+		}
 
 		// Trim testcase for use in coverage databaes
 		testcase = strings.TrimSuffix(path.Base(testcase), path.Ext(testcase))

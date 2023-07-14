@@ -394,7 +394,7 @@ func xsimCmd(rule Simulation, args []string, gui bool, testcase string, params s
 	xsim_cmd = append(xsim_cmd, "--sv_seed", fmt.Sprintf("%d", seed))
 
 	// Create optional command preamble
-	cmd_preamble, testcase = Preamble(rule, testcase)
+	cmd_preamble, testcase = Preamble(rule, testcase, false)
 
 	cmd_echo := ""
 	if rule.Params != nil && params != "" {

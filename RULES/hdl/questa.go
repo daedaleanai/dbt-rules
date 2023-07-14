@@ -3,7 +3,6 @@ package hdl
 import (
 	"fmt"
 	"log"
-	"os"
 	"path"
 	"strings"
 
@@ -97,7 +96,7 @@ var DumpQwavedbScope = core.StringFlag{
 	DefaultFn: func() string {
 		return "all"
 	},
-	Description: "Control the scope of data dumped to qwavedb file",
+	Description:   "Control the scope of data dumped to qwavedb file",
 	AllowedValues: []string{"all", "signals", "assertions", "memory", "queues"},
 }.Register()
 
@@ -150,30 +149,320 @@ var rules = make(map[string]bool)
 const common_flags = "-nologo -quiet"
 
 // Parameters of the do-file
+type ShFileParams struct {
+	Name             string
+	Work             string
+	Path             string
+	Visualizer       bool
+	Target           string
+	Params           []string
+	LibFlags         string
+	DbFlags          string
+	Coverage         bool
+	TestFiles        []string
+	TestFilesDir     string
+	TestFileGen      string
+	TestFileGenFlags string
+	TestFileElf      string
+}
+
+func (sh ShFileParams) AsArray(strs []string) string {
+	return strings.Trim(strings.Join(strs, "\\n"), " ")
+}
+
+// Sh-file template
+const sh_file_template = `#!/usr/bin/env bash
+#================================================================
+# HEADER
+#================================================================
+#% SYNOPSIS
+#+    ${SCRIPT_NAME} [OPTION]...
+#%
+#% DESCRIPTION
+#%    Run Questa Sim on {{ .Work }}/{{ .Name }}  
+#%
+#% OPTIONS
+{{- if .TestFiles }}
+#%    -f, --testfile=<string>       Select the test files to execute
+{{ end }}
+#%    -g, --gui                     Open GUI
+#%    -h, --help                    Print this help
+{{- if .Params }}
+#%    -p, --params=<string>         Select parameter set to run 
+{{ end }}
+#%    -v, --verbosity=<string>      Control verbosity
+#%
+#% EXAMPLES
+#%    ${SCRIPT_NAME}
+#%        Runs all available parameter sets. 
+#%
+#%    ${SCRIPT_NAME} -p fast
+#%        Runs only the fast parameter set.
+#%
+#================================================================
+#- IMPLEMENTATION
+#-    version         ${SCRIPT_NAME} (www.daedalean.ai) 1.0.1
+#-    author          Niels Haandbaek
+#-    copyright       Copyright (c) http://www.daedalean.ai
+#-
+#================================================================
+#  DEBUG OPTION
+#    set -n  # If you uncomment this line, the script will not execute,
+#            # but the syntax will still be checked.
+#    set -x  # If you uncomment this line the script will produce additional
+#            # debug output to stdout.
+#================================================================
+# END_OF_HEADER
+#================================================================
+
+# Needed variables
+SCRIPT_HEADSIZE=$(head -200 ${0} | grep -n "^# END_OF_HEADER" | cut -f1 -d:)
+SCRIPT_NAME="$(basename ${0})"
+
+#================================================================
+# Utility functions
+#================================================================
+
+fecho() {
+  _Type=${1} ; shift ;
+  printf "[${_Type%[A-Z][A-Z]}] ${*}\n"
+}
+
+# Error management functions
+info() { fecho INF "${*}"; }
+warning() { fecho WRN "WARNING: ${*}" 1>&2 ; }
+error() { fecho ERR "ERROR: ${*}" 1>&2 ; }
+debug() { [[ ${flag_debug} -ne 0 ]] && fecho DBG "DEBUG: ${*}" 1>&2; }
+
+# Usage functions
+usage() {
+  printf "Usage: "
+  head -${SCRIPT_HEADSIZE:-99} ${0} | grep -e "^#+" | sed -e "s/^#+[ ]*//g" -e "s/\${SCRIPT_NAME}/${SCRIPT_NAME}/g"
+}
+usagefull() { head -${SCRIPT_HEADSIZE:-99} ${0} | grep -e "^#[%+-]" | sed -e "s/^#[%+-]//g" -e "s/\${SCRIPT_NAME}/${SCRIPT_NAME}/g"; }
+scriptinfo() { head -${SCRIPT_HEADSIZE:-99} ${0} | grep -e "^#-" | sed -e "s/^#-//g" -e "s/\${SCRIPT_NAME}/${SCRIPT_NAME}/g"; }
+
+# complain to STDERR and exit with error
+die() {
+  echo "$*" >&2
+  exit 2
+}
+
+needs_arg() {
+  if [[ -z "$OPTARG" ]]; then
+    die "No arg for --$OPT option"
+  fi
+}
+
+function ctrl_c() {
+  cd - > /dev/null
+  echo "Interrupted"
+  exit 1
+}
+
+#================================================================
+# Argument parsing
+#================================================================
+
+flag_debug=0
+flag_gui=0
+flag_quiet=0
+{{- if .TestFiles }}
+testfiles_dir={{ .TestFilesDir }}
+all_testfiles=(\
+  {{- range .TestFiles }}
+  {{ . }}\
+  {{- end }}
+)
+{{- else }}
+testfiles_dir=""
+all_testfiles=("_")
+{{- end }}
+{{- if .Params }}
+all_params=(\
+  {{- range .Params }}
+  {{ . }}\
+  {{- end }}
+)
+{{- else }}
+all_params=("_")
+{{- end }}
+seed="-sv_seed random"
+params=()
+testfiles=()
+otherargs=()
+
+while getopts f:gho:p:qs:-: OPT; do
+  # support long options: https://stackoverflow.com/a/28466267/519360
+  if [[ "$OPT" = "-" ]]; then # long option: reformulate OPT and OPTARG
+    OPT="${OPTARG%%=*}"       # extract long option name
+    OPTARG="${OPTARG#$OPT}"   # extract long option argument (may be empty)
+  fi
+  case "$OPT" in
+    f | testfile )   needs_arg; testfiles[${#testfiles[@]}]="$OPTARG" ;;
+    g | gui )        flag_gui=1 ;;
+    h | help | man ) usagefull; exit 0 ;;
+    o | otherargs )  needs_arg; otherargs[${#otherargs[@]}]="$OPTARG" ;;
+    p | params )     needs_arg; params[${#params[@]}]="$OPTARG" ;;
+    q | quiet )      flag_quiet=1 ;;
+    s | seed )       needs_arg; seed="-sv_seed $OPTARG" ;;
+    ??* )            die "Illegal option --$OPT" ;;  # bad long option
+    ? )              exit 2 ;;  # bad short option (error reported via getopts)
+  esac
+done
+shift $((OPTIND-1)) # remove parsed options and args from $@ list
+
+if [ ${#testfiles[@]} -eq 0 ]; then
+  testfiles=("${all_testfiles[@]}")
+fi
+
+if [ ${#params[@]} -eq 0 ]; then
+  params=("${all_params[@]}")
+fi
+
+# Store current directory 
+cwd=${PWD}
+cd {{ .Path }}
+
+# Make sure we get back to where we started on Ctrl-C
+trap ctrl_c INT
+
+for p in ${params[@]}; do
+  # Run for each parameter
+  if [[ ${p} != "_" ]]; then
+    target="${p}_{{ .Target }}"
+    main_coverage_db="{{ .Name }}_${p}"
+  else
+    target="{{ .Target }}"
+    main_coverage_db="{{ .Name }}"
+  fi
+
+  if [[ $flag_gui -eq 0 ]]; then
+    mode="-batch -quiet"
+  else
+    {{- if .Visualizer }}
+    mode="-visualizer=+designfile={{ .Path }}/{{ .Name }}/${target}.bin"
+    {{- else }}
+    mode="-gui"
+    {{- end }}
+  fi
+
+  if [[ $flag_gui -eq 0 && $flag_quiet -eq 1 ]]; then
+    nostdout="-nostdout"
+  else
+    nostdout=""
+  fi
+
+  for tf in ${testfiles[@]}; do
+    # Run for each test file
+    echo -n "Testcase "
+    logfile=""
+
+    if [[ ${p} != "_" ]]; then
+      logfile="${logfile}${p}_"
+      echo -n "${p}"
+    fi
+
+    if [[ ${tf} == "_" ]]; then
+      testfile="default"
+      coverage_db=${main_coverage_db}
+      echo -n ":"
+      {{- if .TestFileGen }}
+      {{ .TestFileGen }} .
+      {{- end }}
+    else
+      testfile="${tf##*/}"
+      testfile="${testfile%.*}"
+      coverage_db="${main_coverage_db}_${testfile}"
+      if [[ ${p} != "" ]]; then 
+        echo -n "/${testfile}:"
+      else
+        echo -n "${testfile}:"
+      fi
+      logfile="${logfile}${testfile}_"
+      testgen_logfile="${logfile}testgen.log"
+      {{- if .TestFileGen }}
+      flags="{{ .TestFileGenFlags }}"
+      if [[ $tf == *.json ]]; then
+        flags="${flags} -test"
+      fi
+      {{ .TestFileGen }} $flags ${testfiles_dir}/${tf} -out {{ .TestFileElf }} > ${testgen_logfile} 2>&1
+      {{- else }}
+      ${testfiles_dir}/${tf} > ${testgen_logfile} 2>&1
+      {{- end }}
+      if [[ $? -ne 0 ]]; then
+        cat ${testgen_logfile}; 
+        cd ${cwd} > /dev/null
+        exit 1;
+      fi
+    fi
+  
+    vsim_logfile="${logfile}vsim.log"
+
+    # Run simulation
+    vsim \
+      -logfile ${vsim_logfile}\
+      -modelsimini {{ .Path }}/{{ .Name }}/modelsim.ini\
+      -onfinish final\
+      $nostdout\
+      $seed\
+      {{- if .Coverage }}
+      -coverage -assertdebug\
+      -do "set coverage 1"\
+      -do "set main_coverage_db ${main_coverage_db}"\
+      -do "set coverage_db ${coverage_db}"\
+      {{- end }}
+      -do "set gui ${flag_gui}"\
+      {{- if .LibFlags }}
+      {{ .LibFlags }}\
+      {{- end }}
+      {{- if .DbFlags }}
+      {{ .DbFlags }}\
+      {{- end }}
+      -do "set target ${target}"\
+      -do "set testfile ${testfile}"\
+      ${otherargs[@]}\
+      -do {{ .Path }}/{{ .Name }}/vsim.do\
+      -work {{ .Work }}\
+      ${mode}\
+      ${target}
+    if [[ $? -eq 0 ]]; then
+      echo -n "PASS"
+    else
+      if [[ ${flag_quiet} -eq 1 ]]; then
+        cat ${vsim_logfile}
+        echo
+      fi
+      echo "FAIL"
+      cd ${cwd} > /dev/null
+      exit 1
+    fi
+    {{- if .Coverage }}
+    echo " Coverage: {{ .Path }}/{{ .Name }}/${main_coverage_db}.ucdb"
+    {{- else }}
+    echo ""
+    {{- end }}
+  done
+done
+
+# Return to original directory
+cd ${cwd} > /dev/null
+`
+
+// Parameters of the do-file
 type DoFileParams struct {
-	Lib          string
 	WaveformInit string
-	DumpVcd      bool
 	DumpVcdFile  string
 	CovFiles     string
 }
 
 // Do-file template
-const do_file_template = `
-proc reload {} {
-	global target
-	vsim -work {{ .Lib }} $target
-	{{ if .WaveformInit }}
-		source {{ .WaveformInit }}
-	{{ end }}
-
-}
-
+const do_file_template = `# Disable warnings from standard packages
 set StdArithNoWarnings 1
 set NumericStdNoWarnings 1
 
 {{ if .WaveformInit }}
-if [info exists gui] {
+if {[info exists gui] && $gui} {
 	catch { source {{ .WaveformInit }} }
 	assertion fail -action break
 }
@@ -183,7 +472,7 @@ if [info exists from] {
 	run $from
 }
 
-{{ if .DumpVcd }}
+{{ if .DumpVcdFile }}
 vcd file {{ .DumpVcdFile }}
 vcd add -r *
 {{ end }}
@@ -194,17 +483,18 @@ if [info exists to] {
 	run -all
 }
 
-{{ if .DumpVcd }}
+{{ if .DumpVcdFile }}
 vcd flush
 {{ end }}
 
 if [info exists coverage] {
 	# Create coverage database
-	coverage save -assert -directive -cvg -codeall -testname $testcase $coverage_db.ucdb
+	coverage save -assert -directive -cvg -codeall -testname $testfile ${coverage_db}.ucdb
 	# Optionally merge coverage databases
 	if {$main_coverage_db != $coverage_db} {
-		puts "Writing merged coverage database to [pwd]/$main_coverage_db.ucdb"
-		vcover merge -testassociated -output $main_coverage_db.ucdb $main_coverage_db.ucdb $coverage_db.ucdb
+		puts "Writing merged coverage database to [file normalize $main_coverage_db.ucdb]"
+		vcover merge -testassociated -output ${main_coverage_db}.ucdb \
+      ${main_coverage_db}.ucdb ${coverage_db}.ucdb
 	}
 	# Create HTML coverage report
 	vcover report -html -output ${main_coverage_db}_covhtml \
@@ -212,41 +502,51 @@ if [info exists coverage] {
 	# Create textual code coverage report
 	{{ if .CovFiles }}
 	vcover report -output ${main_coverage_db}_covcode.txt -srcfile={{ .CovFiles }}\
-		-codeAll $main_coverage_db.ucdb
+		-codeAll ${main_coverage_db}.ucdb
 	{{ else }}
 	vcover report -output ${main_coverage_db}_covcode.txt\
-		-codeAll $main_coverage_db.ucdb
+		-codeAll ${main_coverage_db}.ucdb
 	{{ end }}
 	# Create textual assertion coverage report
-	puts "Writing coverage report to [pwd]/${main_coverage_db}_cover.txt"
-	vcover report -output ${main_coverage_db}_cover.txt -flat -directive -cvg $main_coverage_db.ucdb
+	puts "Writing coverage report to [file normalize ${main_coverage_db}_cover.txt]"
+	vcover report -output ${main_coverage_db}_cover.txt -flat \
+    -directive -cvg ${main_coverage_db}.ucdb
 	# Create textural assertion report
-	puts "Writing assertion report to [pwd]/${main_coverage_db}_cover.txt"
-	vcover report -output ${main_coverage_db}_assert.txt -flat -assert $main_coverage_db.ucdb
+	puts "Writing assertion report to [file normalize ${main_coverage_db}_cover.txt]"
+	vcover report -output ${main_coverage_db}_assert.txt -flat\
+    -assert ${main_coverage_db}.ucdb
 }
 
-if ![info exists gui] {
-	quit -code [coverage attribute -name TESTSTATUS -concise]
+if {![info exists gui] || !$gui} {
+	# Report error in case status > 1 (WARNING)
+	quit -code [expr [coverage attribute -name TESTSTATUS -concise] > 1]
 }
 `
 
 func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []core.Path {
+	log_file := rule.Path().WithSuffix("/vmap.log")
+
+	cmds := []string{
+		fmt.Sprintf("cd %s", rule.Path()),
+		fmt.Sprintf("rm -f %s", log_file.String()),
+		fmt.Sprintf("vlib %s >> %s 2>&1", rule.Path().WithSuffix("/"+rule.Lib()), log_file.String()),
+		fmt.Sprintf("vmap %s %s >> %s 2>&1", rule.Lib(), rule.Path().WithSuffix("/"+rule.Lib()), log_file.String()),
+	}
+
 	if SimulatorLibDir.Value() != "" {
-		cmds := []string{}
 		for _, lib := range rule.Libs {
 			cmds = append(cmds, fmt.Sprintf("vmap %s %s/%s", lib, SimulatorLibDir.Value(), lib))
 		}
-
-		if len(cmds) > 0 {
-			modelsim_ini := rule.Path().WithSuffix("/modelsim.ini")
-			ctx.AddBuildStep(core.BuildStep{
-				Out:   modelsim_ini,
-				Cmd:   strings.Join(cmds, " && "),
-				Descr: fmt.Sprintf("vmap: %s", modelsim_ini.Absolute()),
-			})
-			deps = append(deps, modelsim_ini)
-		}
 	}
+
+	modelsim_ini := rule.Path().WithSuffix("/modelsim.ini")
+	ctx.AddBuildStep(core.BuildStep{
+		Out:   modelsim_ini,
+		Cmd:   strings.Join(cmds, " && "),
+		Descr: fmt.Sprintf("vmap: %s", modelsim_ini.Absolute()),
+	})
+	deps = append(deps, modelsim_ini)
+
 	return deps
 }
 
@@ -265,65 +565,71 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				continue
 			}
 
-			cmd := fmt.Sprintf("%s -work %s -l %s", common_flags, rule.Lib(), log.String())
+			cmd := fmt.Sprintf("%s -work %s -logfile %s -modelsimini %s",
+				common_flags, rule.Lib(), log.String(), rule.Path().WithSuffix("/modelsim.ini"))
 
 			// tool will point to the tool to execute (also used for logging below)
 			var tool string
 			if IsVerilog(src.String()) {
 				tool = "vlog"
-				cmd = cmd + " " + VlogFlags.Value()
-				cmd = cmd + " -suppress 2583 -svinputport=net -define SIMULATION"
-				cmd = cmd + fmt.Sprintf(" %s", rule.libFlags())
-				cmd = cmd + fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
+				cmd += " " + VlogFlags.Value()
+				cmd += "\\\n    -suppress 2583 -svinputport=net -define SIMULATION"
+				if rule.libFlags() != "" {
+					cmd += "\\\n    " + rule.libFlags()
+				}
+				cmd += "\\\n    +incdir+" + core.SourcePath("").String()
 				seen_incs := make(map[string]struct{})
 				for _, inc := range incs {
 					inc_path := path.Dir(inc.Absolute())
 					if _, ok := seen_incs[inc_path]; !ok {
-						cmd = cmd + fmt.Sprintf(" +incdir+%s", inc_path)
+						cmd += "\\\n    +incdir+" + inc_path
 						seen_incs[inc_path] = struct{}{}
 					}
 				}
 				if flags != nil {
 					if vlog_flags, ok := flags["vlog"]; ok {
-						cmd = cmd + " " + vlog_flags
+						cmd += " " + vlog_flags
 					}
 				}
 				for key, value := range rule.Defines {
-					cmd = cmd + fmt.Sprintf(" -define %s", key)
+					cmd += "\\\n    -define " + key
 					if value != "" {
-						cmd = cmd + fmt.Sprintf("=%s", value)
+						cmd += "=" + value
 					}
 				}
 			} else if IsVhdl(src.String()) {
 				tool = "vcom"
-				cmd = cmd + " " + VcomFlags.Value()
+				cmd += " " + VcomFlags.Value()
 				if flags != nil {
 					if vcom_flags, ok := flags["vcom"]; ok {
-						cmd = cmd + " " + vcom_flags
+						cmd += " " + vcom_flags
 					}
 				}
 			}
 
 			if Lint.Value() {
-				cmd = cmd + " -lint"
+				cmd += "\\\n    -lint"
 			}
 
 			// Create plain compilation command
-			cmd = tool + " " + cmd + " " + src.String()
-
-			// Remove the log file if the command fails to ensure we can recompile it
-			cmd = cmd + " || { rm " + log.String() + " && exit 1; }"
+			cmd = tool + " " + cmd + "\\\n    " + src.String()
 
 			// Add the source file to the dependencies
 			deps = append(deps, src)
 
+			script := "#!/usr/bin/env bash\n" + cmd + "\n"
+			script += "if [ $? -ne 0 ]; then\n"
+			script += "  rm " + log.String() + "\n"
+			script += "  exit 1" + "\n"
+			script += "fi"
+
 			// Add the compilation command as a build step with the log file as the
 			// generated output
 			ctx.AddBuildStep(core.BuildStep{
-				Out:   log,
-				Ins:   deps,
-				Cmd:   cmd,
-				Descr: fmt.Sprintf("%s: %s", tool, src.Relative()),
+				Out:    log,
+				Ins:    deps,
+				Script: script,
+				Descr:  fmt.Sprintf("%s: %s", tool, src.Relative()),
 			})
 
 			// Add the log file to the dependencies of the next files
@@ -433,27 +739,29 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 			access_flag = "-debug,livesim"
 		} else if Access.Value() == "acc" {
 			access_flag = "+acc"
-		}  else if Access.Value() != "" {
+		} else if Access.Value() != "" {
 			access_flag = fmt.Sprintf("+acc=%s", Access.Value())
 		}
 
 		// Generate designfile flag
 		designfile_flag := ""
 		if Designfile.Value() {
-			designfile_flag = "-designfile " + target + ".bin"
+			designfile_flag = "-designfile " + rule.Path().WithSuffix("/"+target+".bin").String()
 		}
 
-		cmd := "vopt " + common_flags 
-		cmd = cmd + " " + VoptFlags.Value()
-		cmd = cmd + " " + cover_flag
-		cmd = cmd + " " + access_flag
-		cmd = cmd + " " + designfile_flag
-		cmd = cmd + " -l " + log_file.String()
-		cmd = cmd + " -work " + rule.Lib()
-		cmd = cmd + " " + top
-		cmd = cmd + " " + additional_tops
-		cmd = cmd + " " + rule.libFlags()
-		cmd = cmd + " -o " + target
+		cmd := "vopt " + common_flags
+		cmd += "\\\n    -modelsimini " + rule.Path().WithSuffix("/modelsim.ini").String()
+		cmd += "\\\n    " + VoptFlags.Value()
+		cmd += "\\\n    " + cover_flag
+		cmd += "\\\n    " + access_flag
+		cmd += "\\\n    " + designfile_flag
+		cmd += "\\\n    -logfile " + log_file.String()
+		cmd += "\\\n    -work " + rule.Lib()
+		cmd += "\\\n    " + top
+		cmd += "\\\n    " + additional_tops
+		cmd += "\\\n    " + rule.libFlags()
+		cmd += "\\\n    -o " + target
+		cmd += "\\\n>> " + log_file.String() + " 2>&1"
 
 		// Set up parameters
 		if param_set != "" {
@@ -461,7 +769,7 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 			if params, ok := rule.Params[param_set]; ok {
 				// Add parameters for all generics
 				for param, value := range params {
-					cmd = fmt.Sprintf("%s -g %s=%s", cmd, param, value)
+					cmd += fmt.Sprintf("\\\n    -g %s=%s", param, value)
 				}
 			}
 		}
@@ -479,10 +787,10 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 
 		// Add the rule to run 'vopt'.
 		ctx.AddBuildStep(core.BuildStep{
-			Out:   log_file,
-			Ins:   deps,
-			Cmd:   cmd,
-			Descr: fmt.Sprintf("vopt: %s %s", rule.Lib()+"."+top, target),
+			Out:    log_file,
+			Ins:    deps,
+			Script: cmd,
+			Descr:  fmt.Sprintf("vopt: %s %s", rule.Lib()+"."+top, target),
 		})
 
 		// Note that we created this rule
@@ -494,9 +802,6 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 func doFile(ctx core.Context, rule Simulation) {
 	// Do-file script
 	params := DoFileParams{
-		Lib: rule.Lib(),
-		DumpVcd: DumpVcd.Value(),
-		DumpVcdFile: fmt.Sprintf("%s.vcd.gz", rule.Name),
 		CovFiles: strings.Join(rule.ReportCovFiles(), "+"),
 	}
 
@@ -504,11 +809,74 @@ func doFile(ctx core.Context, rule Simulation) {
 		params.WaveformInit = rule.WaveformInit.String()
 	}
 
+	if DumpVcd.Value() {
+		params.DumpVcdFile = fmt.Sprintf("%s.vcd.gz", rule.Name)
+	}
+
 	doFile := rule.Path().WithSuffix("/" + "vsim.do")
 	ctx.AddBuildStep(core.BuildStep{
 		Out:   doFile,
 		Data:  core.CompileTemplate(do_file_template, "do", params),
 		Descr: fmt.Sprintf("vsim: %s", doFile.Relative()),
+	})
+}
+
+// Create a script for starting the simulation
+func simulationFile(ctx core.Context, rule Simulation) {
+	var keys []string
+	for k := range rule.Params {
+		keys = append(keys, k)
+	}
+
+	params := ShFileParams{
+		Name:             rule.Name,
+		Work:             rule.Lib(),
+		Target:           rule.Target(),
+		Path:             core.BuildPath("").Absolute(),
+		Params:           keys,
+		Coverage:         Coverage.Value(),
+		Visualizer:       Designfile.Value(),
+		LibFlags:         rule.libFlags(),
+		TestFiles:        rule.TestFiles(false),
+		TestFileGenFlags: rule.TestCaseGeneratorFlags,
+	}
+
+	if rule.TestCaseGenerator != nil {
+		params.TestFileGen = rule.TestCaseGenerator.String()
+	}
+
+	if rule.TestCaseElf != nil {
+		params.TestFileElf = rule.TestCaseElf.String()
+	}
+
+	if rule.TestCasesDir != nil {
+		params.TestFilesDir = rule.TestCasesDir.Absolute()
+	}
+
+	// Enable qwavedb dumping
+	if DumpQwavedb.Value() {
+		params.DbFlags = "-qwavedb="
+		switch DumpQwavedbScope.Value() {
+		case "signals":
+			params.DbFlags += "+signal"
+		case "assertions":
+			params.DbFlags += "+signal+assertions=pass,atv"
+		case "memory":
+			params.DbFlags += "+signal+assertions=pass,atv+memory"
+		case "queues":
+			params.DbFlags += "+signal+assertions=pass,atv+memory+queues"
+		case "all":
+			params.DbFlags += "+signal+assertions=pass,atv+memory+queues+class+classmemory+classdynarray"
+		}
+		params.DbFlags += "+wavefile=" + rule.Target() + ".db"
+	}
+
+	shFile := rule.Path().WithSuffix("/" + "vsim.sh")
+	ctx.AddBuildStep(core.BuildStep{
+		Out:          shFile,
+		Data:         core.CompileTemplate(sh_file_template, "sh", params),
+		DataFileMode: 0755,
+		Descr:        fmt.Sprintf("vsim: %s", shFile.Relative()),
 	})
 }
 
@@ -521,7 +889,10 @@ func BuildQuesta(ctx core.Context, rule Simulation) {
 	// optimize the code
 	optimize(ctx, rule, deps)
 
-	// Create script
+	// Create simulation command file
+	simulationFile(ctx, rule)
+
+	// Create simulation script
 	doFile(ctx, rule)
 }
 
@@ -532,19 +903,19 @@ func verbosityLevelToFlag(level string) (string, bool) {
 	var print_output bool
 	switch level {
 	case "none":
-		verbosity_flag = " +verbosity=DVM_VERB_NONE"
+		verbosity_flag = "+verbosity=DVM_VERB_NONE"
 		print_output = false
 	case "low":
-		verbosity_flag = " +verbosity=DVM_VERB_LOW"
+		verbosity_flag = "+verbosity=DVM_VERB_LOW"
 		print_output = true
 	case "medium":
-		verbosity_flag = " +verbosity=DVM_VERB_MED"
+		verbosity_flag = "+verbosity=DVM_VERB_MED"
 		print_output = true
 	case "high":
-		verbosity_flag = " +verbosity=DVM_VERB_HIGH"
+		verbosity_flag = "+verbosity=DVM_VERB_HIGH"
 		print_output = true
 	case "all":
-		verbosity_flag = " +verbosity=DVM_VERB_ALL"
+		verbosity_flag = "+verbosity=DVM_VERB_ALL"
 		print_output = true
 	default:
 		log.Fatal(fmt.Sprintf("invalid verbosity flag '%s', only 'low', 'medium',"+
@@ -554,79 +925,24 @@ func verbosityLevelToFlag(level string) (string, bool) {
 	return verbosity_flag, print_output
 }
 
-// questaCmd will create a command for starting 'vsim' on the compiled and optimized design with flags
-// set in accordance with what is specified on the command line.
-func questaCmd(rule Simulation, args []string, gui bool, testcase string, params string) string {
-	// Prefix the vsim command with this
-	cmd_preamble := ""
-
-	// Default log file
-	log_file_suffix := "vsim.log"
-	if testcase != "" {
-		log_file_suffix = testcase + "_" + log_file_suffix
-	}
-	if params != "" {
-		log_file_suffix = params + "_" + log_file_suffix
-	}
-	log_file := rule.Path().WithSuffix("/" + log_file_suffix)
-
-	// Script to execute
-	do_file := rule.Path().WithSuffix("/" + "vsim.do")
-
-	// Collect do-files and commands here
-	var do_flags []string
-
-	// Default flag values
-	vsim_flags := " -onfinish final -l " + log_file.String() + rule.libFlags()
-
-	seed_flag := " -sv_seed random"
-	verbosity_flag := " +verbosity=DVM_VERB_NONE"
-	mode_flag := " -batch -quiet"
-	plusargs_flag := ""
-
-	// Default database name for simulation
-	var target string
-	if len(params) > 0 {
-		target = params + "_" + rule.Target()
-	} else {
-		target = rule.Target()
-	}
-
-	// Enable coverage in simulator
-	coverage_flag := ""
-	if Coverage.Value() {
-		coverage_flag = " -coverage -assertdebug"
-		do_flags = append(do_flags, "\"set coverage 1\"")
-	}
-
-	// Enable qwavedb dumping
-	qwavedb_flag := ""
-	if DumpQwavedb.Value() {
-		qwavedb_flag = " -qwavedb="
-		switch DumpQwavedbScope.Value() {
-			case "signals":
-				qwavedb_flag += "+signal"
-			case "assertions":
-				qwavedb_flag += "+signal+assertions=pass,atv"
-			case "memory":
-				qwavedb_flag += "+signal+assertions=pass,atv+memory"
-			case "queues":
-				qwavedb_flag += "+signal+assertions=pass,atv+memory+queues"
-			case "all":
-				qwavedb_flag += "+signal+assertions=pass,atv+memory+queues+class+classmemory+classdynarray"
-		}
-		qwavedb_flag += "+wavefile=" + target + ".db"
-	}
-
-	// Determine the names of the coverage databases, this one will hold merged
-	// data from multiple testcases
-	main_coverage_db := rule.Name
-
-	// This will be the name of the database created by the current run
-	coverage_db := rule.Name
-
-	// Turn off output unless verbosity is activated
+// simulateQuesta will create a command to start 'vsim' on the compiled design
+// with flags set in accordance with what is specified on the command line. It will
+// optionally build a chain of commands in case the rule has parameters, but
+// no parameters are specified on the command line
+func simulateQuesta(rule Simulation, args []string, gui bool) string {
+	// Control verbosity
+	verbosity_flag := "+verbosity=DVM_VERB_NONE"
+	// Control whether to print anything
 	print_output := false
+
+	// Optional testcase goes here
+	testcases := []string{}
+
+	// Optional parameter set goes here
+	params := []string{}
+
+	// Optional all other flags
+	other_flags := []string{}
 
 	// Parse additional arguments
 	for _, arg := range args {
@@ -634,7 +950,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 			// Define simulator seed
 			var seed int64
 			if _, err := fmt.Sscanf(arg, "-seed=%d", &seed); err == nil {
-				seed_flag = fmt.Sprintf(" -sv_seed %d", seed)
+				other_flags = append(other_flags, fmt.Sprintf("-s %d", seed))
 			} else {
 				log.Fatal("-seed expects an integer argument!")
 			}
@@ -650,7 +966,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 			// Define how long to run
 			var from string
 			if _, err := fmt.Sscanf(arg, "-from=%s", &from); err == nil {
-				do_flags = append(do_flags, fmt.Sprintf("\"set from %s\"", from))
+				other_flags = append(other_flags, fmt.Sprintf("\"set from %s\"", from))
 			} else {
 				log.Fatal("-from expects an argument of '<timesteps>[<time units>]'!")
 			}
@@ -658,127 +974,14 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 			// Define how long to run
 			var to string
 			if _, err := fmt.Sscanf(arg, "-to=%s", &to); err == nil {
-				do_flags = append(do_flags, fmt.Sprintf("\"set to %s\"", to))
+				other_flags = append(other_flags, fmt.Sprintf("\"set to %s\"", to))
 			} else {
 				log.Fatal("-to expects an argument of '<timesteps>[<time units>]'!")
 			}
 		} else if strings.HasPrefix(arg, "+") {
 			// All '+' arguments go directly to the simulator
-			plusargs_flag = plusargs_flag + " " + arg
-		}
-	}
-
-	// Create optional command preamble
-	cmd_preamble, testcase = Preamble(rule, testcase)
-
-	cmd_echo := ""
-	if rule.Params != nil && params != "" {
-		// Update coverage database name based on parameters. Since we cannot merge
-		// different parameter sets, we have to make a dedicated main database
-		// for this parameter set.
-		main_coverage_db = main_coverage_db + "_" + params
-		coverage_db = coverage_db + "_" + params
-		cmd_echo = "Testcase " + params
-
-		// Update with testcase if specified
-		if testcase != "" {
-			coverage_db = coverage_db + "_" + testcase
-			cmd_echo = cmd_echo + "/" + testcase + ":"
-			testcase = params + "_" + testcase
-		} else {
-			cmd_echo = cmd_echo + ":"
-			testcase = params
-		}
-	} else {
-		// Update coverage database name with testcase alone, main database stays
-		// the same
-		if testcase != "" {
-			coverage_db = coverage_db + "_" + testcase
-			cmd_echo = "Testcase " + testcase + ":"
-		} else {
-			testcase = "default"
-		}
-	}
-
-	do_flags = append(do_flags, fmt.Sprintf("\"set target %s\"", target))
-	do_flags = append(do_flags, fmt.Sprintf("\"set testcase %s\"", testcase))
-	do_flags = append(do_flags, fmt.Sprintf("\"set main_coverage_db %s\"", main_coverage_db))
-	do_flags = append(do_flags, fmt.Sprintf("\"set coverage_db %s\"", coverage_db))
-
-	cmd_postamble := ""
-	cmd_pass := "PASS"
-	cmd_fail := "FAIL"
-	if gui {
-		do_flags = append(do_flags, "\"set gui 1\"")
-		if Designfile.Value() {
-			mode_flag = " -visualizer=+designfile=" + target + ".bin"
-		} else {
-			mode_flag = " -gui"
-		}
-	}
-
-	if !print_output && !gui {
-		mode_flag = mode_flag + " -nostdout"
-	}
-
-	if Coverage.Value() {
-		cmd_pass = cmd_pass + fmt.Sprintf(" Coverage: $$(pwd)/%s.ucdb", main_coverage_db)
-		cmd_fail = cmd_fail + fmt.Sprintf(" Coverage: $$(pwd)/%s.ucdb", main_coverage_db)
-	}
-
-	cmd_newline := ":"
-	if cmd_echo != "" {
-		cmd_newline = "echo"
-	}
-
-	if !print_output {
-		cmd_postamble = fmt.Sprintf("|| { %s; cat %s; echo %s; exit 1; }", cmd_newline, log_file.String(), cmd_fail)
-	}
-
-	vsim_flags = vsim_flags + mode_flag + seed_flag + coverage_flag + qwavedb_flag +
-		verbosity_flag + plusargs_flag + " " + VsimFlags.Value()
-
-	// Add any extra flags specified with the rule
-	if rule.ToolFlags != nil {
-		if extra_flags, ok := rule.ToolFlags["vsim"]; ok {
-			vsim_flags = vsim_flags + " " + extra_flags
-		}
-	}
-
-	for _, do_flag := range do_flags {
-		vsim_flags = vsim_flags + " -do " + do_flag
-	}
-
-	// Add the file as the last argument
-	vsim_flags = vsim_flags + " -do " + do_file.String()
-
-	cmd := fmt.Sprintf("{ echo -n %s && vsim %s -work %s %s && echo %s; }", cmd_echo, vsim_flags, rule.Lib(), target, cmd_pass)
-	if cmd_preamble == "" {
-		cmd = cmd + " " + cmd_postamble
-	} else {
-		cmd = "{ { " + cmd_preamble + " } && " + cmd + " } " + cmd_postamble
-	}
-
-	// Wrap command in another layer of {} to enable chaining
-	cmd = "{ " + cmd + " }"
-
-	return cmd
-}
-
-// simulateQuesta will create a command to start 'vsim' on the compiled design
-// with flags set in accordance with what is specified on the command line. It will
-// optionally build a chain of commands in case the rule has parameters, but
-// no parameters are specified on the command line
-func simulateQuesta(rule Simulation, args []string, gui bool) string {
-	// Optional testcase goes here
-	testcases := []string{}
-
-	// Optional parameter set goes here
-	params := []string{}
-
-	// Parse additional arguments
-	for _, arg := range args {
-		if strings.HasPrefix(arg, "-testcases=") && rule.TestCaseGenerator != nil {
+			other_flags = append(other_flags, arg)
+		} else if strings.HasPrefix(arg, "-testcases=") && rule.TestCaseGenerator != nil {
 			var testcases_arg string
 			if _, err := fmt.Sscanf(arg, "-testcases=%s", &testcases_arg); err != nil {
 				log.Fatal(fmt.Sprintf("-testcases expects a string argument!"))
@@ -798,49 +1001,25 @@ func simulateQuesta(rule Simulation, args []string, gui bool) string {
 		}
 	}
 
-	// If no parameters have been specified, simulate them all
-	if rule.Params != nil && len(params) == 0 {
-		for key := range rule.Params {
-			params = append(params, key)
-		}
-	} else if len(params) == 0 {
-		params = append(params, "")
+	cmd := "-o " + verbosity_flag
+
+	if len(testcases) > 0 {
+		cmd += " -f " + strings.Join(testcases, " -f -")
 	}
 
-	// If no testcase has been specified, simulate them all
-	if rule.TestCaseGenerator != nil && rule.TestCasesDir != nil && len(testcases) == 0 {
-		// Loop through all defined testcases in directory
-		if items, err := os.ReadDir(rule.TestCasesDir.String()); err == nil {
-			for _, item := range items {
-				testcases = append(testcases, item.Name())
-			}
-		} else {
-			log.Fatal(err)
-		}
-	} else if len(testcases) == 0 {
-		testcases = append(testcases, "")
+	if len(params) > 0 {
+		cmd += " -p " + strings.Join(params, " -p ")
 	}
 
-	// Final command
-	cmd := "{ :; }"
-
-	// Loop for all parameter sets
-	for i := range params {
-		// Loop for all test cases
-		for j := range testcases {
-			cmd = cmd + " && " + questaCmd(rule, args, gui, testcases[j], params[i])
-			// Only one testcase allowed in GUI mode
-			if gui {
-				break
-			}
-		}
-		// Only one parameter set allowed in gui mode
-		if gui {
-			break
-		}
+	if len(other_flags) > 0 {
+		cmd += " -o " + strings.Join(other_flags, " -o ") 
 	}
 
-	return cmd
+	if !print_output {
+		cmd += " -q"
+	}
+
+	return rule.Path().String() + "/vsim.sh " + cmd
 }
 
 // Run will build the design and run a simulation in GUI mode.
