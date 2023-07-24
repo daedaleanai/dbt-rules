@@ -523,6 +523,12 @@ func (bin Binary) AnalysisDeps(ctx core.Context) []core.AnalyzeInterface {
 	for _, dep := range bin.Deps {
 		result = append(result, dep.CcLibrary(toolchain))
 	}
+	for _, dep := range bin.DepsPost {
+		result = append(result, dep.CcLibrary(toolchain))
+	}
+	for _, dep := range bin.DepsPre {
+		result = append(result, dep.CcLibrary(toolchain))
+	}
 	return result
 }
 
