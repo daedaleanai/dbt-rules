@@ -58,7 +58,11 @@ func (bin Binary) getInputs() []core.Path {
 	cmd.Dir = bin.Package.Absolute()
 	data, err := cmd.Output()
 	if err != nil {
-		core.Fatal("'go list' failed: %s", err)
+		if exitError, ok := err.(*exec.ExitError); ok {
+			core.Fatal("'go list' failed: %s\nstdout: %s\nstderr: %s\n", err, data, exitError.Stderr)
+		} else {
+			core.Fatal("'go list' failed: %s\nstdout: %s\n", err, data)
+		}
 	}
 
 	// Create a map of all packages by import path
