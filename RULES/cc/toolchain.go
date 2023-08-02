@@ -2,6 +2,7 @@ package cc
 
 import (
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 
@@ -16,6 +17,17 @@ const (
 	LldLink
 	Gcc
 	Clang
+)
+
+type OptimizationLevel int
+
+const (
+	OptDefault OptimizationLevel = iota
+	OptNone
+	OptSize
+	OptLev1
+	OptLev2
+	OptLev3
 )
 
 type Toolchain interface {
@@ -36,6 +48,8 @@ type Toolchain interface {
 
 	StdDeps() []Dep
 	Script() core.Path
+
+	TranslateOptLevel(opt_level OptimizationLevel) []string
 
 	LinkerFlavor() LinkerFlavor
 }
@@ -151,6 +165,27 @@ func (gcc GccToolchain) CxxFlags() []string {
 		result = append(result, "-isystem", fmt.Sprintf("%q", inc))
 	}
 	return result
+}
+
+func (gcc GccToolchain) TranslateOptLevel(optLevel OptimizationLevel) []string {
+	switch optLevel {
+	case OptDefault:
+		// Default to O2 for this toolchain
+		return []string{"-O2"}
+	case OptNone:
+		return []string{"-O0"}
+	case OptSize:
+		return []string{"-Os"}
+	case OptLev1:
+		return []string{"-O1"}
+	case OptLev2:
+		return []string{"-O2"}
+	case OptLev3:
+		return []string{"-O3"}
+	}
+
+	log.Panicln("Unknonw optimization level ", optLevel)
+	return []string{}
 }
 
 func (gcc GccToolchain) AsFlags() []string {

@@ -20,6 +20,7 @@ type objectFile struct {
 	CxxFlags  []string
 	AsFlags   []string
 	Toolchain Toolchain
+	OptLevel  OptimizationLevel
 }
 
 func ninjaEscape(s string) string {
@@ -101,6 +102,7 @@ func (obj objectFile) flags(tc Toolchain) []string {
 	for _, inc := range obj.Includes {
 		flags = append(flags, fmt.Sprintf("-I%s", inc.Absolute()))
 	}
+	flags = append(flags, tc.TranslateOptLevel(obj.OptLevel)...)
 
 	return flags
 }
@@ -135,6 +137,9 @@ func (obj objectFile) Build(ctx core.Context) {
 	}
 	sort.Strings(includeFlags)
 	flags = append(flags, includeFlags...)
+
+	toolchain := toolchainOrDefault(obj.Toolchain)
+	flags = append(flags, toolchain.TranslateOptLevel(obj.OptLevel)...)
 
 	ctx.WithTrace("obj:"+obj.Out.Relative(), func(ctx core.Context) {
 		ctx.AddBuildStepWithRule(core.BuildStepWithRule{
@@ -251,7 +256,7 @@ func includesForSoruces(srcs []core.Path, private bool) []core.Path {
 	return result
 }
 
-func getObjs(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, includes []core.Path, toolchain Toolchain, orderDeps []core.Path) []objectFile {
+func getObjs(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, includes []core.Path, toolchain Toolchain, orderDeps []core.Path, optLevel OptimizationLevel) []objectFile {
 	for _, dep := range deps {
 		includes = append(includes, dep.Includes...)
 		orderDeps = append(orderDeps, dep.GeneratedSrcs...)
@@ -272,6 +277,7 @@ func getObjs(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []stri
 			CxxFlags:  cxxFlags,
 			AsFlags:   asFlags,
 			Toolchain: toolchain,
+			OptLevel:  optLevel,
 		})
 	}
 
@@ -313,6 +319,7 @@ type Library struct {
 	Shared        bool
 	AlwaysLink    bool
 	Toolchain     Toolchain
+	OptLevel      OptimizationLevel
 
 	// Extra fields for handling multi-toolchain logic.
 	userOut       core.OutPath
@@ -495,6 +502,7 @@ type Binary struct {
 	Toolchain       Toolchain
 	Includes        []core.Path
 	Objs            []core.Path
+	OptLevel        OptimizationLevel
 }
 
 func (bin Binary) TranslationUnits(ctx core.Context) []core.TranslationUnit {
