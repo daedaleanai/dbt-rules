@@ -512,8 +512,8 @@ func (ctx *context) ninjaFile() string {
 	fmt.Fprintf(ninjaFile, "# targets\n\n")
 	for i, target := range ctx.targetRules {
 		fmt.Fprintf(ninjaFile, "rule __target%d\n", i)
-		for name, value := range target.Variables {
-			fmt.Fprintf(ninjaFile, "  %s = %s\n", name, value)
+		for _, kv := range sortedKvs(target.Variables) {
+			fmt.Fprintf(ninjaFile, "  %s = %s\n", kv.k, kv.v)
 		}
 		fmt.Fprintf(ninjaFile, "\n")
 		fmt.Fprintf(ninjaFile, "build %s: __target%d %s __phony__\n", target.Target, i, strings.Join(target.Ins, " "))
