@@ -155,6 +155,7 @@ func GeneratorMain(vars map[string]interface{}) {
 		for name := range ctx.compDbBuildRules {
 			output.CompDbRules = append(output.CompDbRules, name)
 		}
+		sort.Strings(output.CompDbRules)
 	}
 
 	// Serialize generator output.
