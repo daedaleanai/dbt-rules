@@ -414,7 +414,7 @@ func stepsAreEquivalent(a, b *BuildStepWithRule) error {
 	return nil
 }
 
-func sortedKeys(m map[string]interface{}) []string {
+func sortedBuildRules(m map[string]*BuildStepWithRule) []string {
 	keys := []string{}
 	for key, _ := range m {
 		keys = append(keys, key)
@@ -423,9 +423,23 @@ func sortedKeys(m map[string]interface{}) []string {
 	return keys
 }
 
+type _kv struct {
+	k string
+	v string
+}
+
+func sortedKvs(m map[string]string) []_kv {
+	keys := []_kv{}
+	for key, _ := range m {
+		keys = append(keys, _kv{key, m[key]})
+	}
+	sort.Slice(keys, func(l, r int) bool { return keys[l].k < keys[r].k })
+	return keys
+}
+
 func (ctx *context) ninjaFile() string {
 	ninjaFile := &strings.Builder{}
-	buildKeys := sortedKeys(ctx.buildSteps)
+	buildKeys := sortedBuildRules(ctx.buildSteps)
 
 	fmt.Fprintf(ninjaFile, "build __phony__: phony\n\n")
 
@@ -446,8 +460,8 @@ func (ctx *context) ninjaFile() string {
 		seenRules[step.Rule.Name] = true
 
 		fmt.Fprintf(ninjaFile, "rule %s\n", step.Rule.Name)
-		for _, name := range sortedKeys(step.Rule.Variables) {
-			fmt.Fprintf(ninjaFile, "  %s = %s\n", name, step.Rule.Variables[name])
+		for _, kv := range sortedKvs(step.Rule.Variables) {
+			fmt.Fprintf(ninjaFile, "  %s = %s\n", kv.k, kv.v)
 		}
 		fmt.Fprint(ninjaFile, "\n\n")
 	}
@@ -489,8 +503,8 @@ func (ctx *context) ninjaFile() string {
 		}
 
 		fmt.Fprintf(ninjaFile, "build %s: %s %s || %s\n", strings.Join(outs, " "), step.Rule.Name, strings.Join(ins, " "), strings.Join(orderDeps, " "))
-		for _, name := range sortedKeys(step.Variables) {
-			fmt.Fprintf(ninjaFile, "  %s = %s\n", name, step.Variables[name])
+		for _, kv := range sortedKvs(step.Variables) {
+			fmt.Fprintf(ninjaFile, "  %s = %s\n", kv.k, kv.v)
 		}
 		fmt.Fprint(ninjaFile, "\n\n")
 	}
