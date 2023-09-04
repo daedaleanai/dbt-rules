@@ -414,30 +414,30 @@ func stepsAreEquivalent(a, b *BuildStepWithRule) error {
 	return nil
 }
 
-func sortedBuildRules(m map[string]*BuildStepWithRule) []string {
-	keys := []string{}
-	for key, _ := range m {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-type _kv struct {
-	k string
-	v string
-}
-
-func sortedKvs(m map[string]string) []_kv {
-	keys := []_kv{}
-	for key, _ := range m {
-		keys = append(keys, _kv{key, m[key]})
-	}
-	sort.Slice(keys, func(l, r int) bool { return keys[l].k < keys[r].k })
-	return keys
-}
-
 func (ctx *context) ninjaFile() string {
+	type kv struct {
+		k string
+		v string
+	}
+
+	sortedBuildRules := func(m map[string]*BuildStepWithRule) []string {
+		keys := []string{}
+		for key, _ := range m {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		return keys
+	}
+
+	sortedKvs := func(m map[string]string) []kv {
+		keys := []kv{}
+		for key, _ := range m {
+			keys = append(keys, kv{key, m[key]})
+		}
+		sort.Slice(keys, func(l, r int) bool { return keys[l].k < keys[r].k })
+		return keys
+	}
+
 	ninjaFile := &strings.Builder{}
 	buildKeys := sortedBuildRules(ctx.buildSteps)
 
