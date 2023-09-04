@@ -155,12 +155,13 @@ func GeneratorMain(vars map[string]interface{}) {
 		for name := range ctx.compDbBuildRules {
 			output.CompDbRules = append(output.CompDbRules, name)
 		}
+		sort.Strings(output.CompDbRules)
 	}
 
 	// Serialize generator output.
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		Fatal("failed to marshall generator output: %s", err)
+		Fatal("failed to marshal generator output: %s", err)
 	}
 	err = ioutil.WriteFile(outputFileName, data, fileMode)
 	if err != nil {
