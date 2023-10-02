@@ -12,9 +12,14 @@ type Binary struct {
 	Out       core.OutPath
 	Package   core.Path
 	Toolchain string
+	/// If target is given, compilation is done with cross instead of cargo, as cross compilation is assumed.
+	Target string
 }
 
-func (bin Binary) binLocation() core.OutPath {
+func (bin Binary) BinLocation() core.OutPath {
+	if bin.Target != "" {
+		return bin.Out.WithPrefix(fmt.Sprintf("%s/%s/release/", filepath.Base(bin.Package.Relative()), bin.Target))
+	}
 	return bin.Out.WithPrefix(fmt.Sprintf("%s/release/", filepath.Base(bin.Package.Relative())))
 }
 
@@ -22,11 +27,19 @@ func (bin Binary) Build(ctx core.Context) {
 	if bin.Toolchain == "" {
 		bin.Toolchain = "stable"
 	}
+
+	cargo := "cargo"
+	target := ""
+	if bin.Target != "" {
+		cargo = "cross"
+		target = fmt.Sprintf("--target=%q", bin.Target)
+	}
+
 	ctx.AddBuildStep(core.BuildStep{
-		Out: bin.binLocation(),
+		Out: bin.BinLocation(),
 		Ins: bin.getInputs(),
 		// With suffix is used to turn an input path into an output path
-		Cmd: fmt.Sprintf("cd %q && cargo +%s build -r --locked --bins --target-dir %q", bin.Package, bin.Toolchain, bin.Package.WithSuffix("")),
+		Cmd: fmt.Sprintf("cd %q && %s +%s build -r --locked --bins --target-dir %q %s", bin.Package, cargo, bin.Toolchain, bin.Package.WithSuffix(""), target),
 	})
 }
 
@@ -35,7 +48,7 @@ func (bin Binary) Run(args []string) string {
 	for _, arg := range args {
 		quotedArgs = append(quotedArgs, fmt.Sprintf("%q", arg))
 	}
-	return fmt.Sprintf("%q %s", bin.binLocation(), strings.Join(quotedArgs, " "))
+	return fmt.Sprintf("%q %s", bin.BinLocation(), strings.Join(quotedArgs, " "))
 
 }
 
