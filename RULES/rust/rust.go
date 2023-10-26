@@ -50,11 +50,9 @@ func (bin Binary) Build(ctx core.Context) {
 			fmt.Println("Warning: could not read /proc/self/cgroup. Assuming that we are not running under docker")
 			cgroup = []byte{}
 		}
-		fmt.Println("Cgroup is: ", string(cgroup))
 		if match := dockerRegexp.FindStringSubmatch(string(cgroup)); len(match) == 2 {
 			hostnameOverride = fmt.Sprint("HOSTNAME=", match[1], " ")
 		}
-		fmt.Println("hostname override: ", hostnameOverride)
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
