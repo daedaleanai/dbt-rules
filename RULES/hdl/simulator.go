@@ -311,6 +311,17 @@ func Preamble(rule Simulation, testcase string) (string, string) {
 }
 
 func ExportIpFromXci(ctx core.Context, rule Simulation, src core.Path) core.Path {
+  xci, err := ReadXci(src.String())
+  if err != nil {
+    log.Fatal(fmt.Sprintf("unable to read XCI file %s", src.Relative()))
+  }
+
+  part := strings.ToLower(
+    xci.IpInst.Parameters.ProjectParameters.Device[0].Value + "-" +
+    xci.IpInst.Parameters.ProjectParameters.Package[0].Value +
+    xci.IpInst.Parameters.ProjectParameters.Speedgrade[0].Value + "-" +
+    xci.IpInst.Parameters.ProjectParameters.TemperatureGrade[0].Value)
+
 	// Default output directory is given by the source file name
 	dir := ctx.Cwd()
 
@@ -323,7 +334,7 @@ func ExportIpFromXci(ctx core.Context, rule Simulation, src core.Path) core.Path
 	data := exportIpTemplateParams{
 		Source:    src.Absolute(),
 		Dir:       dir.Absolute(),
-    Part:      PartName.Value(),
+    Part:      part,
     Simulator: Simulator.Value(),
 		LibDir:    SimulatorLibDir.Value(),
 	}
