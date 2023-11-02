@@ -102,12 +102,22 @@ var DumpQwavedbScope = core.StringFlag{
 }.Register()
 
 // Target returns the optimization target name defined for this rule.
-func (rule Simulation) Target() string {
+func (rule Simulation) Target(params string) string {
+  target := strings.Replace(rule.Name, "-", "_", -1)
+  if params != "" {
+    if rule.Params != nil {
+      if _, ok := rule.Params[params]; !ok {
+        log.Fatal(fmt.Sprintf("parameter set %s not defined!", params))
+      }
+    } else {
+      log.Fatal(fmt.Sprintf("parameter set %s requested, but no parameters sets are defined!", params))
+    }
+    target = target + "_" + params
+  }
 	if Coverage.Value() {
-		return "vopt_cover"
-	} else {
-		return "vopt"
-	}
+		target = target + "_cover"
+  }
+  return target
 }
 
 // Instance returns the instance name of the rule based on the Top and the DUT
@@ -135,11 +145,43 @@ func (rule Simulation) libFlags() string {
 	flags := ""
 	if SimulatorLibDir.Value() != "" {
 		for _, lib := range rule.Libs {
-			flags += fmt.Sprintf(" -L %s/%s", SimulatorLibDir.Value(), lib)
+			flags += fmt.Sprintf(" -L %s", lib)
 		}
 	}
 
 	return flags
+}
+
+func (rule Simulation) paramFlags(params string) string {
+  cmd := ""
+  if params != "" {
+    if rule.Params != nil {
+      if _, ok := rule.Params[params]; !ok {
+        log.Fatal(fmt.Sprintf("parameter set %s not defined!", params))
+      }
+    } else {
+      log.Fatal(fmt.Sprintf("parameter set %s requested, but no parameters sets are defined!", params))
+    }
+    // Add parameters for all generics into a single string
+    for name, value := range rule.Params[params] {
+      cmd = cmd + fmt.Sprintf("-g %s=%s", name, value)
+    }
+  }
+  return cmd
+}
+
+// Construct a string of +incdir+%s arguments from a list of directories
+func incDirFlags(incs []core.Path) string {
+  cmd := ""
+  seen_incs := make(map[string]struct{})
+  for _, inc := range incs {
+    inc_path := path.Dir(inc.Absolute())
+    if _, ok := seen_incs[inc_path]; !ok {
+      cmd = cmd + fmt.Sprintf(" +incdir+%s", inc_path)
+      seen_incs[inc_path] = struct{}{}
+    }
+  }
+  return cmd
 }
 
 // rules holds a map of all defined rules to prevent defining the same rule
@@ -149,9 +191,14 @@ var rules = make(map[string]bool)
 // common_flags holds common flags used for the 'vlog', 'vcom', and 'vopt' commands.
 const common_flags = "-nologo -quiet"
 
+type Target struct {
+  Name    string
+  LogFile core.OutPath
+  Params  string
+}
+
 // Parameters of the do-file
 type DoFileParams struct {
-	Lib          string
 	WaveformInit string
 	DumpVcd      bool
 	DumpVcdFile  string
@@ -162,7 +209,7 @@ type DoFileParams struct {
 const do_file_template = `
 proc reload {} {
 	global target
-	vsim -work {{ .Lib }} $target
+	vsim -work work $target
 	{{ if .WaveformInit }}
 		source {{ .WaveformInit }}
 	{{ end }}
@@ -231,22 +278,29 @@ if ![info exists gui] {
 `
 
 func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []core.Path {
-	if SimulatorLibDir.Value() != "" {
-		cmds := []string{}
-		for _, lib := range rule.Libs {
-			cmds = append(cmds, fmt.Sprintf("vmap %s %s/%s", lib, SimulatorLibDir.Value(), lib))
-		}
+  questa_lib := core.BuildPath("questa_lib")
+  ctx.AddBuildStep(core.BuildStep{
+    Out:   questa_lib,
+    Cmd:   fmt.Sprintf("mkdir %q", questa_lib.Absolute()),
+    Descr: fmt.Sprintf("mkdir: %q", questa_lib.Absolute()),
+  })
+  deps = append(deps, questa_lib)
 
-		if len(cmds) > 0 {
-			modelsim_ini := rule.Path().WithSuffix("/modelsim.ini")
-			ctx.AddBuildStep(core.BuildStep{
-				Out:   modelsim_ini,
-				Cmd:   strings.Join(cmds, " && "),
-				Descr: fmt.Sprintf("vmap: %s", modelsim_ini.Absolute()),
-			})
-			deps = append(deps, modelsim_ini)
-		}
-	}
+  modelsim_ini := core.BuildPath("modelsim.ini")
+  cmds := []string{"vlib questa_lib/work", "vmap work questa_lib/work"}
+
+	if SimulatorLibDir.Value() != "" {
+    cmds = append(cmds, fmt.Sprintf("for lib in $$(find %s -mindepth 1 -maxdepth 1 -type d); do vmap $$(basename $$lib) $$lib; done", SimulatorLibDir.Value()))
+  }
+
+  ctx.AddBuildStep(core.BuildStep{
+    In:    questa_lib,
+    Out:   modelsim_ini,
+    Cmd:   strings.Join(cmds, " && "),
+    Descr: fmt.Sprintf("vmap: %s", modelsim_ini.Absolute()),
+  })
+  deps = append(deps, modelsim_ini)
+
 	return deps
 }
 
@@ -256,16 +310,11 @@ func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []co
 func compileSrcs(ctx core.Context, rule Simulation,
 	deps []core.Path, incs []core.Path, srcs []core.Path, flags FlagMap) ([]core.Path, []core.Path) {
 	for _, src := range srcs {
+    // log will point to the log file to be generated when compiling the code
+    log := core.BuildPath(src.Relative()).WithSuffix(".log")
+
 		if IsRtl(src.String()) {
-			// log will point to the log file to be generated when compiling the code
-			log := rule.Path().WithSuffix("/" + src.Relative() + ".log")
-
-			// If we already have a rule for this file, skip it.
-			if rules[log.String()] {
-				continue
-			}
-
-			cmd := fmt.Sprintf("%s -work %s -l %s", common_flags, rule.Lib(), log.String())
+			cmd := fmt.Sprintf("%s -work work -l %s", common_flags, log.String())
 
 			// tool will point to the tool to execute (also used for logging below)
 			var tool string
@@ -275,14 +324,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				cmd = cmd + " -suppress 2583 -svinputport=net -define SIMULATION"
 				cmd = cmd + fmt.Sprintf(" %s", rule.libFlags())
 				cmd = cmd + fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
-				seen_incs := make(map[string]struct{})
-				for _, inc := range incs {
-					inc_path := path.Dir(inc.Absolute())
-					if _, ok := seen_incs[inc_path]; !ok {
-						cmd = cmd + fmt.Sprintf(" +incdir+%s", inc_path)
-						seen_incs[inc_path] = struct{}{}
-					}
-				}
+        cmd = cmd + incDirFlags(incs)
 				if flags != nil {
 					if vlog_flags, ok := flags["vlog"]; ok {
 						cmd = cmd + " " + vlog_flags
@@ -317,21 +359,41 @@ func compileSrcs(ctx core.Context, rule Simulation,
 			// Add the source file to the dependencies
 			deps = append(deps, src)
 
-			// Add the compilation command as a build step with the log file as the
-			// generated output
-			ctx.AddBuildStep(core.BuildStep{
-				Out:   log,
-				Ins:   deps,
-				Cmd:   cmd,
-				Descr: fmt.Sprintf("%s: %s", tool, src.Relative()),
-			})
+      // If we already have a rule for this file, skip it.
+      if !rules[log.String()] {
+        // Add the compilation command as a build step with the log file as the
+        // generated output
+        ctx.AddBuildStep(core.BuildStep{
+          Out:   log,
+          Ins:   deps,
+          Cmd:   cmd,
+          Descr: fmt.Sprintf("%s: %s", tool, src.Relative()),
+        })
+
+        // Note down the created rule
+        rules[log.String()] = true
+      }
 
 			// Add the log file to the dependencies of the next files
 			deps = append(deps, log)
 
-			// Note down the created rule
-			rules[log.String()] = true
-		} else {
+		} else if IsXilinxIpCheckpoint(src.String()) {
+      do := ExportIpFromXci(ctx, rule, src)
+      if !rules[log.String()] {
+        ctx.AddBuildStep(core.BuildStep{
+          Out:    log,
+          In:     do,
+          Cmd:    fmt.Sprintf("vsim -batch -do %s -do exit -logfile %s", do.Relative(), log.Relative()),
+          Descr:  fmt.Sprintf("vsim: %s", do.Relative()),
+        })
+
+        // Note down the created rule
+        rules[log.String()] = true
+      }
+
+			// Add the log file to the dependencies of the next files
+      deps = append(deps, log)
+    } else {
 			// We handle header files separately from other source files
 			if IsHeader(src.String()) {
 				incs = append(incs, src)
@@ -375,96 +437,84 @@ func compile(ctx core.Context, rule Simulation) []core.Path {
 // coverage recording functionality. The optimized design unit can then conveniently
 // be simulated using 'vsim'.
 func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
-	top := "board"
-	additional_tops := ""
-
 	if rule.Top != "" && len(rule.Tops) > 0 {
 		log.Fatal(fmt.Sprintf("only one of Top or Tops allowed!"))
 	}
 
+  // Default for compatibility
+  tops := []string{"board"}
 	if rule.Top != "" {
-		top = rule.Top
-	}
+		tops = []string{rule.Top}
+	} else if len(rule.Tops) > 0 {
+    tops = rule.Tops
+  }
 
-	if len(rule.Tops) > 0 {
-		top = rule.Tops[0]
-		if len(rule.Tops) > 1 {
-			additional_tops = strings.Join(rule.Tops[1:], " ")
-		}
-	}
-
-	cover_flag := ""
 	log_file_suffix := "vopt.log"
+
+  cover_flag := ""
 	if Coverage.Value() {
 		cover_flag = "+cover"
-		log_file_suffix = "vopt_cover.log"
 	}
 
-	log_files := []core.OutPath{}
-	targets := []string{}
-	params := []string{}
+  // Will hold all targets for optimization
+  targets := []Target{}
+
 	if rule.Params != nil {
-		for key, _ := range rule.Params {
-			log_files = append(log_files, rule.Path().WithSuffix("/"+key+"_"+log_file_suffix))
-			targets = append(targets, key+"_"+rule.Target())
-			params = append(params, key)
+		for params_name := range rule.Params {
+      targets = append(targets, Target{
+        Name: rule.Target(params_name),
+        LogFile: rule.Path().WithSuffix("/" + params_name + "_" + log_file_suffix),
+        Params: params_name,
+      })
 		}
 	} else {
-		log_files = append(log_files, rule.Path().WithSuffix("/"+log_file_suffix))
-		targets = append(targets, rule.Target())
-		params = append(params, "")
+    targets = append(targets, Target{
+      Name: rule.Target(""),
+      LogFile: rule.Path().WithSuffix("/" + log_file_suffix),
+      Params: "",
+    })
 	}
 
-	for i := range log_files {
-		log_file := log_files[i]
-		target := targets[i]
-		param_set := params[i]
+  // Generate access flag
+  access_flag := ""
+  if Access.Value() == "debug" {
+    access_flag = "-debug"
+  } else if Access.Value() == "livesim" {
+    access_flag = "-debug,livesim"
+  } else if Access.Value() == "acc" {
+    access_flag = "+acc"
+  }  else if Access.Value() != "" {
+    access_flag = fmt.Sprintf("+acc=%s", Access.Value())
+  }
 
+	for _, target := range targets {
 		// Skip if we already have a rule
-		if rules[log_file.String()] {
-			return
+		if rules[target.LogFile.String()] {
+			continue
 		}
 
-		// Generate access flag
-		access_flag := ""
-		if Access.Value() == "debug" {
-			access_flag = "-debug"
-		} else if Access.Value() == "livesim" {
-			access_flag = "-debug,livesim"
-		} else if Access.Value() == "acc" {
-			access_flag = "+acc"
-		}  else if Access.Value() != "" {
-			access_flag = fmt.Sprintf("+acc=%s", Access.Value())
-		}
+    // Generate designfile flag
+    designfile_flag := ""
+    if Designfile.Value() {
+      design_file := "design"
+      if target.Params != "" {
+        design_file = design_file + "_" + target.Params
+      }
 
-		// Generate designfile flag
-		designfile_flag := ""
-		if Designfile.Value() {
-			designfile_flag = "-designfile " + target + ".bin"
-		}
+      designfile_flag = "-designfile " + rule.Path().WithSuffix("/" + design_file + ".bin").String()
+    }
 
-		cmd := "vopt " + common_flags 
+		cmd := "vopt " + common_flags
 		cmd = cmd + " " + VoptFlags.Value()
 		cmd = cmd + " " + cover_flag
 		cmd = cmd + " " + access_flag
 		cmd = cmd + " " + designfile_flag
-		cmd = cmd + " -l " + log_file.String()
-		cmd = cmd + " -work " + rule.Lib()
-		cmd = cmd + " " + top
-		cmd = cmd + " " + additional_tops
+		cmd = cmd + " -l " + target.LogFile.String()
+		cmd = cmd + " -work work"
+		cmd = cmd + " " + strings.Join(tops, " ")
 		cmd = cmd + " " + rule.libFlags()
-		cmd = cmd + " -o " + target
-
-		// Set up parameters
-		if param_set != "" {
-			// Check that the parameters exist
-			if params, ok := rule.Params[param_set]; ok {
-				// Add parameters for all generics
-				for param, value := range params {
-					cmd = fmt.Sprintf("%s -g %s=%s", cmd, param, value)
-				}
-			}
-		}
+    cmd = cmd + " " + rule.paramFlags(target.Params)
+		cmd = cmd + " -o " + target.Name
 
 		// Add any extra flags specified with the rule
 		if rule.ToolFlags != nil {
@@ -479,14 +529,14 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 
 		// Add the rule to run 'vopt'.
 		ctx.AddBuildStep(core.BuildStep{
-			Out:   log_file,
+			Out:   target.LogFile,
 			Ins:   deps,
 			Cmd:   cmd,
-			Descr: fmt.Sprintf("vopt: %s %s", rule.Lib()+"."+top, target),
+			Descr: fmt.Sprintf("vopt: %s -o %s", strings.Join(tops, " "), target.Name),
 		})
 
 		// Note that we created this rule
-		rules[log_file.String()] = true
+		rules[target.LogFile.String()] = true
 	}
 }
 
@@ -494,9 +544,8 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 func doFile(ctx core.Context, rule Simulation) {
 	// Do-file script
 	params := DoFileParams{
-		Lib: rule.Lib(),
 		DumpVcd: DumpVcd.Value(),
-		DumpVcdFile: fmt.Sprintf("%s.vcd.gz", rule.Name),
+		DumpVcdFile: rule.Path().WithSuffix("/waves.vcd.gz").String(),
 		CovFiles: strings.Join(rule.ReportCovFiles(), "+"),
 	}
 
@@ -508,7 +557,7 @@ func doFile(ctx core.Context, rule Simulation) {
 	ctx.AddBuildStep(core.BuildStep{
 		Out:   doFile,
 		Data:  core.CompileTemplate(do_file_template, "do", params),
-		Descr: fmt.Sprintf("vsim: %s", doFile.Relative()),
+		Descr: fmt.Sprintf("template: %s", doFile.Relative()),
 	})
 }
 
@@ -585,12 +634,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	plusargs_flag := ""
 
 	// Default database name for simulation
-	var target string
-	if len(params) > 0 {
-		target = params + "_" + rule.Target()
-	} else {
-		target = rule.Target()
-	}
+  target := rule.Target(params)
 
 	// Enable coverage in simulator
 	coverage_flag := ""
@@ -615,7 +659,11 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 			case "all":
 				qwavedb_flag += "+signal+assertions=pass,atv+memory+queues+class+classmemory+classdynarray"
 		}
-		qwavedb_flag += "+wavefile=" + target + ".db"
+    qwavedb_file := "waves"
+    if params != "" {
+      qwavedb_file = qwavedb_file + "_" + params
+    }
+		qwavedb_flag += "+wavefile=" + rule.Path().WithSuffix("/" + qwavedb_file + ".db").String()
 	}
 
 	// Determine the names of the coverage databases, this one will hold merged
@@ -752,7 +800,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	// Add the file as the last argument
 	vsim_flags = vsim_flags + " -do " + do_file.String()
 
-	cmd := fmt.Sprintf("{ echo -n %s && vsim %s -work %s %s && echo %s; }", cmd_echo, vsim_flags, rule.Lib(), target, cmd_pass)
+	cmd := fmt.Sprintf("{ echo -n %s && vsim %s -work work %s && echo %s; }", cmd_echo, vsim_flags, target, cmd_pass)
 	if cmd_preamble == "" {
 		cmd = cmd + " " + cmd_postamble
 	} else {

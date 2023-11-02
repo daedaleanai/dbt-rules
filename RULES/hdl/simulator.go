@@ -13,6 +13,34 @@ import (
 	"strings"
 )
 
+type exportIpTemplateParams struct {
+	Source    string
+  Simulator string
+  Part      string
+	Dir       string
+	LibDir    string
+}
+
+const export_ip_template = `#!/usr/bin/env -S vivado -nojournal -nolog -mode batch -source
+puts "Running in [pwd]..."
+puts "Creating in-memory project"
+create_project -part {{ .Part }} -in_memory
+set_property target_language verilog [current_project]
+puts "Reading IP from {{ .Source }}"
+import_ip {{ .Source }}
+foreach ip [get_ips] {
+  puts "Upgrade IP"
+  upgrade_ip $ip
+  puts "Generating IP"
+  generate_target simulation $ip
+	puts "Exporting IP"
+  #export_simulation -simulator {{ .Simulator }} -quiet -force -absolute_path -use_ip_compiled_libs -lib_map_path {{ .LibDir }} -of_objects $ip -step compile -directory {{ .Dir }}
+  export_simulation -simulator {{ .Simulator }} -quiet -force -absolute_path -lib_map_path {{ .LibDir }} -of_objects $ip -step compile -directory {{ .Dir }}
+}
+
+puts "Finished generating IP in {{ .Dir }}"
+`
+
 var Simulator = core.StringFlag{
 	Name:        "hdl-simulator",
 	Description: "Select HDL simulator",
@@ -280,6 +308,34 @@ func Preamble(rule Simulation, testcase string) (string, string) {
 	}
 
 	return preamble, testcase
+}
+
+func ExportIpFromXci(ctx core.Context, rule Simulation, src core.Path) core.Path {
+	// Default output directory is given by the source file name
+	dir := ctx.Cwd()
+
+  // Determine name of .do file
+	oldExt := path.Ext(src.Relative())
+	newRel := strings.TrimSuffix(src.Relative(), oldExt)
+  do := core.BuildPath(newRel).WithSuffix(fmt.Sprintf("/%s/compile.do", Simulator.Value()))
+
+	// Template parameters are the direct and parent script sources.
+	data := exportIpTemplateParams{
+		Source:    src.Absolute(),
+		Dir:       dir.Absolute(),
+    Part:      PartName.Value(),
+    Simulator: Simulator.Value(),
+		LibDir:    SimulatorLibDir.Value(),
+	}
+
+	ctx.AddBuildStep(core.BuildStep{
+		Out:    do,
+		In:     src,
+		Script: core.CompileTemplate(export_ip_template, "exportIp", data),
+    Descr:  fmt.Sprintf("export: %s", src.Relative()),
+	})
+
+  return do
 }
 
 func copySrcsBinaries(ctx core.Context, srcs []core.Path) {
