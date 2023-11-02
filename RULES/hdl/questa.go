@@ -32,7 +32,7 @@ var VcomFlags = core.StringFlag{
 var VoptFlags = core.StringFlag{
 	Name: "questa-vopt-flags",
 	DefaultFn: func() string {
-		return "-fsmverbose"
+		return "-fsmverbose -suppress 10016"
 	},
 	Description: "Extra flags for the vopt command",
 }.Register()
