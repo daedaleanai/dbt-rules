@@ -34,8 +34,8 @@ foreach ip [get_ips] {
   puts "Generating IP"
   generate_target simulation $ip
 	puts "Exporting IP"
-  #export_simulation -simulator {{ .Simulator }} -quiet -force -absolute_path -use_ip_compiled_libs -lib_map_path {{ .LibDir }} -of_objects $ip -step compile -directory {{ .Dir }}
-  export_simulation -simulator {{ .Simulator }} -quiet -force -absolute_path -lib_map_path {{ .LibDir }} -of_objects $ip -step compile -directory {{ .Dir }}
+  export_simulation -simulator {{ .Simulator }} -quiet -force -absolute_path -use_ip_compiled_libs -lib_map_path {{ .LibDir }} -of_objects $ip -step compile -directory {{ .Dir }}
+  #export_simulation -simulator {{ .Simulator }} -quiet -force -absolute_path -of_objects $ip -step compile -directory {{ .Dir }}
 }
 
 puts "Finished generating IP in {{ .Dir }}"
@@ -316,28 +316,35 @@ func ExportIpFromXci(ctx core.Context, rule Simulation, src core.Path) core.Path
     log.Fatal(fmt.Sprintf("unable to read XCI file %s", src.Relative()))
   }
 
-  part := strings.ToLower(
-    xci.IpInst.Parameters.ProjectParameters.Device[0].Value + "-" +
-    xci.IpInst.Parameters.ProjectParameters.Package[0].Value +
-    xci.IpInst.Parameters.ProjectParameters.Speedgrade[0].Value + "-" +
-    xci.IpInst.Parameters.ProjectParameters.TemperatureGrade[0].Value)
+  if SimulatorLibDir.Value() == "" {
+    log.Fatal("hdl-simulator-lib-dir must be set when compiling XCI files!")
+  }
 
-	// Default output directory is given by the source file name
-	dir := ctx.Cwd()
+  part := xci.IpInst.Parameters.ProjectParameters.Device[0].Value + "-" +
+          xci.IpInst.Parameters.ProjectParameters.Package[0].Value +
+          xci.IpInst.Parameters.ProjectParameters.Speedgrade[0].Value
+
+  if xci.IpInst.Parameters.ProjectParameters.TemperatureGrade[0].Value != "" {
+    part = part + "-" + xci.IpInst.Parameters.ProjectParameters.TemperatureGrade[0].Value
+  }
 
   // Determine name of .do file
 	oldExt := path.Ext(src.Relative())
 	newRel := strings.TrimSuffix(src.Relative(), oldExt)
+  dir := core.BuildPath(path.Dir(src.Relative()))
   do := core.BuildPath(newRel).WithSuffix(fmt.Sprintf("/%s/compile.do", Simulator.Value()))
 
 	// Template parameters are the direct and parent script sources.
 	data := exportIpTemplateParams{
 		Source:    src.Absolute(),
 		Dir:       dir.Absolute(),
-    Part:      part,
+    Part:      strings.ToLower(part),
     Simulator: Simulator.Value(),
 		LibDir:    SimulatorLibDir.Value(),
 	}
+
+  //fmt.Fprintln(os.Stderr, "Parameters:\n")
+  //fmt.Fprintln(os.Stderr, data)
 
 	ctx.AddBuildStep(core.BuildStep{
 		Out:    do,

@@ -164,7 +164,7 @@ func (rule Simulation) paramFlags(params string) string {
     }
     // Add parameters for all generics into a single string
     for name, value := range rule.Params[params] {
-      cmd = cmd + fmt.Sprintf("-g %s=%s", name, value)
+      cmd = cmd + fmt.Sprintf(" -g %s=%s", name, value)
     }
   }
   return cmd
@@ -322,7 +322,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 				tool = "vlog"
 				cmd = cmd + " " + VlogFlags.Value()
 				cmd = cmd + " -suppress 2583 -svinputport=net -define SIMULATION"
-				cmd = cmd + fmt.Sprintf(" %s", rule.libFlags())
+				cmd = cmd + rule.libFlags()
 				cmd = cmd + fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
         cmd = cmd + incDirFlags(incs)
 				if flags != nil {
@@ -367,7 +367,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
           Out:   log,
           Ins:   deps,
           Cmd:   cmd,
-          Descr: fmt.Sprintf("%s: %s", tool, src.Relative()),
+          Descr: fmt.Sprintf("%s: %s", tool, src.Absolute()),
         })
 
         // Note down the created rule
@@ -384,7 +384,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
           Out:    log,
           In:     do,
           Cmd:    fmt.Sprintf("vsim -batch -do %s -do exit -logfile %s", do.Relative(), log.Relative()),
-          Descr:  fmt.Sprintf("vsim: %s", do.Relative()),
+          Descr:  fmt.Sprintf("vsim: %s", do.Absolute()),
         })
 
         // Note down the created rule
@@ -512,8 +512,8 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 		cmd = cmd + " -l " + target.LogFile.String()
 		cmd = cmd + " -work work"
 		cmd = cmd + " " + strings.Join(tops, " ")
-		cmd = cmd + " " + rule.libFlags()
-    cmd = cmd + " " + rule.paramFlags(target.Params)
+		cmd = cmd + rule.libFlags()
+    cmd = cmd + rule.paramFlags(target.Params)
 		cmd = cmd + " -o " + target.Name
 
 		// Add any extra flags specified with the rule
@@ -557,7 +557,7 @@ func doFile(ctx core.Context, rule Simulation) {
 	ctx.AddBuildStep(core.BuildStep{
 		Out:   doFile,
 		Data:  core.CompileTemplate(do_file_template, "do", params),
-		Descr: fmt.Sprintf("template: %s", doFile.Relative()),
+		Descr: fmt.Sprintf("template: %s", doFile.Absolute()),
 	})
 }
 
