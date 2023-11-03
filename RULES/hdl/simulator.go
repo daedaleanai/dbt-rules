@@ -35,7 +35,6 @@ foreach ip [get_ips] {
   generate_target simulation $ip
 	puts "Exporting IP"
   export_simulation -simulator {{ .Simulator }} -quiet -force -absolute_path -use_ip_compiled_libs -lib_map_path {{ .LibDir }} -of_objects $ip -step compile -directory {{ .Dir }}
-  #export_simulation -simulator {{ .Simulator }} -quiet -force -absolute_path -of_objects $ip -step compile -directory {{ .Dir }}
 }
 
 puts "Finished generating IP in {{ .Dir }}"
@@ -54,7 +53,15 @@ var SimulatorLibDir = core.StringFlag{
 	Name:        "hdl-simulator-lib-dir",
 	Description: "Path to the HDL simulator libraries",
 	DefaultFn: func() string {
-		return ""
+		return "../../DEPS/simlibs"
+	},
+}.Register()
+
+var SimulatorLibSearch = core.StringFlag{
+	Name:        "hdl-simulator-lib-search",
+	Description: "Default HDL simulator libraries to search",
+	DefaultFn: func() string {
+		return "unisims_ver unifast_ver unimacro_ver simprims_ver secureip xpm xil_defaultlib"
 	},
 }.Register()
 

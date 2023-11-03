@@ -142,12 +142,24 @@ func (rule Simulation) Instance() string {
 
 // libFlags returns the flags needed to configure the extra libraries for this rule
 func (rule Simulation) libFlags() string {
+  // List all libraries
+  lib_map := map[string]bool{}
+
+  // get defaults
+  for _, lib := range strings.Split(SimulatorLibSearch.Value(), " ") {
+    lib_map[lib] = true
+  }
+
+  // get from simulation target
+  for _, lib := range rule.Libs {
+    lib_map[lib] = true
+  }
+
+  // build flags
 	flags := ""
-	if SimulatorLibDir.Value() != "" {
-		for _, lib := range rule.Libs {
-			flags += fmt.Sprintf(" -L %s", lib)
-		}
-	}
+  for lib, _ := range lib_map {
+    flags += fmt.Sprintf(" -L %s", lib)
+  }
 
 	return flags
 }
@@ -164,7 +176,7 @@ func (rule Simulation) paramFlags(params string) string {
     }
     // Add parameters for all generics into a single string
     for name, value := range rule.Params[params] {
-      cmd = cmd + fmt.Sprintf(" -g %s=%s", name, value)
+      cmd += fmt.Sprintf(" -g %s=%s", name, value)
     }
   }
   return cmd
@@ -177,7 +189,7 @@ func incDirFlags(incs []core.Path) string {
   for _, inc := range incs {
     inc_path := path.Dir(inc.Absolute())
     if _, ok := seen_incs[inc_path]; !ok {
-      cmd = cmd + fmt.Sprintf(" +incdir+%s", inc_path)
+      cmd += fmt.Sprintf(" +incdir+%s", inc_path)
       seen_incs[inc_path] = struct{}{}
     }
   }
@@ -221,6 +233,7 @@ set NumericStdNoWarnings 1
 
 {{ if .WaveformInit }}
 if [info exists gui] {
+  run 1
 	catch { source {{ .WaveformInit }} }
 	assertion fail -action break
 }
@@ -293,6 +306,9 @@ func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []co
     cmds = append(cmds, fmt.Sprintf("for lib in $$(find %s -mindepth 1 -maxdepth 1 -type d); do vmap $$(basename $$lib) $$lib; done", SimulatorLibDir.Value()))
   }
 
+  // add default libs
+
+
   ctx.AddBuildStep(core.BuildStep{
     In:    questa_lib,
     Out:   modelsim_ini,
@@ -320,41 +336,41 @@ func compileSrcs(ctx core.Context, rule Simulation,
 			var tool string
 			if IsVerilog(src.String()) {
 				tool = "vlog"
-				cmd = cmd + " " + VlogFlags.Value()
-				cmd = cmd + " -suppress 2583 -svinputport=net -define SIMULATION"
-				cmd = cmd + rule.libFlags()
-				cmd = cmd + fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
-        cmd = cmd + incDirFlags(incs)
+				cmd += " " + VlogFlags.Value()
+				cmd += " -suppress 2583 -svinputport=net -define SIMULATION"
+				cmd += rule.libFlags()
+				cmd += fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
+        cmd += incDirFlags(incs)
 				if flags != nil {
 					if vlog_flags, ok := flags["vlog"]; ok {
-						cmd = cmd + " " + vlog_flags
+						cmd += " " + vlog_flags
 					}
 				}
 				for key, value := range rule.Defines {
-					cmd = cmd + fmt.Sprintf(" -define %s", key)
+					cmd += fmt.Sprintf(" -define %s", key)
 					if value != "" {
-						cmd = cmd + fmt.Sprintf("=%s", value)
+						cmd += fmt.Sprintf("=%s", value)
 					}
 				}
 			} else if IsVhdl(src.String()) {
 				tool = "vcom"
-				cmd = cmd + " " + VcomFlags.Value()
+				cmd += " " + VcomFlags.Value()
 				if flags != nil {
 					if vcom_flags, ok := flags["vcom"]; ok {
-						cmd = cmd + " " + vcom_flags
+						cmd += " " + vcom_flags
 					}
 				}
 			}
 
 			if Lint.Value() {
-				cmd = cmd + " -lint"
+				cmd += " -lint"
 			}
 
 			// Create plain compilation command
 			cmd = tool + " " + cmd + " " + src.String()
 
 			// Remove the log file if the command fails to ensure we can recompile it
-			cmd = cmd + " || { rm " + log.String() + " && exit 1; }"
+			cmd += " || { rm " + log.String() + " && exit 1; }"
 
 			// Add the source file to the dependencies
 			deps = append(deps, src)
@@ -505,21 +521,21 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
     }
 
 		cmd := "vopt " + common_flags
-		cmd = cmd + " " + VoptFlags.Value()
-		cmd = cmd + " " + cover_flag
-		cmd = cmd + " " + access_flag
-		cmd = cmd + " " + designfile_flag
-		cmd = cmd + " -l " + target.LogFile.String()
-		cmd = cmd + " -work work"
-		cmd = cmd + " " + strings.Join(tops, " ")
-		cmd = cmd + rule.libFlags()
-    cmd = cmd + rule.paramFlags(target.Params)
-		cmd = cmd + " -o " + target.Name
+		cmd += " " + VoptFlags.Value()
+		cmd += " " + cover_flag
+		cmd += " " + access_flag
+		cmd += " " + designfile_flag
+		cmd += " -l " + target.LogFile.String()
+		cmd += " -work work"
+		cmd += " " + strings.Join(tops, " ")
+		cmd += rule.libFlags()
+    cmd += rule.paramFlags(target.Params)
+		cmd += " -o " + target.Name
 
 		// Add any extra flags specified with the rule
 		if rule.ToolFlags != nil {
 			if vopt_flags, ok := rule.ToolFlags["vopt"]; ok {
-				cmd = cmd + " " + vopt_flags
+				cmd += " " + vopt_flags
 			}
 		}
 
@@ -759,7 +775,11 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	if gui {
 		do_flags = append(do_flags, "\"set gui 1\"")
 		if Designfile.Value() {
-			mode_flag = " -visualizer=+designfile=" + target + ".bin"
+      design_file := "design"
+      if params != "" {
+        design_file += "_" + params
+      }
+			mode_flag = " -visualizer=+designfile=" + rule.Path().WithSuffix("/" + design_file + ".bin").String()
 		} else {
 			mode_flag = " -gui"
 		}
@@ -802,7 +822,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 
 	cmd := fmt.Sprintf("{ echo -n %s && vsim %s -work work %s && echo %s; }", cmd_echo, vsim_flags, target, cmd_pass)
 	if cmd_preamble == "" {
-		cmd = cmd + " " + cmd_postamble
+		cmd += " " + cmd_postamble
 	} else {
 		cmd = "{ { " + cmd_preamble + " } && " + cmd + " } " + cmd_postamble
 	}
@@ -876,7 +896,7 @@ func simulateQuesta(rule Simulation, args []string, gui bool) string {
 	for i := range params {
 		// Loop for all test cases
 		for j := range testcases {
-			cmd = cmd + " && " + questaCmd(rule, args, gui, testcases[j], params[i])
+			cmd += " && " + questaCmd(rule, args, gui, testcases[j], params[i])
 			// Only one testcase allowed in GUI mode
 			if gui {
 				break
