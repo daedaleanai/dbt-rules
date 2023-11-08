@@ -148,14 +148,14 @@ const export_simulation_template = `
 {{- if .Defines }}
     -define [list\
 {{- range .Defines }}
-      { {{ . }} }\
+      { {{- . -}} }\
 {{- end }}
     ]\
 {{- end }}
 {{- if .Options }}
     -more_options [list\
 {{- range .Options }}
-      { {{ $.Simulator }}.compile.{{ . }} }\
+      { {{- $.Simulator }}.compile.{{ . -}} }\
 {{- end }}
     ]\
 {{- end }}
