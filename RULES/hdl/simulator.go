@@ -13,33 +13,6 @@ import (
 	"strings"
 )
 
-type exportIpTemplateParams struct {
-	Source    string
-  Simulator string
-  Part      string
-	Dir       string
-	LibDir    string
-}
-
-const export_ip_template = `#!/usr/bin/env -S vivado -nojournal -nolog -mode batch -source
-puts "Running in [pwd]..."
-puts "Creating in-memory project"
-create_project -part {{ .Part }} -in_memory
-set_property target_language verilog [current_project]
-puts "Reading IP from {{ .Source }}"
-import_ip {{ .Source }}
-foreach ip [get_ips] {
-  puts "Upgrade IP"
-  upgrade_ip $ip
-  puts "Generating IP"
-  generate_target simulation $ip
-	puts "Exporting IP"
-  export_simulation -simulator {{ .Simulator }} -quiet -force -absolute_path -use_ip_compiled_libs -lib_map_path {{ .LibDir }} -of_objects $ip -step compile -directory {{ .Dir }}
-}
-
-puts "Finished generating IP in {{ .Dir }}"
-`
-
 var Simulator = core.StringFlag{
 	Name:        "hdl-simulator",
 	Description: "Select HDL simulator",
@@ -122,6 +95,25 @@ func (rule Simulation) Lib() string {
 // Path returns the default root path for log files defined for this rule.
 func (rule Simulation) Path() core.Path {
 	return core.BuildPath("/" + rule.Name)
+}
+
+// Target returns the optimization target name defined for this rule.
+func (rule Simulation) Target(params string, coverage bool) string {
+  target := strings.Replace(rule.Name, "-", "_", -1)
+  if params != "" {
+    if rule.Params != nil {
+      if _, ok := rule.Params[params]; !ok {
+        log.Fatal(fmt.Sprintf("parameter set %s not defined!", params))
+      }
+    } else {
+      log.Fatal(fmt.Sprintf("parameter set %s requested, but no parameters sets are defined!", params))
+    }
+    target += "_" + params
+  }
+	if coverage {
+		target += "_cover"
+  }
+  return target
 }
 
 func (rule Simulation) Build(ctx core.Context) {
@@ -315,52 +307,6 @@ func Preamble(rule Simulation, testcase string) (string, string) {
 	}
 
 	return preamble, testcase
-}
-
-func ExportIpFromXci(ctx core.Context, rule Simulation, src core.Path) core.Path {
-  xci, err := ReadXci(src.String())
-  if err != nil {
-    log.Fatal(fmt.Sprintf("unable to read XCI file %s", src.Relative()))
-  }
-
-  if SimulatorLibDir.Value() == "" {
-    log.Fatal("hdl-simulator-lib-dir must be set when compiling XCI files!")
-  }
-
-  part := xci.IpInst.Parameters.ProjectParameters.Device[0].Value + "-" +
-          xci.IpInst.Parameters.ProjectParameters.Package[0].Value +
-          xci.IpInst.Parameters.ProjectParameters.Speedgrade[0].Value
-
-  if xci.IpInst.Parameters.ProjectParameters.TemperatureGrade[0].Value != "" {
-    part = part + "-" + xci.IpInst.Parameters.ProjectParameters.TemperatureGrade[0].Value
-  }
-
-  // Determine name of .do file
-	oldExt := path.Ext(src.Relative())
-	newRel := strings.TrimSuffix(src.Relative(), oldExt)
-  dir := core.BuildPath(path.Dir(src.Relative()))
-  do := core.BuildPath(newRel).WithSuffix(fmt.Sprintf("/%s/compile.do", Simulator.Value()))
-
-	// Template parameters are the direct and parent script sources.
-	data := exportIpTemplateParams{
-		Source:    src.Absolute(),
-		Dir:       dir.Absolute(),
-    Part:      strings.ToLower(part),
-    Simulator: Simulator.Value(),
-		LibDir:    SimulatorLibDir.Value(),
-	}
-
-  //fmt.Fprintln(os.Stderr, "Parameters:\n")
-  //fmt.Fprintln(os.Stderr, data)
-
-	ctx.AddBuildStep(core.BuildStep{
-		Out:    do,
-		In:     src,
-		Script: core.CompileTemplate(export_ip_template, "exportIp", data),
-    Descr:  fmt.Sprintf("export: %s", src.Relative()),
-	})
-
-  return do
 }
 
 func copySrcsBinaries(ctx core.Context, srcs []core.Path) {

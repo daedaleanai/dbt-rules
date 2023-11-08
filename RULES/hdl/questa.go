@@ -14,7 +14,7 @@ import (
 var VlogFlags = core.StringFlag{
 	Name: "questa-vlog-flags",
 	DefaultFn: func() string {
-		return ""
+		return "-suppress 2583 -svinputport=net"
 	},
 	Description: "Extra flags for the vlog command",
 }.Register()
@@ -101,70 +101,8 @@ var DumpQwavedbScope = core.StringFlag{
 	AllowedValues: []string{"all", "signals", "assertions", "memory", "queues"},
 }.Register()
 
-// Target returns the optimization target name defined for this rule.
-func (rule Simulation) Target(params string) string {
-  target := strings.Replace(rule.Name, "-", "_", -1)
-  if params != "" {
-    if rule.Params != nil {
-      if _, ok := rule.Params[params]; !ok {
-        log.Fatal(fmt.Sprintf("parameter set %s not defined!", params))
-      }
-    } else {
-      log.Fatal(fmt.Sprintf("parameter set %s requested, but no parameters sets are defined!", params))
-    }
-    target = target + "_" + params
-  }
-	if Coverage.Value() {
-		target = target + "_cover"
-  }
-  return target
-}
-
-// Instance returns the instance name of the rule based on the Top and the DUT
-// fields.
-func (rule Simulation) Instance() string {
-	// Defaults
-	top := "board"
-	dut := "u_dut"
-
-	// Pick top from rule
-	if rule.Top != "" {
-		top = rule.Top
-	}
-
-	// Pick DUT from rule
-	if rule.Dut != "" {
-		dut = rule.Dut
-	}
-
-	return "/" + top + "/" + dut
-}
-
-// libFlags returns the flags needed to configure the extra libraries for this rule
-func (rule Simulation) libFlags() string {
-  // List all libraries
-  lib_map := map[string]bool{}
-
-  // get defaults
-  for _, lib := range strings.Split(SimulatorLibSearch.Value(), " ") {
-    lib_map[lib] = true
-  }
-
-  // get from simulation target
-  for _, lib := range rule.Libs {
-    lib_map[lib] = true
-  }
-
-  // build flags
-	flags := ""
-  for lib, _ := range lib_map {
-    flags += fmt.Sprintf(" -L %s", lib)
-  }
-
-	return flags
-}
-
-func (rule Simulation) paramFlags(params string) string {
+// paramFlags returns the flags needed to select specific parameters for this rule
+func paramFlags(rule Simulation, params string) string {
   cmd := ""
   if params != "" {
     if rule.Params != nil {
@@ -182,6 +120,24 @@ func (rule Simulation) paramFlags(params string) string {
   return cmd
 }
 
+// libFlags returns the flags needed to configure the extra libraries for this rule
+func libFlags(rule Simulation) string {
+  // Holds actual flags
+  flags := ""
+  // Holds all libraries to avoid duplication
+  lib_map := map[string]bool{}
+
+  // get defaults
+  for _, lib := range append(strings.Split(SimulatorLibSearch.Value(), " "), rule.Libs...) {
+    if _, ok := lib_map[lib]; !ok {
+      lib_map[lib] = true
+      flags += " -L " + lib
+    }
+  }
+
+	return flags
+}
+
 // Construct a string of +incdir+%s arguments from a list of directories
 func incDirFlags(incs []core.Path) string {
   cmd := ""
@@ -196,12 +152,41 @@ func incDirFlags(incs []core.Path) string {
   return cmd
 }
 
+// verbosityLevelToFlag takes a verbosity level of none, low, medium or high and
+// converts it to the corresponding DVM_ level.
+func verbosityLevelToFlag(level string) (string, bool) {
+	var verbosity_flag string
+	var print_output bool
+	switch level {
+	case "none":
+		verbosity_flag = " +verbosity=DVM_VERB_NONE"
+		print_output = false
+	case "low":
+		verbosity_flag = " +verbosity=DVM_VERB_LOW"
+		print_output = true
+	case "medium":
+		verbosity_flag = " +verbosity=DVM_VERB_MED"
+		print_output = true
+	case "high":
+		verbosity_flag = " +verbosity=DVM_VERB_HIGH"
+		print_output = true
+	case "all":
+		verbosity_flag = " +verbosity=DVM_VERB_ALL"
+		print_output = true
+	default:
+		log.Fatal(fmt.Sprintf("invalid verbosity flag '%s', only 'low', 'medium',"+
+			" 'high', 'all'  or 'none' allowed!", level))
+	}
+
+	return verbosity_flag, print_output
+}
+
 // rules holds a map of all defined rules to prevent defining the same rule
 // multiple times.
 var rules = make(map[string]bool)
 
 // common_flags holds common flags used for the 'vlog', 'vcom', and 'vopt' commands.
-const common_flags = "-nologo -quiet"
+const common_flags = "-nologo -quiet -work work"
 
 type Target struct {
   Name    string
@@ -210,7 +195,7 @@ type Target struct {
 }
 
 // Parameters of the do-file
-type DoFileParams struct {
+type doFileParams struct {
 	WaveformInit string
 	DumpVcd      bool
 	DumpVcdFile  string
@@ -300,14 +285,19 @@ func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []co
   deps = append(deps, questa_lib)
 
   modelsim_ini := core.BuildPath("modelsim.ini")
-  cmds := []string{"vlib questa_lib/work", "vmap work questa_lib/work"}
+
+  // Standard libraries needed by Vivado
+  cmds := []string{
+    "vlib questa_lib/work",
+    "vlib questa_lib/msim",
+    "vlib questa_lib/msim/xil_defaultlib",
+    "vmap work questa_lib/work",
+    "vmap xil_defaultlib questa_lib/msim/xil_defaultlib",
+  }
 
 	if SimulatorLibDir.Value() != "" {
     cmds = append(cmds, fmt.Sprintf("for lib in $$(find %s -mindepth 1 -maxdepth 1 -type d); do vmap $$(basename $$lib) $$lib; done", SimulatorLibDir.Value()))
   }
-
-  // add default libs
-
 
   ctx.AddBuildStep(core.BuildStep{
     In:    questa_lib,
@@ -320,6 +310,43 @@ func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []co
 	return deps
 }
 
+func vlogCmd(ctx core.Context, rule Simulation, incs []core.Path, flags FlagMap) string {
+  cmd := "vlog " + common_flags
+  cmd += " " + VlogFlags.Value()
+  cmd += libFlags(rule)
+  cmd += " +incdir+" + core.SourcePath("").String()
+  cmd += incDirFlags(incs)
+
+  if flags != nil {
+    if vlog_flags, ok := flags["vlog"]; ok {
+      cmd += " " + vlog_flags
+    }
+  }
+
+  cmd += "  -define SIMULATION"
+  for key, value := range rule.Defines {
+    cmd += " -define " + key
+    if value != "" {
+      cmd += fmt.Sprintf("=%s", value)
+    }
+  }
+
+  return cmd
+}
+
+func vcomCmd(ctx core.Context, rule Simulation, flags FlagMap) string {
+  cmd := "vcom " + common_flags
+  cmd += " " + VcomFlags.Value()
+
+  if flags != nil {
+    if vlog_flags, ok := flags["vcom"]; ok {
+      cmd += " " + vlog_flags
+    }
+  }
+
+  return cmd
+}
+
 // compileSrcs compiles a list of sources using the specified context ctx, rule,
 // dependencies and include paths. It returns the resulting dependencies and include paths
 // that result from compiling the source files.
@@ -328,52 +355,42 @@ func compileSrcs(ctx core.Context, rule Simulation,
 	for _, src := range srcs {
     // log will point to the log file to be generated when compiling the code
     log := core.BuildPath(src.Relative()).WithSuffix(".log")
+    // Command will be updated to compile the source code
+    cmd := ""
+    // Tool will indicate the used tool
+    tool := ""
 
 		if IsRtl(src.String()) {
-			cmd := fmt.Sprintf("%s -work work -l %s", common_flags, log.String())
-
 			// tool will point to the tool to execute (also used for logging below)
-			var tool string
-			if IsVerilog(src.String()) {
-				tool = "vlog"
-				cmd += " " + VlogFlags.Value()
-				cmd += " -suppress 2583 -svinputport=net -define SIMULATION"
-				cmd += rule.libFlags()
-				cmd += fmt.Sprintf(" +incdir+%s", core.SourcePath("").String())
-        cmd += incDirFlags(incs)
-				if flags != nil {
-					if vlog_flags, ok := flags["vlog"]; ok {
-						cmd += " " + vlog_flags
-					}
-				}
-				for key, value := range rule.Defines {
-					cmd += fmt.Sprintf(" -define %s", key)
-					if value != "" {
-						cmd += fmt.Sprintf("=%s", value)
-					}
-				}
+      if IsVerilog(src.String()) {
+        tool = "vlog"
+        cmd += vlogCmd(ctx, rule, incs, flags)
 			} else if IsVhdl(src.String()) {
-				tool = "vcom"
-				cmd += " " + VcomFlags.Value()
-				if flags != nil {
-					if vcom_flags, ok := flags["vcom"]; ok {
-						cmd += " " + vcom_flags
-					}
-				}
+        tool = "vcom"
+        cmd += vcomCmd(ctx, rule, flags)
 			}
 
-			if Lint.Value() {
-				cmd += " -lint"
-			}
+      if Lint.Value() {
+        cmd += " -lint"
+      }
 
-			// Create plain compilation command
-			cmd = tool + " " + cmd + " " + src.String()
+      cmd += " -l " + log.String() + " " + src.String()
 
+		} else if IsXilinxIpCheckpoint(src.String()) {
+      tool = "vsim"
+      src = ExportXilinxIpCheckpoint(ctx, rule, src)
+      cmd = "vsim -batch -do " + src.String() + " -do exit -logfile " + log.String()
+    } else if IsHeader(src.String()) {
+      // Header files are added to the list to be able to set include directories correctly
+      incs = append(incs, src)
+		}
+
+    // Just add the file to the dependencies of the next one (including header files)
+    deps = append(deps, src)
+
+    if cmd != "" {
 			// Remove the log file if the command fails to ensure we can recompile it
 			cmd += " || { rm " + log.String() + " && exit 1; }"
-
-			// Add the source file to the dependencies
-			deps = append(deps, src)
 
       // If we already have a rule for this file, skip it.
       if !rules[log.String()] {
@@ -392,44 +409,44 @@ func compileSrcs(ctx core.Context, rule Simulation,
 
 			// Add the log file to the dependencies of the next files
 			deps = append(deps, log)
-
-		} else if IsXilinxIpCheckpoint(src.String()) {
-      do := ExportIpFromXci(ctx, rule, src)
-      if !rules[log.String()] {
-        ctx.AddBuildStep(core.BuildStep{
-          Out:    log,
-          In:     do,
-          Cmd:    fmt.Sprintf("vsim -batch -do %s -do exit -logfile %s", do.Relative(), log.Relative()),
-          Descr:  fmt.Sprintf("vsim: %s", do.Absolute()),
-        })
-
-        // Note down the created rule
-        rules[log.String()] = true
-      }
-
-			// Add the log file to the dependencies of the next files
-      deps = append(deps, log)
-    } else {
-			// We handle header files separately from other source files
-			if IsHeader(src.String()) {
-				incs = append(incs, src)
-			}
-
-			// Just add the file to the dependencies of the next one (including header files)
-			deps = append(deps, src)
-		}
+    }
 	}
 
 	return deps, incs
 }
 
-// compileIp compiles the IP dependencies and the source files and an IP.
+// compileBlockDesign exports and compiles a BlockDesign
+func compileBlockDesign(ctx core.Context, rule Simulation, ip BlockDesign, deps []core.Path) []core.Path {
+  log := ctx.Cwd().WithSuffix("/" + ip.Top + ".log")
+
+  if !rules[log.String()] {
+    do := ExportBlockDesign(ctx, ip, rule.Defines)
+    ctx.AddBuildStep(core.BuildStep{
+      Out:    log,
+      In:     do,
+      Cmd:    fmt.Sprintf("vsim -batch -do %s -do exit -logfile %s", do.Relative(), log.Relative()),
+      Descr:  fmt.Sprintf("vsim: %s", do.Absolute()),
+    })
+
+    // Note down the created rule
+    rules[log.String()] = true
+  }
+
+  return append(deps, log)
+}
+
+// compileIp compiles the IP dependencies and the source files of a Library
 func compileIp(ctx core.Context, rule Simulation, ip Ip,
 	deps []core.Path, incs []core.Path) ([]core.Path, []core.Path) {
-	for _, sub_ip := range ip.Ips() {
-		deps, incs = compileIp(ctx, rule, sub_ip, deps, incs)
-	}
-	deps, incs = compileSrcs(ctx, rule, deps, incs, ip.Sources(), ip.Flags())
+
+  for _, sub_ip := range ip.Ips() {
+    deps, incs = compileIp(ctx, rule, sub_ip, deps, incs)
+  }
+  deps, incs = compileSrcs(ctx, rule, deps, incs, ip.Sources(), ip.Flags())
+
+  if v, ok := ip.(BlockDesign); ok {
+    deps = compileBlockDesign(ctx, rule, v, deps)
+  }
 
 	return deps, incs
 }
@@ -478,14 +495,14 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 	if rule.Params != nil {
 		for params_name := range rule.Params {
       targets = append(targets, Target{
-        Name: rule.Target(params_name),
+        Name: rule.Target(params_name, Coverage.Value()),
         LogFile: rule.Path().WithSuffix("/" + params_name + "_" + log_file_suffix),
         Params: params_name,
       })
 		}
 	} else {
     targets = append(targets, Target{
-      Name: rule.Target(""),
+      Name: rule.Target("", Coverage.Value()),
       LogFile: rule.Path().WithSuffix("/" + log_file_suffix),
       Params: "",
     })
@@ -525,12 +542,8 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 		cmd += " " + cover_flag
 		cmd += " " + access_flag
 		cmd += " " + designfile_flag
-		cmd += " -l " + target.LogFile.String()
-		cmd += " -work work"
-		cmd += " " + strings.Join(tops, " ")
-		cmd += rule.libFlags()
-    cmd += rule.paramFlags(target.Params)
-		cmd += " -o " + target.Name
+		cmd += libFlags(rule)
+    cmd += paramFlags(rule, target.Params)
 
 		// Add any extra flags specified with the rule
 		if rule.ToolFlags != nil {
@@ -538,6 +551,10 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 				cmd += " " + vopt_flags
 			}
 		}
+
+    cmd += " -l " + target.LogFile.String()
+    cmd += " " + strings.Join(tops, " ")
+    cmd += " -o " + target.Name
 
 		if rule.TestCaseGenerator != nil {
 			deps = append(deps, rule.TestCaseGenerator)
@@ -559,7 +576,7 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 // Create a simulation script
 func doFile(ctx core.Context, rule Simulation) {
 	// Do-file script
-	params := DoFileParams{
+	params := doFileParams{
 		DumpVcd: DumpVcd.Value(),
 		DumpVcdFile: rule.Path().WithSuffix("/waves.vcd.gz").String(),
 		CovFiles: strings.Join(rule.ReportCovFiles(), "+"),
@@ -590,38 +607,9 @@ func BuildQuesta(ctx core.Context, rule Simulation) {
 	doFile(ctx, rule)
 }
 
-// verbosityLevelToFlag takes a verbosity level of none, low, medium or high and
-// converts it to the corresponding DVM_ level.
-func verbosityLevelToFlag(level string) (string, bool) {
-	var verbosity_flag string
-	var print_output bool
-	switch level {
-	case "none":
-		verbosity_flag = " +verbosity=DVM_VERB_NONE"
-		print_output = false
-	case "low":
-		verbosity_flag = " +verbosity=DVM_VERB_LOW"
-		print_output = true
-	case "medium":
-		verbosity_flag = " +verbosity=DVM_VERB_MED"
-		print_output = true
-	case "high":
-		verbosity_flag = " +verbosity=DVM_VERB_HIGH"
-		print_output = true
-	case "all":
-		verbosity_flag = " +verbosity=DVM_VERB_ALL"
-		print_output = true
-	default:
-		log.Fatal(fmt.Sprintf("invalid verbosity flag '%s', only 'low', 'medium',"+
-			" 'high', 'all'  or 'none' allowed!", level))
-	}
-
-	return verbosity_flag, print_output
-}
-
-// questaCmd will create a command for starting 'vsim' on the compiled and optimized design with flags
+// vsimCmd will create a command for starting 'vsim' on the compiled and optimized design with flags
 // set in accordance with what is specified on the command line.
-func questaCmd(rule Simulation, args []string, gui bool, testcase string, params string) string {
+func vsimCmd(rule Simulation, args []string, gui bool, testcase string, params string) string {
 	// Prefix the vsim command with this
 	cmd_preamble := ""
 
@@ -642,7 +630,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	var do_flags []string
 
 	// Default flag values
-	vsim_flags := " -onfinish final -l " + log_file.String() + rule.libFlags()
+	vsim_flags := " -onfinish final -l " + log_file.String() + libFlags(rule)
 
 	seed_flag := " -sv_seed random"
 	verbosity_flag := " +verbosity=DVM_VERB_NONE"
@@ -650,7 +638,7 @@ func questaCmd(rule Simulation, args []string, gui bool, testcase string, params
 	plusargs_flag := ""
 
 	// Default database name for simulation
-  target := rule.Target(params)
+  target := rule.Target(params, Coverage.Value())
 
 	// Enable coverage in simulator
 	coverage_flag := ""
@@ -896,7 +884,7 @@ func simulateQuesta(rule Simulation, args []string, gui bool) string {
 	for i := range params {
 		// Loop for all test cases
 		for j := range testcases {
-			cmd += " && " + questaCmd(rule, args, gui, testcases[j], params[i])
+			cmd += " && " + vsimCmd(rule, args, gui, testcases[j], params[i])
 			// Only one testcase allowed in GUI mode
 			if gui {
 				break
