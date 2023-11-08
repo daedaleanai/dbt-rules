@@ -73,9 +73,11 @@ type templateParams struct {
   Simulator string
   Top       string
   Part      string
+  Board     string
 	Dir       string
 	LibDir    string
   Defines   []string
+  Options   []string
 }
 
 const export_ip_template = `
@@ -102,6 +104,9 @@ const create_project_template = `
 create_project -in_memory -part {{ .Part }}
 set_property target_language verilog [current_project]
 set_property source_mgmt_mode All [current_project]
+{{- if .Board }}
+set_property board_part {{ .Board }} [current_project]
+{{- end }}
 `
 
 const add_files_template = `
@@ -140,8 +145,19 @@ const export_simulation_template = `
     -use_ip_compiled_libs\
     -lib_map_path {{ .LibDir }}\
     -step compile\
+{{- if .Defines }}
+    -define [list\
 {{- range .Defines }}
-    -define {{ . }}\
+      { {{ . }} }\
+{{- end }}
+    ]\
+{{- end }}
+{{- if .Options }}
+    -more_options [list\
+{{- range .Options }}
+      { {{ $.Simulator }}.compile.{{ . }} }\
+{{- end }}
+    ]\
 {{- end }}
     -directory {{ .Dir }}\
 `
@@ -157,7 +173,7 @@ foreach f [get_files -of [get_filesets utils_1]] {
 }
 `
 
-func ExportXilinxIpCheckpoint(ctx core.Context, rule Simulation, src core.Path) core.Path {
+func ExportXilinxIpCheckpoint(ctx core.Context, rule Simulation, src core.Path, def DefineMap, flags FlagMap) core.Path {
   xci, err := ReadXci(src.String())
   if err != nil {
     log.Fatal(fmt.Sprintf("unable to read XCI file %s", src.Relative()))
@@ -175,6 +191,20 @@ func ExportXilinxIpCheckpoint(ctx core.Context, rule Simulation, src core.Path) 
     part = part + "-" + xci.IpInst.Parameters.ProjectParameters.TemperatureGrade[0].Value
   }
 
+  defines := []string{"SIMULATION"}
+  for key, value := range def {
+    if value != "" {
+      defines = append(defines, fmt.Sprintf("%s=%s", key, value))
+    } else {
+      defines = append(defines, key)
+    }
+  }
+
+  options := []string{}
+  for tool, option := range flags {
+    options = append(options, fmt.Sprintf("%s:%s", tool, option))
+  }
+
   // Determine name of .do file
 	oldExt := path.Ext(src.Relative())
 	newRel := strings.TrimSuffix(src.Relative(), oldExt)
@@ -188,6 +218,8 @@ func ExportXilinxIpCheckpoint(ctx core.Context, rule Simulation, src core.Path) 
     Part:      strings.ToLower(part),
     Simulator: Simulator.Value(),
 		LibDir:    SimulatorLibDir.Value(),
+    Defines:   defines,
+    Options:   options,
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
@@ -204,9 +236,10 @@ type BlockDesign struct {
   Library
   Top       string
   Part      string
+  Board     string
 }
 
-func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap) core.Path {
+func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags FlagMap) core.Path {
   // Get all Verilog sources files
   sources := rule.FilterSources(".tcl")
   sources = append(sources, rule.FilterSources(".v")...)
@@ -217,6 +250,11 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap) core.P
     part = rule.Part
   }
 
+  board := BoardName.Value()
+  if rule.Board != "" {
+    board = rule.Board
+  }
+
   defines := []string{"SIMULATION"}
   for key, value := range def {
     if value != "" {
@@ -225,15 +263,23 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap) core.P
       defines = append(defines, key)
     }
   }
+
+  options := []string{}
+  for tool, option := range flags {
+    options = append(options, fmt.Sprintf("%s:%s", tool, option))
+  }
+
 	// Template parameters are the direct and parent script sources.
 	data := templateParams{
 		Sources:   sources,
 		Dir:       ctx.Cwd().Absolute(),
     Top:       rule.Top,
     Part:      strings.ToLower(part),
+    Board:     strings.ToLower(board),
     Simulator: Simulator.Value(),
 		LibDir:    SimulatorLibDir.Value(),
     Defines:   defines,
+    Options:   options,
 	}
 
   do := ctx.Cwd().WithSuffix(fmt.Sprintf("/%s/compile.do", Simulator.Value()))

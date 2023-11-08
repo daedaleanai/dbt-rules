@@ -312,7 +312,6 @@ func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []co
 
 func vlogCmd(ctx core.Context, rule Simulation, incs []core.Path, flags FlagMap) string {
   cmd := "vlog " + common_flags
-  cmd += " " + VlogFlags.Value()
   cmd += libFlags(rule)
   cmd += " +incdir+" + core.SourcePath("").String()
   cmd += incDirFlags(incs)
@@ -336,11 +335,10 @@ func vlogCmd(ctx core.Context, rule Simulation, incs []core.Path, flags FlagMap)
 
 func vcomCmd(ctx core.Context, rule Simulation, flags FlagMap) string {
   cmd := "vcom " + common_flags
-  cmd += " " + VcomFlags.Value()
 
   if flags != nil {
-    if vlog_flags, ok := flags["vcom"]; ok {
-      cmd += " " + vlog_flags
+    if vcom_flags, ok := flags["vcom"]; ok {
+      cmd += " " + vcom_flags
     }
   }
 
@@ -378,7 +376,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 
 		} else if IsXilinxIpCheckpoint(src.String()) {
       tool = "vsim"
-      src = ExportXilinxIpCheckpoint(ctx, rule, src)
+      src = ExportXilinxIpCheckpoint(ctx, rule, src, rule.Defines, flags)
       cmd = "vsim -batch -do " + src.String() + " -do exit -logfile " + log.String()
     } else if IsHeader(src.String()) {
       // Header files are added to the list to be able to set include directories correctly
@@ -416,11 +414,16 @@ func compileSrcs(ctx core.Context, rule Simulation,
 }
 
 // compileBlockDesign exports and compiles a BlockDesign
-func compileBlockDesign(ctx core.Context, rule Simulation, ip BlockDesign, deps []core.Path) []core.Path {
+func compileBlockDesign(ctx core.Context, rule Simulation, ip BlockDesign, deps []core.Path, flags FlagMap) []core.Path {
   log := ctx.Cwd().WithSuffix("/" + ip.Top + ".log")
 
   if !rules[log.String()] {
-    do := ExportBlockDesign(ctx, ip, rule.Defines)
+    // Merge options
+    for tool, flag := range ip.Flags() {
+      flags[tool] = flag
+    }
+
+    do := ExportBlockDesign(ctx, ip, rule.Defines, flags)
     ctx.AddBuildStep(core.BuildStep{
       Out:    log,
       In:     do,
@@ -437,15 +440,20 @@ func compileBlockDesign(ctx core.Context, rule Simulation, ip BlockDesign, deps 
 
 // compileIp compiles the IP dependencies and the source files of a Library
 func compileIp(ctx core.Context, rule Simulation, ip Ip,
-	deps []core.Path, incs []core.Path) ([]core.Path, []core.Path) {
+	deps []core.Path, incs []core.Path, flags FlagMap) ([]core.Path, []core.Path) {
 
   for _, sub_ip := range ip.Ips() {
-    deps, incs = compileIp(ctx, rule, sub_ip, deps, incs)
+    deps, incs = compileIp(ctx, rule, sub_ip, deps, incs, flags)
   }
-  deps, incs = compileSrcs(ctx, rule, deps, incs, ip.Sources(), ip.Flags())
+
+  // Merge tool options
+  for tool, flag := range ip.Flags() {
+    flags[tool] = flag
+  }
+  deps, incs = compileSrcs(ctx, rule, deps, incs, ip.Sources(), flags)
 
   if v, ok := ip.(BlockDesign); ok {
-    deps = compileBlockDesign(ctx, rule, v, deps)
+    deps = compileBlockDesign(ctx, rule, v, deps, flags)
   }
 
 	return deps, incs
@@ -455,13 +463,29 @@ func compileIp(ctx core.Context, rule Simulation, ip Ip,
 func compile(ctx core.Context, rule Simulation) []core.Path {
 	incs := []core.Path{}
 	deps := []core.Path{}
+  flags := FlagMap{}
+  if rule.ToolFlags != nil {
+    flags = rule.ToolFlags
+  }
+
+  if val, ok := flags["vlog"]; !ok {
+    flags["vlog"] = VlogFlags.Value()
+  } else {
+    flags["vlog"] = val + " " + VlogFlags.Value()
+  }
+
+  if val, ok := flags["vcom"]; !ok {
+    flags["vcom"] = VcomFlags.Value()
+  } else {
+    flags["vcom"] = val + " " + VlogFlags.Value()
+  }
 
 	deps = createModelsimIni(ctx, rule, deps)
 
 	for _, ip := range rule.Ips {
-		deps, incs = compileIp(ctx, rule, ip, deps, incs)
+		deps, incs = compileIp(ctx, rule, ip, deps, incs, flags)
 	}
-	deps, incs = compileSrcs(ctx, rule, deps, incs, rule.Srcs, rule.ToolFlags)
+	deps, incs = compileSrcs(ctx, rule, deps, incs, rule.Srcs, flags)
 
 	return deps
 }
