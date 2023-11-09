@@ -83,12 +83,14 @@ type templateParams struct {
 const export_ip_template = `
 {{- range .Sources }}
 {{- if or (hasSuffix .String ".xci") }}
-set name [file tail {{ .String }}]
-foreach xci [exec find .srcs -name "*.xci"] {
-  if {[file tail $xci] == $name} {
-    puts "Removing existing IP in $xci"
-    file delete -force $xci
-    break
+if {[file exists .srcs] && [file isdirectory .srcs]} {
+  set name [file tail {{ .String }}]
+  foreach xci [exec find .srcs -name "*.xci"] {
+    if {[file tail $xci] == $name} {
+      puts "Removing existing IP in $xci"
+      file delete -force $xci
+      break
+    }
   }
 }
 puts "Reading IP from {{ .String }}"

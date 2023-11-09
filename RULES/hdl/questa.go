@@ -14,7 +14,7 @@ import (
 var VlogFlags = core.StringFlag{
 	Name: "questa-vlog-flags",
 	DefaultFn: func() string {
-		return "-suppress 2583 -svinputport=net"
+		return "-svinputport=net"
 	},
 	Description: "Extra flags for the vlog command",
 }.Register()
@@ -32,7 +32,7 @@ var VcomFlags = core.StringFlag{
 var VoptFlags = core.StringFlag{
 	Name: "questa-vopt-flags",
 	DefaultFn: func() string {
-		return "-fsmverbose -suppress 10016"
+		return "-fsmverbose"
 	},
 	Description: "Extra flags for the vopt command",
 }.Register()
@@ -152,7 +152,7 @@ func incDirFlags(incs []core.Path) string {
 	return cmd
 }
 
-// verbosityLevelToFlag takes a verbosity level of none, low, medium or high and
+// verbosityLevelToFlag takes a verbosity level of none, low, medium, high or all and
 // converts it to the corresponding DVM_ level.
 func verbosityLevelToFlag(level string) (string, bool) {
 	var verbosity_flag string

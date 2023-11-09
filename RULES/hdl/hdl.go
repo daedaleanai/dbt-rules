@@ -75,7 +75,7 @@ func (lib Library) filterSources(seen map[string]bool, sources []core.Path, suff
 
 	// Add sources
 	for _, source := range lib.Sources() {
-		if suffix != "" && strings.HasSuffix(source.String(), suffix) {
+		if (suffix != "") && strings.HasSuffix(source.String(), suffix) {
 			if _, ok := seen[source.String()]; !ok {
 				seen[source.String()] = true
 				sources = append(sources, source)
