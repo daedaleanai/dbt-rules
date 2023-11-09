@@ -97,59 +97,59 @@ var DumpQwavedbScope = core.StringFlag{
 	DefaultFn: func() string {
 		return "all"
 	},
-	Description: "Control the scope of data dumped to qwavedb file",
+	Description:   "Control the scope of data dumped to qwavedb file",
 	AllowedValues: []string{"all", "signals", "assertions", "memory", "queues"},
 }.Register()
 
 // paramFlags returns the flags needed to select specific parameters for this rule
 func paramFlags(rule Simulation, params string) string {
-  cmd := ""
-  if params != "" {
-    if rule.Params != nil {
-      if _, ok := rule.Params[params]; !ok {
-        log.Fatal(fmt.Sprintf("parameter set %s not defined!", params))
-      }
-    } else {
-      log.Fatal(fmt.Sprintf("parameter set %s requested, but no parameters sets are defined!", params))
-    }
-    // Add parameters for all generics into a single string
-    for name, value := range rule.Params[params] {
-      cmd += fmt.Sprintf(" -g %s=%s", name, value)
-    }
-  }
-  return cmd
+	cmd := ""
+	if params != "" {
+		if rule.Params != nil {
+			if _, ok := rule.Params[params]; !ok {
+				log.Fatal(fmt.Sprintf("parameter set %s not defined!", params))
+			}
+		} else {
+			log.Fatal(fmt.Sprintf("parameter set %s requested, but no parameters sets are defined!", params))
+		}
+		// Add parameters for all generics into a single string
+		for name, value := range rule.Params[params] {
+			cmd += fmt.Sprintf(" -g %s=%s", name, value)
+		}
+	}
+	return cmd
 }
 
 // libFlags returns the flags needed to configure the extra libraries for this rule
 func libFlags(rule Simulation) string {
-  // Holds actual flags
-  flags := ""
-  // Holds all libraries to avoid duplication
-  lib_map := map[string]bool{}
+	// Holds actual flags
+	flags := ""
+	// Holds all libraries to avoid duplication
+	lib_map := map[string]bool{}
 
-  // get defaults
-  for _, lib := range append(strings.Split(SimulatorLibSearch.Value(), " "), rule.Libs...) {
-    if _, ok := lib_map[lib]; !ok {
-      lib_map[lib] = true
-      flags += " -L " + lib
-    }
-  }
+	// get defaults
+	for _, lib := range append(strings.Split(SimulatorLibSearch.Value(), " "), rule.Libs...) {
+		if _, ok := lib_map[lib]; !ok {
+			lib_map[lib] = true
+			flags += " -L " + lib
+		}
+	}
 
 	return flags
 }
 
 // Construct a string of +incdir+%s arguments from a list of directories
 func incDirFlags(incs []core.Path) string {
-  cmd := ""
-  seen_incs := make(map[string]struct{})
-  for _, inc := range incs {
-    inc_path := path.Dir(inc.Absolute())
-    if _, ok := seen_incs[inc_path]; !ok {
-      cmd += fmt.Sprintf(" +incdir+%s", inc_path)
-      seen_incs[inc_path] = struct{}{}
-    }
-  }
-  return cmd
+	cmd := ""
+	seen_incs := make(map[string]struct{})
+	for _, inc := range incs {
+		inc_path := path.Dir(inc.Absolute())
+		if _, ok := seen_incs[inc_path]; !ok {
+			cmd += fmt.Sprintf(" +incdir+%s", inc_path)
+			seen_incs[inc_path] = struct{}{}
+		}
+	}
+	return cmd
 }
 
 // verbosityLevelToFlag takes a verbosity level of none, low, medium or high and
@@ -189,9 +189,9 @@ var rules = make(map[string]bool)
 const common_flags = "-nologo -quiet -work work"
 
 type Target struct {
-  Name    string
-  LogFile core.OutPath
-  Params  string
+	Name    string
+	LogFile core.OutPath
+	Params  string
 }
 
 // Parameters of the do-file
@@ -276,73 +276,73 @@ if ![info exists gui] {
 `
 
 func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []core.Path {
-  questa_lib := core.BuildPath("questa_lib")
-  ctx.AddBuildStep(core.BuildStep{
-    Out:   questa_lib,
-    Cmd:   fmt.Sprintf("mkdir %q", questa_lib.Absolute()),
-    Descr: fmt.Sprintf("mkdir: %q", questa_lib.Absolute()),
-  })
-  deps = append(deps, questa_lib)
+	questa_lib := core.BuildPath("questa_lib")
+	ctx.AddBuildStep(core.BuildStep{
+		Out:   questa_lib,
+		Cmd:   fmt.Sprintf("mkdir %q", questa_lib.Absolute()),
+		Descr: fmt.Sprintf("mkdir: %q", questa_lib.Absolute()),
+	})
+	deps = append(deps, questa_lib)
 
-  modelsim_ini := core.BuildPath("modelsim.ini")
+	modelsim_ini := core.BuildPath("modelsim.ini")
 
-  // Standard libraries needed by Vivado
-  cmds := []string{
-    "vlib questa_lib/work",
-    "vlib questa_lib/msim",
-    "vlib questa_lib/msim/xil_defaultlib",
-    "vmap work questa_lib/work",
-    "vmap xil_defaultlib questa_lib/msim/xil_defaultlib",
-  }
+	// Standard libraries needed by Vivado
+	cmds := []string{
+		"vlib questa_lib/work",
+		"vlib questa_lib/msim",
+		"vlib questa_lib/msim/xil_defaultlib",
+		"vmap work questa_lib/work",
+		"vmap xil_defaultlib questa_lib/msim/xil_defaultlib",
+	}
 
 	if SimulatorLibDir.Value() != "" {
-    cmds = append(cmds, fmt.Sprintf("for lib in $$(find %s -mindepth 1 -maxdepth 1 -type d); do vmap $$(basename $$lib) $$lib; done", SimulatorLibDir.Value()))
-  }
+		cmds = append(cmds, fmt.Sprintf("for lib in $$(find %s -mindepth 1 -maxdepth 1 -type d); do vmap $$(basename $$lib) $$lib; done", SimulatorLibDir.Value()))
+	}
 
-  ctx.AddBuildStep(core.BuildStep{
-    In:    questa_lib,
-    Out:   modelsim_ini,
-    Cmd:   strings.Join(cmds, " && "),
-    Descr: fmt.Sprintf("vmap: %s", modelsim_ini.Absolute()),
-  })
-  deps = append(deps, modelsim_ini)
+	ctx.AddBuildStep(core.BuildStep{
+		In:    questa_lib,
+		Out:   modelsim_ini,
+		Cmd:   strings.Join(cmds, " && "),
+		Descr: fmt.Sprintf("vmap: %s", modelsim_ini.Absolute()),
+	})
+	deps = append(deps, modelsim_ini)
 
 	return deps
 }
 
 func vlogCmd(ctx core.Context, rule Simulation, incs []core.Path, flags FlagMap) string {
-  cmd := "vlog " + common_flags
-  cmd += libFlags(rule)
-  cmd += " +incdir+" + core.SourcePath("").String()
-  cmd += incDirFlags(incs)
+	cmd := "vlog " + common_flags
+	cmd += libFlags(rule)
+	cmd += " +incdir+" + core.SourcePath("").String()
+	cmd += incDirFlags(incs)
 
-  if flags != nil {
-    if vlog_flags, ok := flags["vlog"]; ok {
-      cmd += " " + vlog_flags
-    }
-  }
+	if flags != nil {
+		if vlog_flags, ok := flags["vlog"]; ok {
+			cmd += " " + vlog_flags
+		}
+	}
 
-  cmd += "  -define SIMULATION"
-  for key, value := range rule.Defines {
-    cmd += " -define " + key
-    if value != "" {
-      cmd += fmt.Sprintf("=%s", value)
-    }
-  }
+	cmd += "  -define SIMULATION"
+	for key, value := range rule.Defines {
+		cmd += " -define " + key
+		if value != "" {
+			cmd += fmt.Sprintf("=%s", value)
+		}
+	}
 
-  return cmd
+	return cmd
 }
 
 func vcomCmd(ctx core.Context, rule Simulation, flags FlagMap) string {
-  cmd := "vcom " + common_flags
+	cmd := "vcom " + common_flags
 
-  if flags != nil {
-    if vcom_flags, ok := flags["vcom"]; ok {
-      cmd += " " + vcom_flags
-    }
-  }
+	if flags != nil {
+		if vcom_flags, ok := flags["vcom"]; ok {
+			cmd += " " + vcom_flags
+		}
+	}
 
-  return cmd
+	return cmd
 }
 
 // compileSrcs compiles a list of sources using the specified context ctx, rule,
@@ -351,63 +351,63 @@ func vcomCmd(ctx core.Context, rule Simulation, flags FlagMap) string {
 func compileSrcs(ctx core.Context, rule Simulation,
 	deps []core.Path, incs []core.Path, srcs []core.Path, flags FlagMap) ([]core.Path, []core.Path) {
 	for _, src := range srcs {
-    // log will point to the log file to be generated when compiling the code
-    log := core.BuildPath(src.Relative()).WithSuffix(".log")
-    // Command will be updated to compile the source code
-    cmd := ""
-    // Tool will indicate the used tool
-    tool := ""
+		// log will point to the log file to be generated when compiling the code
+		log := core.BuildPath(src.Relative()).WithSuffix(".log")
+		// Command will be updated to compile the source code
+		cmd := ""
+		// Tool will indicate the used tool
+		tool := ""
 
 		if IsRtl(src.String()) {
 			// tool will point to the tool to execute (also used for logging below)
-      if IsVerilog(src.String()) {
-        tool = "vlog"
-        cmd += vlogCmd(ctx, rule, incs, flags)
+			if IsVerilog(src.String()) {
+				tool = "vlog"
+				cmd += vlogCmd(ctx, rule, incs, flags)
 			} else if IsVhdl(src.String()) {
-        tool = "vcom"
-        cmd += vcomCmd(ctx, rule, flags)
+				tool = "vcom"
+				cmd += vcomCmd(ctx, rule, flags)
 			}
 
-      if Lint.Value() {
-        cmd += " -lint"
-      }
+			if Lint.Value() {
+				cmd += " -lint"
+			}
 
-      cmd += " -l " + log.String() + " " + src.String()
+			cmd += " -l " + log.String() + " " + src.String()
 
 		} else if IsXilinxIpCheckpoint(src.String()) {
-      tool = "vsim"
-      src = ExportXilinxIpCheckpoint(ctx, rule, src, rule.Defines, flags)
-      cmd = "vsim -batch -do " + src.String() + " -do exit -logfile " + log.String()
-    } else if IsHeader(src.String()) {
-      // Header files are added to the list to be able to set include directories correctly
-      incs = append(incs, src)
+			tool = "vsim"
+			src = ExportXilinxIpCheckpoint(ctx, rule, src, rule.Defines, flags)
+			cmd = "vsim -batch -do " + src.String() + " -do exit -logfile " + log.String()
+		} else if IsHeader(src.String()) {
+			// Header files are added to the list to be able to set include directories correctly
+			incs = append(incs, src)
 		}
 
-    // Just add the file to the dependencies of the next one (including header files)
-    deps = append(deps, src)
+		// Just add the file to the dependencies of the next one (including header files)
+		deps = append(deps, src)
 
-    if cmd != "" {
+		if cmd != "" {
 			// Remove the log file if the command fails to ensure we can recompile it
 			cmd += " || { rm " + log.String() + " && exit 1; }"
 
-      // If we already have a rule for this file, skip it.
-      if !rules[log.String()] {
-        // Add the compilation command as a build step with the log file as the
-        // generated output
-        ctx.AddBuildStep(core.BuildStep{
-          Out:   log,
-          Ins:   deps,
-          Cmd:   cmd,
-          Descr: fmt.Sprintf("%s: %s", tool, src.Absolute()),
-        })
+			// If we already have a rule for this file, skip it.
+			if !rules[log.String()] {
+				// Add the compilation command as a build step with the log file as the
+				// generated output
+				ctx.AddBuildStep(core.BuildStep{
+					Out:   log,
+					Ins:   deps,
+					Cmd:   cmd,
+					Descr: fmt.Sprintf("%s: %s", tool, src.Absolute()),
+				})
 
-        // Note down the created rule
-        rules[log.String()] = true
-      }
+				// Note down the created rule
+				rules[log.String()] = true
+			}
 
 			// Add the log file to the dependencies of the next files
 			deps = append(deps, log)
-    }
+		}
 	}
 
 	return deps, incs
@@ -415,46 +415,46 @@ func compileSrcs(ctx core.Context, rule Simulation,
 
 // compileBlockDesign exports and compiles a BlockDesign
 func compileBlockDesign(ctx core.Context, rule Simulation, ip BlockDesign, deps []core.Path, flags FlagMap) []core.Path {
-  log := ctx.Cwd().WithSuffix("/" + ip.Top + ".log")
+	log := ctx.Cwd().WithSuffix("/" + ip.Top + ".log")
 
-  if !rules[log.String()] {
-    // Merge options
-    for tool, flag := range ip.Flags() {
-      flags[tool] = flag
-    }
+	if !rules[log.String()] {
+		// Merge options
+		for tool, flag := range ip.Flags() {
+			flags[tool] = flag
+		}
 
-    do := ExportBlockDesign(ctx, ip, rule.Defines, flags)
-    ctx.AddBuildStep(core.BuildStep{
-      Out:    log,
-      In:     do,
-      Cmd:    fmt.Sprintf("vsim -batch -do %s -do exit -logfile %s", do.Relative(), log.Relative()),
-      Descr:  fmt.Sprintf("vsim: %s", do.Absolute()),
-    })
+		do := ExportBlockDesign(ctx, ip, rule.Defines, flags)
+		ctx.AddBuildStep(core.BuildStep{
+			Out:   log,
+			In:    do,
+			Cmd:   fmt.Sprintf("vsim -batch -do %s -do exit -logfile %s", do.Relative(), log.Relative()),
+			Descr: fmt.Sprintf("vsim: %s", do.Absolute()),
+		})
 
-    // Note down the created rule
-    rules[log.String()] = true
-  }
+		// Note down the created rule
+		rules[log.String()] = true
+	}
 
-  return append(deps, log)
+	return append(deps, log)
 }
 
 // compileIp compiles the IP dependencies and the source files of a Library
 func compileIp(ctx core.Context, rule Simulation, ip Ip,
 	deps []core.Path, incs []core.Path, flags FlagMap) ([]core.Path, []core.Path) {
 
-  for _, sub_ip := range ip.Ips() {
-    deps, incs = compileIp(ctx, rule, sub_ip, deps, incs, flags)
-  }
+	for _, sub_ip := range ip.Ips() {
+		deps, incs = compileIp(ctx, rule, sub_ip, deps, incs, flags)
+	}
 
-  // Merge tool options
-  for tool, flag := range ip.Flags() {
-    flags[tool] = flag
-  }
-  deps, incs = compileSrcs(ctx, rule, deps, incs, ip.Sources(), flags)
+	// Merge tool options
+	for tool, flag := range ip.Flags() {
+		flags[tool] = flag
+	}
+	deps, incs = compileSrcs(ctx, rule, deps, incs, ip.Sources(), flags)
 
-  if v, ok := ip.(BlockDesign); ok {
-    deps = compileBlockDesign(ctx, rule, v, deps, flags)
-  }
+	if v, ok := ip.(BlockDesign); ok {
+		deps = compileBlockDesign(ctx, rule, v, deps, flags)
+	}
 
 	return deps, incs
 }
@@ -463,22 +463,22 @@ func compileIp(ctx core.Context, rule Simulation, ip Ip,
 func compile(ctx core.Context, rule Simulation) []core.Path {
 	incs := []core.Path{}
 	deps := []core.Path{}
-  flags := FlagMap{}
-  if rule.ToolFlags != nil {
-    flags = rule.ToolFlags
-  }
+	flags := FlagMap{}
+	if rule.ToolFlags != nil {
+		flags = rule.ToolFlags
+	}
 
-  if val, ok := flags["vlog"]; !ok {
-    flags["vlog"] = VlogFlags.Value()
-  } else {
-    flags["vlog"] = val + " " + VlogFlags.Value()
-  }
+	if val, ok := flags["vlog"]; !ok {
+		flags["vlog"] = VlogFlags.Value()
+	} else {
+		flags["vlog"] = val + " " + VlogFlags.Value()
+	}
 
-  if val, ok := flags["vcom"]; !ok {
-    flags["vcom"] = VcomFlags.Value()
-  } else {
-    flags["vcom"] = val + " " + VlogFlags.Value()
-  }
+	if val, ok := flags["vcom"]; !ok {
+		flags["vcom"] = VcomFlags.Value()
+	} else {
+		flags["vcom"] = val + " " + VlogFlags.Value()
+	}
 
 	deps = createModelsimIni(ctx, rule, deps)
 
@@ -498,51 +498,51 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 		log.Fatal(fmt.Sprintf("only one of Top or Tops allowed!"))
 	}
 
-  // Default for compatibility
-  tops := []string{"board"}
+	// Default for compatibility
+	tops := []string{"board"}
 	if rule.Top != "" {
 		tops = []string{rule.Top}
 	} else if len(rule.Tops) > 0 {
-    tops = rule.Tops
-  }
+		tops = rule.Tops
+	}
 
 	log_file_suffix := "vopt.log"
 
-  cover_flag := ""
+	cover_flag := ""
 	if Coverage.Value() {
 		cover_flag = "+cover"
 	}
 
-  // Will hold all targets for optimization
-  targets := []Target{}
+	// Will hold all targets for optimization
+	targets := []Target{}
 
 	if rule.Params != nil {
 		for params_name := range rule.Params {
-      targets = append(targets, Target{
-        Name: rule.Target(params_name, Coverage.Value()),
-        LogFile: rule.Path().WithSuffix("/" + params_name + "_" + log_file_suffix),
-        Params: params_name,
-      })
+			targets = append(targets, Target{
+				Name:    rule.Target(params_name, Coverage.Value()),
+				LogFile: rule.Path().WithSuffix("/" + params_name + "_" + log_file_suffix),
+				Params:  params_name,
+			})
 		}
 	} else {
-    targets = append(targets, Target{
-      Name: rule.Target("", Coverage.Value()),
-      LogFile: rule.Path().WithSuffix("/" + log_file_suffix),
-      Params: "",
-    })
+		targets = append(targets, Target{
+			Name:    rule.Target("", Coverage.Value()),
+			LogFile: rule.Path().WithSuffix("/" + log_file_suffix),
+			Params:  "",
+		})
 	}
 
-  // Generate access flag
-  access_flag := ""
-  if Access.Value() == "debug" {
-    access_flag = "-debug"
-  } else if Access.Value() == "livesim" {
-    access_flag = "-debug,livesim"
-  } else if Access.Value() == "acc" {
-    access_flag = "+acc"
-  }  else if Access.Value() != "" {
-    access_flag = fmt.Sprintf("+acc=%s", Access.Value())
-  }
+	// Generate access flag
+	access_flag := ""
+	if Access.Value() == "debug" {
+		access_flag = "-debug"
+	} else if Access.Value() == "livesim" {
+		access_flag = "-debug,livesim"
+	} else if Access.Value() == "acc" {
+		access_flag = "+acc"
+	} else if Access.Value() != "" {
+		access_flag = fmt.Sprintf("+acc=%s", Access.Value())
+	}
 
 	for _, target := range targets {
 		// Skip if we already have a rule
@@ -550,16 +550,16 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 			continue
 		}
 
-    // Generate designfile flag
-    designfile_flag := ""
-    if Designfile.Value() {
-      design_file := "design"
-      if target.Params != "" {
-        design_file = design_file + "_" + target.Params
-      }
+		// Generate designfile flag
+		designfile_flag := ""
+		if Designfile.Value() {
+			design_file := "design"
+			if target.Params != "" {
+				design_file = design_file + "_" + target.Params
+			}
 
-      designfile_flag = "-designfile " + rule.Path().WithSuffix("/" + design_file + ".bin").String()
-    }
+			designfile_flag = "-designfile " + rule.Path().WithSuffix("/"+design_file+".bin").String()
+		}
 
 		cmd := "vopt " + common_flags
 		cmd += " " + VoptFlags.Value()
@@ -567,7 +567,7 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 		cmd += " " + access_flag
 		cmd += " " + designfile_flag
 		cmd += libFlags(rule)
-    cmd += paramFlags(rule, target.Params)
+		cmd += paramFlags(rule, target.Params)
 
 		// Add any extra flags specified with the rule
 		if rule.ToolFlags != nil {
@@ -576,9 +576,9 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 			}
 		}
 
-    cmd += " -l " + target.LogFile.String()
-    cmd += " " + strings.Join(tops, " ")
-    cmd += " -o " + target.Name
+		cmd += " -l " + target.LogFile.String()
+		cmd += " " + strings.Join(tops, " ")
+		cmd += " -o " + target.Name
 
 		if rule.TestCaseGenerator != nil {
 			deps = append(deps, rule.TestCaseGenerator)
@@ -601,9 +601,9 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 func doFile(ctx core.Context, rule Simulation) {
 	// Do-file script
 	params := doFileParams{
-		DumpVcd: DumpVcd.Value(),
+		DumpVcd:     DumpVcd.Value(),
 		DumpVcdFile: rule.Path().WithSuffix("/waves.vcd.gz").String(),
-		CovFiles: strings.Join(rule.ReportCovFiles(), "+"),
+		CovFiles:    strings.Join(rule.ReportCovFiles(), "+"),
 	}
 
 	if rule.WaveformInit != nil {
@@ -662,7 +662,7 @@ func vsimCmd(rule Simulation, args []string, gui bool, testcase string, params s
 	plusargs_flag := ""
 
 	// Default database name for simulation
-  target := rule.Target(params, Coverage.Value())
+	target := rule.Target(params, Coverage.Value())
 
 	// Enable coverage in simulator
 	coverage_flag := ""
@@ -676,22 +676,22 @@ func vsimCmd(rule Simulation, args []string, gui bool, testcase string, params s
 	if DumpQwavedb.Value() {
 		qwavedb_flag = " -qwavedb="
 		switch DumpQwavedbScope.Value() {
-			case "signals":
-				qwavedb_flag += "+signal"
-			case "assertions":
-				qwavedb_flag += "+signal+assertions=pass,atv"
-			case "memory":
-				qwavedb_flag += "+signal+assertions=pass,atv+memory"
-			case "queues":
-				qwavedb_flag += "+signal+assertions=pass,atv+memory+queues"
-			case "all":
-				qwavedb_flag += "+signal+assertions=pass,atv+memory+queues+class+classmemory+classdynarray"
+		case "signals":
+			qwavedb_flag += "+signal"
+		case "assertions":
+			qwavedb_flag += "+signal+assertions=pass,atv"
+		case "memory":
+			qwavedb_flag += "+signal+assertions=pass,atv+memory"
+		case "queues":
+			qwavedb_flag += "+signal+assertions=pass,atv+memory+queues"
+		case "all":
+			qwavedb_flag += "+signal+assertions=pass,atv+memory+queues+class+classmemory+classdynarray"
 		}
-    qwavedb_file := "waves"
-    if params != "" {
-      qwavedb_file = qwavedb_file + "_" + params
-    }
-		qwavedb_flag += "+wavefile=" + rule.Path().WithSuffix("/" + qwavedb_file + ".db").String()
+		qwavedb_file := "waves"
+		if params != "" {
+			qwavedb_file = qwavedb_file + "_" + params
+		}
+		qwavedb_flag += "+wavefile=" + rule.Path().WithSuffix("/"+qwavedb_file+".db").String()
 	}
 
 	// Determine the names of the coverage databases, this one will hold merged
@@ -787,11 +787,11 @@ func vsimCmd(rule Simulation, args []string, gui bool, testcase string, params s
 	if gui {
 		do_flags = append(do_flags, "\"set gui 1\"")
 		if Designfile.Value() {
-      design_file := "design"
-      if params != "" {
-        design_file += "_" + params
-      }
-			mode_flag = " -visualizer=+designfile=" + rule.Path().WithSuffix("/" + design_file + ".bin").String()
+			design_file := "design"
+			if params != "" {
+				design_file += "_" + params
+			}
+			mode_flag = " -visualizer=+designfile=" + rule.Path().WithSuffix("/"+design_file+".bin").String()
 		} else {
 			mode_flag = " -gui"
 		}

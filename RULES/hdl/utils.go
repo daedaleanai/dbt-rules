@@ -4,7 +4,6 @@ import (
 	"strings"
 )
 
-
 func IsRtl(path string) bool {
 	return strings.HasSuffix(path, ".v") ||
 		strings.HasSuffix(path, ".sv") ||

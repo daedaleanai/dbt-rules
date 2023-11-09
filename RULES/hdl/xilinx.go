@@ -2,82 +2,82 @@ package hdl
 
 import (
 	"dbt-rules/RULES/core"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path"
 	"strings"
-  "encoding/json"
 )
 
 type XciValue struct {
-  Value string `json:"value"`
+	Value string `json:"value"`
 }
 
 type XciProjectParameters struct {
-  Architecture []XciValue `json:"ARCHITECTURE"`
-  BaseBoardPart []XciValue `json:"BASE_BOARD_PART"`
-  BoardConnections []XciValue `json:"BOARD_CONNECTIONS"`
-  Device []XciValue `json:"DEVICE"`
-  Package []XciValue `json:"PACKAGE"`
-  Prefhdl []XciValue `json:"PREFHDL"`
-  SiliconRevision []XciValue `json:"SILICON_REVISION"`
-  SimulatorLanguage []XciValue `json:"SIMULATOR_LANGUAGE"`
-  Speedgrade []XciValue `json:"SPEEDGRADE"`
-  StaticPower []XciValue `json:"STATIC_POWER"`
-  TemperatureGrade []XciValue `json:"TEMPERATURE_GRADE"`
-  UseRdiCustomization []XciValue `json:"USE_RDI_CUSTOMIZATION"`
-  UseRdiGeneration []XciValue `json:"USE_RDI_GENERATION"`
+	Architecture        []XciValue `json:"ARCHITECTURE"`
+	BaseBoardPart       []XciValue `json:"BASE_BOARD_PART"`
+	BoardConnections    []XciValue `json:"BOARD_CONNECTIONS"`
+	Device              []XciValue `json:"DEVICE"`
+	Package             []XciValue `json:"PACKAGE"`
+	Prefhdl             []XciValue `json:"PREFHDL"`
+	SiliconRevision     []XciValue `json:"SILICON_REVISION"`
+	SimulatorLanguage   []XciValue `json:"SIMULATOR_LANGUAGE"`
+	Speedgrade          []XciValue `json:"SPEEDGRADE"`
+	StaticPower         []XciValue `json:"STATIC_POWER"`
+	TemperatureGrade    []XciValue `json:"TEMPERATURE_GRADE"`
+	UseRdiCustomization []XciValue `json:"USE_RDI_CUSTOMIZATION"`
+	UseRdiGeneration    []XciValue `json:"USE_RDI_GENERATION"`
 }
 
 type XciParameters struct {
-  ComponentParameters map[string]interface{} `json:"component_parameters"`
-  ModelParameters map[string]interface{} `json:"model_parameters"`
-  ProjectParameters XciProjectParameters `json:"project_parameters"`
-  RuntimeParameters map[string]interface{} `json:"runtime_parameters"`
+	ComponentParameters map[string]interface{} `json:"component_parameters"`
+	ModelParameters     map[string]interface{} `json:"model_parameters"`
+	ProjectParameters   XciProjectParameters   `json:"project_parameters"`
+	RuntimeParameters   map[string]interface{} `json:"runtime_parameters"`
 }
 
 type XciIpInst struct {
-  XciName string `json:"xci_name"`
-  ComponentReference string `json:"component_reference"`
-  IpRevision string `json:"ip_revision"`
-  GenDirectory string `json:"gen_directory"`
-  Parameters XciParameters `json:"parameters"`
-  Boundary map[string]interface{} `json:"boundary"`
+	XciName            string                 `json:"xci_name"`
+	ComponentReference string                 `json:"component_reference"`
+	IpRevision         string                 `json:"ip_revision"`
+	GenDirectory       string                 `json:"gen_directory"`
+	Parameters         XciParameters          `json:"parameters"`
+	Boundary           map[string]interface{} `json:"boundary"`
 }
 
 type Xci struct {
-  Schema string `json:"schema"`
-  IpInst XciIpInst `json:"ip_inst"`
+	Schema string    `json:"schema"`
+	IpInst XciIpInst `json:"ip_inst"`
 }
 
 func ReadXci(path string) (Xci, error) {
-  var result Xci
+	var result Xci
 
-  xci_file, err := os.Open(path)
-  if err == nil {
-    // defer the closing of the file
-    defer xci_file.Close()
+	xci_file, err := os.Open(path)
+	if err == nil {
+		// defer the closing of the file
+		defer xci_file.Close()
 
-    bytes, _ := ioutil.ReadAll(xci_file)
+		bytes, _ := ioutil.ReadAll(xci_file)
 
-    err = json.Unmarshal([]byte(bytes), &result)
-  }
+		err = json.Unmarshal([]byte(bytes), &result)
+	}
 
-  return result, err
+	return result, err
 }
 
 type templateParams struct {
 	Sources   []core.Path
-  Simulator string
-  Top       string
-  Part      string
-  Board     string
+	Simulator string
+	Top       string
+	Part      string
+	Board     string
 	Dir       string
 	LibDir    string
-  Defines   []string
-  Options   []string
+	Defines   []string
+	Options   []string
 }
 
 const export_ip_template = `
@@ -186,128 +186,128 @@ foreach f [get_files -of [get_filesets utils_1]] {
 `
 
 func ExportXilinxIpCheckpoint(ctx core.Context, rule Simulation, src core.Path, def DefineMap, flags FlagMap) core.Path {
-  xci, err := ReadXci(src.String())
-  if err != nil {
-    log.Fatal(fmt.Sprintf("unable to read XCI file %s", src.Relative()))
-  }
+	xci, err := ReadXci(src.String())
+	if err != nil {
+		log.Fatal(fmt.Sprintf("unable to read XCI file %s", src.Relative()))
+	}
 
-  if SimulatorLibDir.Value() == "" {
-    log.Fatal("hdl-simulator-lib-dir must be set when compiling XCI files!")
-  }
+	if SimulatorLibDir.Value() == "" {
+		log.Fatal("hdl-simulator-lib-dir must be set when compiling XCI files!")
+	}
 
-  part := xci.IpInst.Parameters.ProjectParameters.Device[0].Value + "-" +
-          xci.IpInst.Parameters.ProjectParameters.Package[0].Value +
-          xci.IpInst.Parameters.ProjectParameters.Speedgrade[0].Value
+	part := xci.IpInst.Parameters.ProjectParameters.Device[0].Value + "-" +
+		xci.IpInst.Parameters.ProjectParameters.Package[0].Value +
+		xci.IpInst.Parameters.ProjectParameters.Speedgrade[0].Value
 
-  if xci.IpInst.Parameters.ProjectParameters.TemperatureGrade[0].Value != "" {
-    part = part + "-" + xci.IpInst.Parameters.ProjectParameters.TemperatureGrade[0].Value
-  }
+	if xci.IpInst.Parameters.ProjectParameters.TemperatureGrade[0].Value != "" {
+		part = part + "-" + xci.IpInst.Parameters.ProjectParameters.TemperatureGrade[0].Value
+	}
 
-  defines := []string{"SIMULATION"}
-  for key, value := range def {
-    if value != "" {
-      defines = append(defines, fmt.Sprintf("%s=%s", key, value))
-    } else {
-      defines = append(defines, key)
-    }
-  }
+	defines := []string{"SIMULATION"}
+	for key, value := range def {
+		if value != "" {
+			defines = append(defines, fmt.Sprintf("%s=%s", key, value))
+		} else {
+			defines = append(defines, key)
+		}
+	}
 
-  options := []string{}
-  for tool, option := range flags {
-    options = append(options, fmt.Sprintf("%s:%s", tool, option))
-  }
+	options := []string{}
+	for tool, option := range flags {
+		options = append(options, fmt.Sprintf("%s:%s", tool, option))
+	}
 
-  // Determine name of .do file
+	// Determine name of .do file
 	oldExt := path.Ext(src.Relative())
 	newRel := strings.TrimSuffix(src.Relative(), oldExt)
-  dir := core.BuildPath(path.Dir(src.Relative()))
-  do := core.BuildPath(newRel).WithSuffix(fmt.Sprintf("/%s/compile.do", Simulator.Value()))
+	dir := core.BuildPath(path.Dir(src.Relative()))
+	do := core.BuildPath(newRel).WithSuffix(fmt.Sprintf("/%s/compile.do", Simulator.Value()))
 
 	// Template parameters are the direct and parent script sources.
 	data := templateParams{
 		Sources:   []core.Path{src},
 		Dir:       dir.Absolute(),
-    Part:      strings.ToLower(part),
-    Simulator: Simulator.Value(),
+		Part:      strings.ToLower(part),
+		Simulator: Simulator.Value(),
 		LibDir:    SimulatorLibDir.Value(),
-    Defines:   defines,
-    Options:   options,
+		Defines:   defines,
+		Options:   options,
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
 		Out:    do,
 		In:     src,
-		Script: core.CompileTemplate(vivado_command + create_project_template + export_ip_template, "export_ip", data),
-    Descr:  fmt.Sprintf("export: %s", src.Relative()),
+		Script: core.CompileTemplate(vivado_command+create_project_template+export_ip_template, "export_ip", data),
+		Descr:  fmt.Sprintf("export: %s", src.Relative()),
 	})
 
-  return do
+	return do
 }
 
 type BlockDesign struct {
-  Library
-  Top       string
-  Part      string
-  Board     string
+	Library
+	Top   string
+	Part  string
+	Board string
 }
 
 func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags FlagMap) core.Path {
-  // Get all Verilog sources files
-  sources := rule.FilterSources(".tcl")
-  sources = append(sources, rule.FilterSources(".v")...)
+	// Get all Verilog sources files
+	sources := rule.FilterSources(".tcl")
+	sources = append(sources, rule.FilterSources(".v")...)
 
-  // Select a suitable part
-  part := PartName.Value()
-  if rule.Part != "" {
-    part = rule.Part
-  }
+	// Select a suitable part
+	part := PartName.Value()
+	if rule.Part != "" {
+		part = rule.Part
+	}
 
-  board := BoardName.Value()
-  if rule.Board != "" {
-    board = rule.Board
-  }
+	board := BoardName.Value()
+	if rule.Board != "" {
+		board = rule.Board
+	}
 
-  defines := []string{"SIMULATION"}
-  for key, value := range def {
-    if value != "" {
-      defines = append(defines, fmt.Sprintf("%s=%s", key, value))
-    } else {
-      defines = append(defines, key)
-    }
-  }
+	defines := []string{"SIMULATION"}
+	for key, value := range def {
+		if value != "" {
+			defines = append(defines, fmt.Sprintf("%s=%s", key, value))
+		} else {
+			defines = append(defines, key)
+		}
+	}
 
-  options := []string{}
-  for tool, option := range flags {
-    options = append(options, fmt.Sprintf("%s:%s", tool, option))
-  }
+	options := []string{}
+	for tool, option := range flags {
+		options = append(options, fmt.Sprintf("%s:%s", tool, option))
+	}
 
 	// Template parameters are the direct and parent script sources.
 	data := templateParams{
 		Sources:   sources,
 		Dir:       ctx.Cwd().Absolute(),
-    Top:       rule.Top,
-    Part:      strings.ToLower(part),
-    Board:     strings.ToLower(board),
-    Simulator: Simulator.Value(),
+		Top:       rule.Top,
+		Part:      strings.ToLower(part),
+		Board:     strings.ToLower(board),
+		Simulator: Simulator.Value(),
 		LibDir:    SimulatorLibDir.Value(),
-    Defines:   defines,
-    Options:   options,
+		Defines:   defines,
+		Options:   options,
 	}
 
-  do := ctx.Cwd().WithSuffix(fmt.Sprintf("/%s/compile.do", Simulator.Value()))
+	do := ctx.Cwd().WithSuffix(fmt.Sprintf("/%s/compile.do", Simulator.Value()))
 
-  ctx.AddBuildStep(core.BuildStep{
-    Ins:   sources,
-    Out:   do,
-    Script: core.CompileTemplate(
-      vivado_command +
-      create_project_template +
-      add_files_template +
-      source_utils +
-      rule.Top +
-      export_simulation_template, "export_bd", data),
-    Descr: fmt.Sprintf("export: %s", rule.Top),
-  })
+	ctx.AddBuildStep(core.BuildStep{
+		Ins: sources,
+		Out: do,
+		Script: core.CompileTemplate(
+			vivado_command+
+				create_project_template+
+				add_files_template+
+				source_utils+
+				rule.Top+
+				export_simulation_template, "export_bd", data),
+		Descr: fmt.Sprintf("export: %s", rule.Top),
+	})
 
-  return do
+	return do
 }

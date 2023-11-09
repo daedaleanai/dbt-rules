@@ -2,7 +2,7 @@ package hdl
 
 import (
 	"dbt-rules/RULES/core"
-  "strings"
+	"strings"
 )
 
 var BoardName = core.StringFlag{
@@ -56,12 +56,12 @@ func (lib Library) Flags() FlagMap {
 
 // Get all sources from a target, including listed IPs.
 func (lib Library) AllSources() []core.Path {
-  return lib.FilterSources("")
+	return lib.FilterSources("")
 }
 
 // Get all sources from a target that match a filter pattern, including listed IPs.
 func (lib Library) FilterSources(suffix string) []core.Path {
-  _, sources := lib.filterSources(map[string]bool{}, []core.Path{}, suffix)
+	_, sources := lib.filterSources(map[string]bool{}, []core.Path{}, suffix)
 	return sources
 }
 
@@ -75,14 +75,13 @@ func (lib Library) filterSources(seen map[string]bool, sources []core.Path, suff
 
 	// Add sources
 	for _, source := range lib.Sources() {
-    if suffix != "" && strings.HasSuffix(source.String(), suffix) {
-      if _, ok := seen[source.String()]; !ok {
-        seen[source.String()] = true
-        sources = append(sources, source)
-      }
-    }
+		if suffix != "" && strings.HasSuffix(source.String(), suffix) {
+			if _, ok := seen[source.String()]; !ok {
+				seen[source.String()] = true
+				sources = append(sources, source)
+			}
+		}
 	}
 
 	return seen, sources
 }
-

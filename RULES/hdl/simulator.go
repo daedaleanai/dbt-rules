@@ -8,8 +8,8 @@ import (
 	"log"
 	"os"
 	"path"
-	"regexp"
 	"reflect"
+	"regexp"
 	"strings"
 )
 
@@ -99,21 +99,21 @@ func (rule Simulation) Path() core.Path {
 
 // Target returns the optimization target name defined for this rule.
 func (rule Simulation) Target(params string, coverage bool) string {
-  target := strings.Replace(rule.Name, "-", "_", -1)
-  if params != "" {
-    if rule.Params != nil {
-      if _, ok := rule.Params[params]; !ok {
-        log.Fatal(fmt.Sprintf("parameter set %s not defined!", params))
-      }
-    } else {
-      log.Fatal(fmt.Sprintf("parameter set %s requested, but no parameters sets are defined!", params))
-    }
-    target += "_" + params
-  }
+	target := strings.Replace(rule.Name, "-", "_", -1)
+	if params != "" {
+		if rule.Params != nil {
+			if _, ok := rule.Params[params]; !ok {
+				log.Fatal(fmt.Sprintf("parameter set %s not defined!", params))
+			}
+		} else {
+			log.Fatal(fmt.Sprintf("parameter set %s requested, but no parameters sets are defined!", params))
+		}
+		target += "_" + params
+	}
 	if coverage {
 		target += "_cover"
-  }
-  return target
+	}
+	return target
 }
 
 func (rule Simulation) Build(ctx core.Context) {
@@ -314,7 +314,7 @@ func copySrcsBinaries(ctx core.Context, srcs []core.Path) {
 		if strings.HasSuffix(src.String(), ".hex") || strings.HasSuffix(src.String(), ".dat") {
 			copyMemory := core.CopyFile{
 				From: src,
-				To: core.BuildPath("/"),
+				To:   core.BuildPath("/"),
 			}
 			copyMemory.Build(ctx)
 		}
