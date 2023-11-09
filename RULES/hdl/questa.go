@@ -450,7 +450,11 @@ func compileIp(ctx core.Context, rule Simulation, ip Ip,
 
 	// Merge tool options
 	for tool, flag := range ip.Flags() {
-		flags[tool] = flag
+    if val, ok := flags[tool]; !ok {
+      flags[tool] = flag
+    } else {
+      flags[tool] = val + " " + flag
+    }
 	}
 	deps, incs = compileSrcs(ctx, rule, deps, incs, ip.Sources(), flags)
 
@@ -536,13 +540,15 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 
 	// Generate access flag
 	access_flag := ""
-	if Access.Value() == "debug" {
+  switch Access.Value() {
+  case "debug":
 		access_flag = "-debug"
-	} else if Access.Value() == "livesim" {
+  case "livesim":
 		access_flag = "-debug,livesim"
-	} else if Access.Value() == "acc" {
+  case "acc":
 		access_flag = "+acc"
-	} else if Access.Value() != "" {
+  case "":
+  default:
 		access_flag = fmt.Sprintf("+acc=%s", Access.Value())
 	}
 
