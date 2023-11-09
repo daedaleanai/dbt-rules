@@ -83,6 +83,14 @@ type templateParams struct {
 const export_ip_template = `
 {{- range .Sources }}
 {{- if or (hasSuffix .String ".xci") }}
+set name [file tail {{ .String }}]
+foreach xci [exec find .srcs -name "*.xci"] {
+  if {[file tail $xci] == $name} {
+    puts "Removing existing IP in $xci"
+    file delete -force $xci
+    break
+  }
+}
 puts "Reading IP from {{ .String }}"
 import_ip {{ .String }}
 {{- end }}
@@ -98,9 +106,13 @@ foreach ip [get_ips] {
 `
 
 const vivado_command = `#!/bin/env -S vivado -nojournal -nolog -mode batch -source`
-//const vivado_command = `#!/bin/env -S vivado -nojournal -nolog -source`
 
 const create_project_template = `
+{{- if .Dir }}
+if [file exists {{ .Dir }}] {
+  file delete -force -- {{ .Dir }}
+}
+{{- end }}
 create_project -in_memory -part {{ .Part }}
 set_property target_language verilog [current_project]
 set_property source_mgmt_mode All [current_project]
