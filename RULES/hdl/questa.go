@@ -129,10 +129,12 @@ func libFlags(rule Simulation) string {
 
 	// get defaults
 	for _, lib := range append(strings.Split(SimulatorLibSearch.Value(), " "), rule.Libs...) {
-		if _, ok := lib_map[lib]; !ok {
-			lib_map[lib] = true
-			flags += " -L " + lib
-		}
+    if lib != "" {
+      if _, ok := lib_map[lib]; !ok {
+        lib_map[lib] = true
+        flags += " -L " + lib
+      }
+    }
 	}
 
 	return flags
@@ -296,7 +298,7 @@ func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []co
 	}
 
 	if SimulatorLibDir.Value() != "" {
-		cmds = append(cmds, fmt.Sprintf("for lib in $$(find %s -mindepth 1 -maxdepth 1 -type d); do vmap $$(basename $$lib) $$lib; done", SimulatorLibDir.Value()))
+		cmds = append(cmds, fmt.Sprintf("if [ -d \"%s\" ]; then for lib in $$(find %s -mindepth 1 -maxdepth 1 -type d); do vmap $$(basename $$lib) $$lib; done; fi", SimulatorLibDir.Value(), SimulatorLibDir.Value()))
 	}
 
 	ctx.AddBuildStep(core.BuildStep{

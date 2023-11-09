@@ -34,7 +34,7 @@ var SimulatorLibSearch = core.StringFlag{
 	Name:        "hdl-simulator-lib-search",
 	Description: "Default HDL simulator libraries to search",
 	DefaultFn: func() string {
-		return "unisims_ver unifast_ver unimacro_ver simprims_ver secureip xpm xil_defaultlib"
+		return "xil_defaultlib"
 	},
 }.Register()
 
