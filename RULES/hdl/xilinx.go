@@ -105,7 +105,7 @@ create_project -in_memory -part {{ .Part }}
 set_property target_language verilog [current_project]
 set_property source_mgmt_mode All [current_project]
 {{- if .Board }}
-set_property board_part {{ .Board }} [current_project]
+catch {set_property board_part {{ .Board }} [current_project]}
 {{- end }}
 `
 
@@ -299,4 +299,3 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags 
 
   return do
 }
-

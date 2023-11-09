@@ -8,7 +8,7 @@ import (
 var BoardName = core.StringFlag{
 	Name: "board",
 	DefaultFn: func() string {
-		return "em.avnet.com:ultra96v2:part0:1.0"
+		return ""
 	},
 }.Register()
 
