@@ -129,12 +129,12 @@ func libFlags(rule Simulation) string {
 
 	// get defaults
 	for _, lib := range append(strings.Split(SimulatorLibSearch.Value(), " "), rule.Libs...) {
-    if lib != "" {
-      if _, ok := lib_map[lib]; !ok {
-        lib_map[lib] = true
-        flags += " -L " + lib
-      }
-    }
+		if lib != "" {
+			if _, ok := lib_map[lib]; !ok {
+				lib_map[lib] = true
+				flags += " -L " + lib
+			}
+		}
 	}
 
 	return flags
@@ -220,7 +220,7 @@ set NumericStdNoWarnings 1
 
 {{ if .WaveformInit }}
 if [info exists gui] {
-  run 1
+	run 1
 	catch { source {{ .WaveformInit }} }
 	assertion fail -action break
 }
@@ -298,7 +298,9 @@ func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []co
 	}
 
 	if SimulatorLibDir.Value() != "" {
-		cmds = append(cmds, fmt.Sprintf("if [ -d \"%s\" ]; then for lib in $$(find %s -mindepth 1 -maxdepth 1 -type d); do vmap $$(basename $$lib) $$lib; done; fi", SimulatorLibDir.Value(), SimulatorLibDir.Value()))
+		cmds = append(cmds, fmt.Sprintf(
+			"if [ -d \"%s\" ]; then for lib in $$(find %s -mindepth 1 -maxdepth 1 -type d); do vmap $$(basename $$lib) $$lib; done; fi",
+			SimulatorLibDir.Value(), SimulatorLibDir.Value()))
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
@@ -417,7 +419,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 
 // compileBlockDesign exports and compiles a BlockDesign
 func compileBlockDesign(ctx core.Context, rule Simulation, ip BlockDesign, deps []core.Path, flags FlagMap) []core.Path {
-	log := ctx.Cwd().WithSuffix("/" + ip.Top + ".log")
+	log := ctx.Cwd().WithSuffix("/" + ip.Name + ".log")
 
 	if !rules[log.String()] {
 		// Merge options
@@ -444,18 +446,26 @@ func compileBlockDesign(ctx core.Context, rule Simulation, ip BlockDesign, deps 
 func compileIp(ctx core.Context, rule Simulation, ip Ip,
 	deps []core.Path, incs []core.Path, flags FlagMap) ([]core.Path, []core.Path) {
 
+	// Merge tool options
+	for tool, flag := range ip.Flags() {
+		if val, ok := flags[tool]; !ok {
+			flags[tool] = flag
+		} else {
+			flags[tool] = val + " " + flag
+		}
+	}
+
+	// Update board and part
+	if v, ok := ip.(Fpga); ok {
+		flags["part"] = v.Part
+		flags["board"] = v.Board
+	}
+
+	// Compile Ips
 	for _, sub_ip := range ip.Ips() {
 		deps, incs = compileIp(ctx, rule, sub_ip, deps, incs, flags)
 	}
-
-	// Merge tool options
-	for tool, flag := range ip.Flags() {
-    if val, ok := flags[tool]; !ok {
-      flags[tool] = flag
-    } else {
-      flags[tool] = val + " " + flag
-    }
-	}
+	// and local sources
 	deps, incs = compileSrcs(ctx, rule, deps, incs, ip.Sources(), flags)
 
 	if v, ok := ip.(BlockDesign); ok {
@@ -540,15 +550,15 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 
 	// Generate access flag
 	access_flag := ""
-  switch Access.Value() {
-  case "debug":
+	switch Access.Value() {
+	case "debug":
 		access_flag = "-debug"
-  case "livesim":
+	case "livesim":
 		access_flag = "-debug,livesim"
-  case "acc":
+	case "acc":
 		access_flag = "+acc"
-  case "":
-  default:
+	case "":
+	default:
 		access_flag = fmt.Sprintf("+acc=%s", Access.Value())
 	}
 

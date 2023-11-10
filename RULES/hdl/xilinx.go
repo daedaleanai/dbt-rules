@@ -68,10 +68,11 @@ func ReadXci(path string) (Xci, error) {
 	return result, err
 }
 
-type templateParams struct {
+type exportTemplateParams struct {
 	Sources   []core.Path
 	Simulator string
-	Top       string
+	Name      string
+	Args      []string
 	Part      string
 	Board     string
 	Dir       string
@@ -102,7 +103,7 @@ foreach ip [get_ips] {
   upgrade_ip $ip
   puts "Generating IP"
   generate_target simulation $ip
-	puts "Exporting IP to {{ .Dir }}"
+  puts "Exporting IP to {{ .Dir }}"
   export_simulation -simulator {{ .Simulator }} -quiet -force -absolute_path -use_ip_compiled_libs -lib_map_path {{ .LibDir }} -of_objects $ip -step compile -directory {{ .Dir }}
 }
 `
@@ -123,7 +124,7 @@ catch {set_property board_part {{ .Board }} [current_project]}
 {{- end }}
 `
 
-const add_files_template = `
+const export_add_files_template = `
 {{- /* add HDL source files */}}
 catch {
   add_files -norecurse {
@@ -144,7 +145,7 @@ catch {
 {{- range .Sources }}
 {{- if hasSuffix .String ".tcl"}}
     {{ . }}
-	{{- end }}
+  {{- end }}
 {{- end }}
   }
 }
@@ -153,7 +154,7 @@ update_compile_order -fileset sources_1
 `
 
 const export_simulation_template = `
-  set_property top {{ .Top }} [current_fileset -simset]
+  set_property top {{ .Name }} [current_fileset -simset]
   export_simulation -simulator {{ .Simulator }}\
     -force -absolute_path\
     -use_ip_compiled_libs\
@@ -226,7 +227,7 @@ func ExportXilinxIpCheckpoint(ctx core.Context, rule Simulation, src core.Path, 
 	do := core.BuildPath(newRel).WithSuffix(fmt.Sprintf("/%s/compile.do", Simulator.Value()))
 
 	// Template parameters are the direct and parent script sources.
-	data := templateParams{
+	data := exportTemplateParams{
 		Sources:   []core.Path{src},
 		Dir:       dir.Absolute(),
 		Part:      strings.ToLower(part),
@@ -248,9 +249,8 @@ func ExportXilinxIpCheckpoint(ctx core.Context, rule Simulation, src core.Path, 
 
 type BlockDesign struct {
 	Library
-	Top   string
-	Part  string
-	Board string
+	Name string
+	Args []string
 }
 
 func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags FlagMap) core.Path {
@@ -260,13 +260,13 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags 
 
 	// Select a suitable part
 	part := PartName.Value()
-	if rule.Part != "" {
-		part = rule.Part
+	if val, ok := flags["part"]; ok {
+		part = val
 	}
 
 	board := BoardName.Value()
-	if rule.Board != "" {
-		board = rule.Board
+	if val, ok := flags["board"]; ok {
+		board = val
 	}
 
 	defines := []string{"SIMULATION"}
@@ -284,10 +284,10 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags 
 	}
 
 	// Template parameters are the direct and parent script sources.
-	data := templateParams{
+	data := exportTemplateParams{
 		Sources:   sources,
 		Dir:       ctx.Cwd().Absolute(),
-		Top:       rule.Top,
+		Name:      rule.Name,
 		Part:      strings.ToLower(part),
 		Board:     strings.ToLower(board),
 		Simulator: Simulator.Value(),
@@ -304,12 +304,257 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags 
 		Script: core.CompileTemplate(
 			vivado_command+
 				create_project_template+
-				add_files_template+
+				export_add_files_template+
 				source_utils+
-				rule.Top+
+				rule.Name+
+				" "+strings.Join(rule.Args, " ")+
 				export_simulation_template, "export_bd", data),
-		Descr: fmt.Sprintf("export: %s", rule.Top),
+		Descr: fmt.Sprintf("export: %s", rule.Name),
 	})
 
 	return do
+}
+
+type implementationTemplateParams struct {
+	Top          string
+  Gui          bool
+	Sources      []core.Path
+	IncDirs      []core.Path
+	BlockDesigns []BlockDesign
+	Step         string
+	Part         string
+	Board        string
+	Dir          core.Path
+	Params       map[string]string
+	Defines      map[string]string
+	Properties   map[string]map[string]string
+}
+
+const implementation_project_template = `#!/bin/env -S vivado -mode {{ if .Gui }}gui{{ else }}batch{{ end }} -nojournal -log {{ .Dir.String }}/{{ .Top }}.log -source
+create_project -force -part {{ .Part }} {{ .Top }} {{ .Dir.String }}
+set_property target_language verilog [current_project]
+set_property source_mgmt_mode All [current_project]
+{{- if .Board }}
+catch {
+  set_property board_part {{ .Board }} [current_project]
+  reset_property board_connections [current_project]
+}
+{{- end }}
+
+# Create 'sources_1' fileset (if not found)
+if {[string equal [get_filesets -quiet sources_1] ""]} {
+  create_fileset -srcset sources_1
+}
+
+# Configure include directories
+set_property include_dirs {\
+{{- range .IncDirs }}
+  {{ . }} \
+{{- end }}
+} [get_filesets sources_1]
+
+# and Verilog defines
+set_property verilog_define {\
+{{- range $key, $value := .Defines }}
+  "{{ $key }}{{ if $value }}={{ $value }}{{ end }}"\
+{{- end }}
+} [get_filesets sources_1]
+
+# and parameters
+set_property generic {\
+{{- range $key, $value := .Params }}
+  "{{ $key }}={{ $value }}"\
+{{- end }}
+} [get_filesets sources_1]
+
+# Add all HDL source files
+add_files -norecurse {
+{{- range .Sources }}
+  {{- if or (hasSuffix .String ".vhd") (hasSuffix .String ".vhdl") (hasSuffix .String ".v") (hasSuffix .String ".vh") (hasSuffix .String ".sv") (hasSuffix .String ".svh") }}
+  {{ . }}
+  {{- end }}
+{{- end }}
+}
+
+# Add all IP source files
+catch {
+  import_ip {
+{{- range .Sources }}
+  {{- if hasSuffix .String ".xci"}}
+    {{ . }}
+  {{- end }}
+{{- end }}
+  }
+}
+
+# Add data files for simulation
+if {[string equal [get_filesets -quiet sim_1] ""]} {
+  create_fileset -simset sim_1
+}
+catch {
+  add_files -fileset sim_1 {
+{{- range .Sources }}
+  {{- if or (hasSuffix .String ".dat") (hasSuffix .String ".hex") }}
+    {{ . }}
+  {{- end }}
+{{- end }}
+  }
+}
+
+# Add constraint files
+if {[string equal [get_filesets -quiet constrs_1] ""]} {
+  create_fileset -constrset constrs_1
+}
+catch {
+  add_files -fileset constrs_1 {
+{{- range .Sources }}
+  {{- if hasSuffix .String ".xdc"}}
+    {{ . }}
+  {{- end }}
+{{- end }}
+  }
+}
+
+# Add utilities
+if {[string equal [get_filesets -quiet utils_1] ""]} {
+  create_fileset -constrset utils_1
+}
+catch {
+  add_files -fileset utils_1 {
+{{- range .Sources }}
+  {{- if hasSuffix .String ".tcl"}}
+    {{ . }}
+  {{- end }}
+{{- end }}
+  }
+}
+
+# Source all utility files
+foreach f [get_files -of [get_filesets utils_1]] {
+  if {[string match *_pre_*.tcl $f] || [string match *_post_*.tcl $f]} {
+    continue
+  } else {
+    puts "INFO: Sourcing utility file $f"
+    source $f
+  }
+}
+
+# Create block designs
+{{- range .BlockDesigns }}
+{{ .Name }}{{ range .Args }} {{ . }}{{ end }}
+{{- end }}
+
+set_property top {{ .Top }} [current_fileset]
+if {[get_property top [current_fileset]] != "{{ .Top }}"} {
+  puts "ERROR: Unable to set top to {{ .Top }}!"
+  exit 1
+}
+puts "INFO: Project [current_project] created"
+
+# Unlock IPs
+foreach ip [get_ips *] {
+  puts "INFO: Upgrading IP ${ip}"
+  upgrade_ip $ip
+}
+
+# Properties
+{{- range $run, $props := .Properties }}
+  {{- range $name, $value := $props }}
+set_property {{ $name }} "{{ $value }}" [get_runs {{ $run }}]
+  {{- end }}
+{{- end }}
+
+# Configure scripts
+foreach f [get_files -of [get_filesets utils_1]] {
+  if [regexp -nocase {.*_(pre|post)_(\w+).tcl} $f total pre_or_post step] {
+    if {$step == "synthesis"} {
+      set property "synth_design"
+      set run "synth_*"
+    } else {
+      set property $step
+      set run "impl_*"
+    }
+
+    puts "INFO: Configuring ${pre_or_post}-$step script $f"
+    set_property steps.$property.tcl.$pre_or_post $f [get_runs $run]
+  }
+}
+
+{{- if eq .Step "project" }}
+exit 0
+{{- end }}
+
+puts "INFO: Running synthesis"
+reset_run synth_1
+launch_runs synth_1
+wait_on_run synth_1
+puts "INFO: Synthesis done"
+
+puts "INFO: Timing summary after synthesis"
+open_run synth_1
+report_timing_summary
+
+{{- if eq .Step "synthesis" }}
+exit 0
+{{- end }}
+
+puts "INFO: Running implementation"
+launch_runs impl_1 -to_step {{ .Step }}
+wait_on_run impl_1
+puts "INFO: Implementation done"
+
+puts "INFO: Timing summary after implementation to {{ .Step }}"
+open_run impl_1
+report_timing_summary
+`
+
+// Get all BlockDesigns of an Ip
+func allBds(ip Ip) []BlockDesign {
+	bds := []BlockDesign{}
+
+	if bd, ok := ip.(BlockDesign); ok {
+		bds = append(bds, bd)
+	}
+
+	for _, ipDep := range ip.Ips() {
+		bds = append(bds, allBds(ipDep)...)
+	}
+
+	return bds
+}
+
+func BuildVivado(ctx core.Context, rule Fpga) {
+	sources := rule.AllSources()
+	dir := core.BuildPath("/" + rule.Top)
+	project := dir.WithSuffix("/" + rule.Top + ".xpr")
+	step := ImplementationStep.Value()
+	switch step {
+	case "placement":
+		step = "place_design"
+	case "routing":
+		step = "route_design"
+	case "bitstream":
+		step = "write_bitstream"
+	}
+
+	data := implementationTemplateParams{
+		Top:          rule.Top,
+    Gui:          ImplementationGui.Value(),
+		Sources:      sources,
+		IncDirs:      rule.AllIncDirs(),
+		BlockDesigns: allBds(rule),
+		Part:         rule.Part,
+		Board:        rule.Board,
+		Dir:          dir,
+		Params:       rule.Params,
+		Defines:      rule.Defines,
+		Step:         step,
+	}
+
+	ctx.AddBuildStep(core.BuildStep{
+		Ins:    sources,
+		Out:    project,
+		Script: core.CompileTemplate(implementation_project_template, "implementation", data),
+		Descr:  fmt.Sprintf("vivado: %s", rule.Top),
+	})
 }
