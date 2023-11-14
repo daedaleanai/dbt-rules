@@ -10,6 +10,7 @@ import (
 	"path"
 	"reflect"
 	"regexp"
+  "sort"
 	"strings"
 )
 
@@ -95,6 +96,18 @@ func (rule Simulation) Lib() string {
 // Path returns the default root path for log files defined for this rule.
 func (rule Simulation) Path() core.Path {
 	return core.BuildPath("/" + rule.Name)
+}
+
+func (rule Simulation) SortedParamSet(paramset string) []string {
+  params := rule.Params[paramset]
+  keys := make([]string, len(params))
+  i := 0
+  for k := range params {
+    keys[i] = k
+    i++
+  }
+  sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+  return keys
 }
 
 // Target returns the optimization target name defined for this rule.

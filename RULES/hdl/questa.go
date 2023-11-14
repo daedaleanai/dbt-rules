@@ -113,7 +113,8 @@ func paramFlags(rule Simulation, params string) string {
 			log.Fatal(fmt.Sprintf("parameter set %s requested, but no parameters sets are defined!", params))
 		}
 		// Add parameters for all generics into a single string
-		for name, value := range rule.Params[params] {
+    for _, name := range rule.SortedParamSet(params) {
+      value := rule.Params[params][name]
 			cmd += fmt.Sprintf(" -g %s=%s", name, value)
 		}
 	}
@@ -152,6 +153,23 @@ func incDirFlags(incs []core.Path) string {
 		}
 	}
 	return cmd
+}
+
+func removeDuplicateFiles(deps []core.Path) []core.Path {
+	// Remove duplicates
+	set := make(map[string]core.Path)
+	for _, dep := range deps {
+		set[dep.String()] = dep
+	}
+
+	// Convert back to string list
+	paths := make([]core.Path, len(set))
+  i := 0
+	for _, value := range set {
+		paths[i] = value
+    i++
+	}
+  return paths
 }
 
 // verbosityLevelToFlag takes a verbosity level of none, low, medium, high or all and
@@ -314,6 +332,7 @@ func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []co
 	return deps
 }
 
+// Create a command for running vlog on a file; the file is not part of the returned command
 func vlogCmd(ctx core.Context, rule Simulation, incs []core.Path, flags FlagMap) string {
 	cmd := "vlog " + common_flags
 	cmd += libFlags(rule)
@@ -327,16 +346,17 @@ func vlogCmd(ctx core.Context, rule Simulation, incs []core.Path, flags FlagMap)
 	}
 
 	cmd += "  -define SIMULATION"
-	for key, value := range rule.Defines {
+	for _, key := range sortedStringKeys(rule.Defines) {
 		cmd += " -define " + key
-		if value != "" {
-			cmd += fmt.Sprintf("=%s", value)
+		if rule.Defines[key] != "" {
+			cmd += fmt.Sprintf("=%s", rule.Defines[key])
 		}
 	}
 
 	return cmd
 }
 
+// Create a command for running vcom on a file; the file is not part of the returned command
 func vcomCmd(ctx core.Context, rule Simulation, flags FlagMap) string {
 	cmd := "vcom " + common_flags
 
@@ -431,7 +451,7 @@ func compileBlockDesign(ctx core.Context, rule Simulation, ip BlockDesign, deps 
 		ctx.AddBuildStep(core.BuildStep{
 			Out:   log,
 			In:    do,
-			Cmd:   fmt.Sprintf("vsim -batch -do %s -do exit -logfile %s", do.Relative(), log.Relative()),
+			Cmd:   fmt.Sprintf("vsim -batch -do \"set t [exec date -R -r modelsim.ini]\" -do %s -do \"exec touch -d ${t} modelsim.ini\" -do exit -logfile %s", do.Relative(), log.Relative()),
 			Descr: fmt.Sprintf("vsim: %s", do.Absolute()),
 		})
 
@@ -479,11 +499,14 @@ func compileIp(ctx core.Context, rule Simulation, ip Ip,
 func compile(ctx core.Context, rule Simulation) []core.Path {
 	incs := []core.Path{}
 	deps := []core.Path{}
+
+  // Collect aditional tool flags from rule
 	flags := FlagMap{}
 	if rule.ToolFlags != nil {
 		flags = rule.ToolFlags
 	}
 
+  // Collect remaining tool flags for the vlog and vcom tools
 	if val, ok := flags["vlog"]; !ok {
 		flags["vlog"] = VlogFlags.Value()
 	} else {

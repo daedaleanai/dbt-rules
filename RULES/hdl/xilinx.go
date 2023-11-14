@@ -109,6 +109,7 @@ foreach ip [get_ips] {
 `
 
 const vivado_command = `#!/bin/env -S vivado -nojournal -nolog -mode batch -source`
+//const vivado_command = `#!/bin/env -S vivado -nojournal -nolog -mode gui -source`
 
 const create_project_template = `
 {{- if .Dir }}
@@ -270,7 +271,10 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags 
 	}
 
 	defines := []string{"SIMULATION"}
-	for key, value := range def {
+	for _, key := range sortedStringKeys(def) {
+    // Iterate over the defines map in sorted order to make sure we don't change the script
+    // unnecessarily and add a suitable command for each define
+    value := def[key]
 		if value != "" {
 			defines = append(defines, fmt.Sprintf("%s=%s", key, value))
 		} else {
@@ -279,7 +283,10 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags 
 	}
 
 	options := []string{}
-	for tool, option := range flags {
+	for _, tool := range sortedStringKeys(flags) {
+    // Iterate over the tool flags in sorted fashion and create a suitable
+    // command accordingly
+    option := flags[tool]
 		options = append(options, fmt.Sprintf("%s:%s", tool, option))
 	}
 
@@ -481,7 +488,11 @@ foreach f [get_files -of [get_filesets utils_1]] {
 }
 
 {{- if eq .Step "project" }}
+{{- if .Gui }}
+break
+{{- else }}
 exit 0
+{{- end }}
 {{- end }}
 
 puts "INFO: Running synthesis"
@@ -495,7 +506,11 @@ open_run synth_1
 report_timing_summary
 
 {{- if eq .Step "synthesis" }}
+{{- if .Gui }}
+break
+{{- else }}
 exit 0
+{{- end }}
 {{- end }}
 
 puts "INFO: Running implementation"
