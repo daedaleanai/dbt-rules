@@ -8,8 +8,9 @@ import (
 	"log"
 	"os"
 	"path"
-	"regexp"
 	"reflect"
+	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -26,7 +27,15 @@ var SimulatorLibDir = core.StringFlag{
 	Name:        "hdl-simulator-lib-dir",
 	Description: "Path to the HDL simulator libraries",
 	DefaultFn: func() string {
-		return ""
+		return "../../DEPS/simlibs"
+	},
+}.Register()
+
+var SimulatorLibSearch = core.StringFlag{
+	Name:        "hdl-simulator-lib-search",
+	Description: "Default HDL simulator libraries to search",
+	DefaultFn: func() string {
+		return "xil_defaultlib"
 	},
 }.Register()
 
@@ -87,6 +96,37 @@ func (rule Simulation) Lib() string {
 // Path returns the default root path for log files defined for this rule.
 func (rule Simulation) Path() core.Path {
 	return core.BuildPath("/" + rule.Name)
+}
+
+func (rule Simulation) SortedParamSet(paramset string) []string {
+	params := rule.Params[paramset]
+	keys := make([]string, len(params))
+	i := 0
+	for k := range params {
+		keys[i] = k
+		i++
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	return keys
+}
+
+// Target returns the optimization target name defined for this rule.
+func (rule Simulation) Target(params string, coverage bool) string {
+	target := strings.Replace(rule.Name, "-", "_", -1)
+	if params != "" {
+		if rule.Params != nil {
+			if _, ok := rule.Params[params]; !ok {
+				log.Fatal(fmt.Sprintf("parameter set %s not defined!", params))
+			}
+		} else {
+			log.Fatal(fmt.Sprintf("parameter set %s requested, but no parameters sets are defined!", params))
+		}
+		target += "_" + params
+	}
+	if coverage {
+		target += "_cover"
+	}
+	return target
 }
 
 func (rule Simulation) Build(ctx core.Context) {
@@ -287,7 +327,7 @@ func copySrcsBinaries(ctx core.Context, srcs []core.Path) {
 		if strings.HasSuffix(src.String(), ".hex") || strings.HasSuffix(src.String(), ".dat") {
 			copyMemory := core.CopyFile{
 				From: src,
-				To: core.BuildPath("/"),
+				To:   core.BuildPath("/"),
 			}
 			copyMemory.Build(ctx)
 		}

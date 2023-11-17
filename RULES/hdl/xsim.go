@@ -54,9 +54,9 @@ var xsim_rules map[string]bool
 
 // Parameters of the do-file
 type tclFileParams struct {
-	DumpWdb      bool
-	DumpVcd      bool
-	DumpVcdFile  string
+	DumpWdb     bool
+	DumpVcd     bool
+	DumpVcdFile string
 }
 
 // Do-file template
@@ -114,9 +114,9 @@ func addToPrjFile(ctx core.Context, prj prjFile, ips []Ip, srcs []core.Path) prj
 			if IsSystemVerilog(src.String()) {
 				prefix = "sv"
 			} else if IsVerilog(src.String()) {
-				prefix  = "verilog"
+				prefix = "verilog"
 			} else if IsVhdl(src.String()) {
-				prefix  = "vhdl"
+				prefix = "vhdl"
 			}
 
 			entry := fmt.Sprintf("%s %s %s", prefix, strings.ToLower(prj.Rule.Lib()), src.String())
@@ -157,9 +157,9 @@ func createPrjFile(ctx core.Context, rule Simulation) core.Path {
 	prjFileContents := addToPrjFile(
 		ctx,
 		prjFile{
-			Rule: rule,
+			Rule:   rule,
 			Macros: macros,
-			Incs: []string{core.SourcePath("").String()},
+			Incs:   []string{core.SourcePath("").String()},
 		}, rule.Ips, rule.Srcs)
 	ctx.AddBuildStep(core.BuildStep{
 		Out:   prjFilePath,
@@ -175,8 +175,8 @@ func createPrjFile(ctx core.Context, rule Simulation) core.Path {
 func tclFile(ctx core.Context, rule Simulation) {
 	// Do-file script
 	params := tclFileParams{
-		DumpWdb: XsimDumpWdb.Value(),
-		DumpVcd: DumpVcd.Value(),
+		DumpWdb:     XsimDumpWdb.Value(),
+		DumpVcd:     DumpVcd.Value(),
 		DumpVcdFile: rule.Path().WithSuffix(fmt.Sprintf("/%s.vcd", rule.Name)).String(),
 	}
 
@@ -213,7 +213,7 @@ func elaborate(ctx core.Context, rule Simulation, prj_file core.Path) {
 	}
 
 	for _, top := range tops {
-		xelab_base_cmd = append(xelab_base_cmd, strings.ToLower(rule.Lib()) + "." + top)
+		xelab_base_cmd = append(xelab_base_cmd, strings.ToLower(rule.Lib())+"."+top)
 	}
 
 	log_file_suffix := "xelab.log"
@@ -222,12 +222,12 @@ func elaborate(ctx core.Context, rule Simulation, prj_file core.Path) {
 	params := []string{}
 	if rule.Params != nil {
 		for key, _ := range rule.Params {
-			log_files = append(log_files, rule.Path().WithSuffix("/" + key + "_" + log_file_suffix))
-			targets = append(targets, rule.Name + "_" + key)
+			log_files = append(log_files, rule.Path().WithSuffix("/"+key+"_"+log_file_suffix))
+			targets = append(targets, rule.Name+"_"+key)
 			params = append(params, key)
 		}
 	} else {
-		log_files = append(log_files, rule.Path().WithSuffix("/" + log_file_suffix))
+		log_files = append(log_files, rule.Path().WithSuffix("/"+log_file_suffix))
 		targets = append(targets, rule.Name)
 		params = append(params, "")
 	}
