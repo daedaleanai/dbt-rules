@@ -16,6 +16,7 @@ type Context interface {
 	AddBuildStep(BuildStep)
 	AddBuildStepWithRule(BuildStepWithRule)
 	Cwd() OutPath
+	BuildChild(c buildInterface)
 
 	// WithTrace calls the given function, with the given value added
 	// to the trace.
@@ -98,6 +99,10 @@ type runInterface interface {
 	Run(args []string) string
 }
 
+type reportInterface interface {
+	Report(allTargets []interface{}, selectedTargets []interface{}) interface{}
+}
+
 // An interface for runnables that depend on some other set of targets to run, but not to build
 // For example, when using a test wrapper.
 type extendedRunInterface interface {
@@ -122,27 +127,18 @@ type CoverageInterface interface {
 	CoverageData() []OutPath
 }
 
-type coverageReportInterface interface {
-	CoverageReport(targetsForCoverage []CoverageInterface) interface{}
-	Build(ctx Context)
-}
-
 type TranslationUnit struct {
 	Source Path
 	Object OutPath
 	Flags  []string
 }
 
-// AnalyzeInterface is an interface for targets compatible with static analisys
+// AnalyzeInterface is an interface for targets compatible with static analysis
 type AnalyzeInterface interface {
 	TranslationUnits(ctx Context) []TranslationUnit
 	AnalysisDeps(ctx Context) []AnalyzeInterface
 }
 
-type analyzerReportInterface interface {
-	AnalyzerReport(targets []AnalyzeInterface) interface{}
-	Build(ctx Context)
-}
 
 type context struct {
 	cwd              OutPath
@@ -152,7 +148,9 @@ type context struct {
 	buildSteps       map[string]*BuildStepWithRule
 	targetRules      []TargetRule
 	compDbBuildRules map[string]*BuildRule
+	nestedBuild 	 bool
 }
+
 
 func newContext(vars map[string]interface{}) *context {
 	ctx := &context{
@@ -160,6 +158,7 @@ func newContext(vars map[string]interface{}) *context {
 		leafOutputs:      map[Path]bool{},
 		buildSteps:       map[string]*BuildStepWithRule{},
 		compDbBuildRules: map[string]*BuildRule{},
+		nestedBuild:	false,
 	}
 	return ctx
 }
@@ -252,11 +251,13 @@ func (ctx *context) AddBuildStepWithRule(step BuildStepWithRule) {
 
 		prevStep.traces = append(prevStep.traces, ctx.Trace())
 
-		for _, out := range step.Outs {
-			ctx.leafOutputs[out] = true
-		}
-		for _, in := range step.Ins {
-			delete(ctx.leafOutputs, in)
+		if !ctx.nestedBuild {
+			for _, out := range step.Outs {
+				ctx.leafOutputs[out] = true
+			}
+			for _, in := range step.Ins {
+				delete(ctx.leafOutputs, in)
+			}
 		}
 	} else {
 		step.traces = append(step.traces, ctx.Trace())
@@ -271,18 +272,27 @@ func (ctx *context) AddBuildStepWithRule(step BuildStepWithRule) {
 		}
 	}
 
-	for _, out := range step.Outs {
-		ctx.leafOutputs[out] = true
-	}
+	if !ctx.nestedBuild {
+		for _, out := range step.Outs {
+			ctx.leafOutputs[out] = true
+		}
 
-	for _, in := range step.Ins {
-		delete(ctx.leafOutputs, in)
+		for _, in := range step.Ins {
+			delete(ctx.leafOutputs, in)
+		}
 	}
 }
 
 // Cwd returns the build directory of the current target.
 func (ctx *context) Cwd() OutPath {
 	return ctx.cwd
+}
+
+func (ctx *context) BuildChild(c buildInterface) {
+	nb := ctx.nestedBuild
+	ctx.nestedBuild = true
+	c.Build(ctx)
+	ctx.nestedBuild = nb
 }
 
 func (ctx *context) handleTarget(targetPath string, target buildInterface) {

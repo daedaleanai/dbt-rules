@@ -22,7 +22,7 @@ const fileMode = 0755
 
 var currentTarget = ""
 
-var minDbtVersion = version{1, 2, 9}
+var minDbtVersion = version{1, 4, 0}
 
 func checkVersion(curVersion, minVersion version) bool {
 	if curVersion[0] != minVersion[0] {
