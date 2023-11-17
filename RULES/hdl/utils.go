@@ -1,7 +1,7 @@
 package hdl
 
 import (
-  "sort"
+	"sort"
 	"strings"
 )
 
@@ -44,13 +44,13 @@ func IsSimulationArchive(path string) bool {
 	return strings.HasSuffix(path, ".sim.tar.gz")
 }
 
-func sortedStringKeys(m map[string]string) ([]string) {
-  keys := make([]string, len(m))
-  i := 0
-  for k := range m {
-    keys[i] = k
-    i++
-  }
-  sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-  return keys
+func sortedStringKeys(m map[string]string) []string {
+	keys := make([]string, len(m))
+	i := 0
+	for k := range m {
+		keys[i] = k
+		i++
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	return keys
 }

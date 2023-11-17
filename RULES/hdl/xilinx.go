@@ -109,6 +109,7 @@ foreach ip [get_ips] {
 `
 
 const vivado_command = `#!/bin/env -S vivado -nojournal -nolog -mode batch -source`
+
 //const vivado_command = `#!/bin/env -S vivado -nojournal -nolog -mode gui -source`
 
 const create_project_template = `
@@ -272,9 +273,9 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags 
 
 	defines := []string{"SIMULATION"}
 	for _, key := range sortedStringKeys(def) {
-    // Iterate over the defines map in sorted order to make sure we don't change the script
-    // unnecessarily and add a suitable command for each define
-    value := def[key]
+		// Iterate over the defines map in sorted order to make sure we don't change the script
+		// unnecessarily and add a suitable command for each define
+		value := def[key]
 		if value != "" {
 			defines = append(defines, fmt.Sprintf("%s=%s", key, value))
 		} else {
@@ -284,9 +285,9 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags 
 
 	options := []string{}
 	for _, tool := range sortedStringKeys(flags) {
-    // Iterate over the tool flags in sorted fashion and create a suitable
-    // command accordingly
-    option := flags[tool]
+		// Iterate over the tool flags in sorted fashion and create a suitable
+		// command accordingly
+		option := flags[tool]
 		options = append(options, fmt.Sprintf("%s:%s", tool, option))
 	}
 
@@ -324,7 +325,7 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags 
 
 type implementationTemplateParams struct {
 	Top          string
-  Gui          bool
+	Gui          bool
 	Sources      []core.Path
 	IncDirs      []core.Path
 	BlockDesigns []BlockDesign
@@ -554,7 +555,7 @@ func BuildVivado(ctx core.Context, rule Fpga) {
 
 	data := implementationTemplateParams{
 		Top:          rule.Top,
-    Gui:          ImplementationGui.Value(),
+		Gui:          ImplementationGui.Value(),
 		Sources:      sources,
 		IncDirs:      rule.AllIncDirs(),
 		BlockDesigns: allBds(rule),

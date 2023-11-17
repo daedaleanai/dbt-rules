@@ -113,8 +113,8 @@ func paramFlags(rule Simulation, params string) string {
 			log.Fatal(fmt.Sprintf("parameter set %s requested, but no parameters sets are defined!", params))
 		}
 		// Add parameters for all generics into a single string
-    for _, name := range rule.SortedParamSet(params) {
-      value := rule.Params[params][name]
+		for _, name := range rule.SortedParamSet(params) {
+			value := rule.Params[params][name]
 			cmd += fmt.Sprintf(" -g %s=%s", name, value)
 		}
 	}
@@ -164,12 +164,12 @@ func removeDuplicateFiles(deps []core.Path) []core.Path {
 
 	// Convert back to string list
 	paths := make([]core.Path, len(set))
-  i := 0
+	i := 0
 	for _, value := range set {
 		paths[i] = value
-    i++
+		i++
 	}
-  return paths
+	return paths
 }
 
 // verbosityLevelToFlag takes a verbosity level of none, low, medium, high or all and
@@ -500,13 +500,13 @@ func compile(ctx core.Context, rule Simulation) []core.Path {
 	incs := []core.Path{}
 	deps := []core.Path{}
 
-  // Collect aditional tool flags from rule
+	// Collect aditional tool flags from rule
 	flags := FlagMap{}
 	if rule.ToolFlags != nil {
 		flags = rule.ToolFlags
 	}
 
-  // Collect remaining tool flags for the vlog and vcom tools
+	// Collect remaining tool flags for the vlog and vcom tools
 	if val, ok := flags["vlog"]; !ok {
 		flags["vlog"] = VlogFlags.Value()
 	} else {

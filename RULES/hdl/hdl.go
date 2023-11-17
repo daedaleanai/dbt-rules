@@ -2,10 +2,10 @@ package hdl
 
 import (
 	"dbt-rules/RULES/core"
-  "fmt"
+	"fmt"
 	"log"
+	"path"
 	"strings"
-  "path"
 )
 
 // The name of a specific FPGA evaluation board if supported by the implementation tool
@@ -23,7 +23,6 @@ var PartName = core.StringFlag{
 		return "xczu3eg-sbva484-1-e"
 	},
 }.Register()
-
 
 var Implementation = core.StringFlag{
 	Name:        "hdl-implementation",
@@ -88,7 +87,7 @@ func (lib Library) Flags() FlagMap {
 
 // Get all sources from a target, including listed IPs.
 func (lib Library) AllSources() []core.Path {
-  return lib.FilterSources("")
+	return lib.FilterSources("")
 }
 
 // Get all sources from a target that match a filter pattern, including listed IPs.
@@ -120,7 +119,7 @@ func (lib Library) filterSources(seen map[string]bool, sources []core.Path, suff
 
 // Get all include directories from a target, including listed IPs.
 func (lib Library) AllIncDirs() []core.Path {
-  incs := []core.Path{}
+	incs := []core.Path{}
 	seen_incs := make(map[string]struct{})
 	for _, inc := range append(lib.FilterSources(".vh"), lib.FilterSources(".svh")...) {
 		inc_path := path.Dir(inc.Absolute())
@@ -135,13 +134,13 @@ func (lib Library) AllIncDirs() []core.Path {
 type PropMap map[string]map[string]string
 
 type Fpga struct {
-  Library
-  Top         string
-  Part        string
-  Board       string
-	Params      map[string]string
-	Defines     map[string]string
-	ToolProps   PropMap
+	Library
+	Top       string
+	Part      string
+	Board     string
+	Params    map[string]string
+	Defines   map[string]string
+	ToolProps PropMap
 }
 
 func (rule Fpga) Build(ctx core.Context) {
@@ -152,4 +151,3 @@ func (rule Fpga) Build(ctx core.Context) {
 		log.Fatal(fmt.Sprintf("invalid value '%s' for hdl-implementation flag", Implementation.Value()))
 	}
 }
-
