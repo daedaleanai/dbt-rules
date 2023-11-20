@@ -14,6 +14,7 @@ import (
 type objectFile struct {
 	Out       core.OutPath
 	Src       core.Path
+	Deps 	  []core.Path
 	OrderDeps []core.Path
 	Includes  []core.Path
 	CFlags    []string
@@ -139,7 +140,7 @@ func (obj objectFile) Build(ctx core.Context) {
 	ctx.WithTrace("obj:"+obj.Out.Relative(), func(ctx core.Context) {
 		ctx.AddBuildStepWithRule(core.BuildStepWithRule{
 			Outs:      []core.OutPath{obj.Out},
-			Ins:       []core.Path{obj.Src},
+			Ins:       append(obj.Deps, obj.Src),
 			OrderDeps: obj.OrderDeps,
 			Rule:      rule,
 			Variables: map[string]string{
@@ -251,7 +252,7 @@ func includesForSoruces(srcs []core.Path, private bool) []core.Path {
 	return result
 }
 
-func getObjs(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, includes []core.Path, toolchain Toolchain, orderDeps []core.Path) []objectFile {
+func getObjs(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, includes []core.Path, toolchain Toolchain, orderDeps []core.Path, compileDeps map[core.Path][]core.Path) []objectFile {
 	for _, dep := range deps {
 		includes = append(includes, dep.Includes...)
 		orderDeps = append(orderDeps, dep.GeneratedSrcs...)
@@ -266,6 +267,7 @@ func getObjs(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []stri
 		objs = append(objs, objectFile{
 			Out:       out.WithSuffix(src.WithSuffix(".o").Relative()),
 			Src:       src,
+			Deps: 	   compileDeps[src],	
 			OrderDeps: orderDeps,
 			Includes:  includes,
 			CFlags:    cFlags,
@@ -278,9 +280,9 @@ func getObjs(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []stri
 	return objs
 }
 
-func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, includes []core.Path, toolchain Toolchain, orderDeps []core.Path) []core.Path {
+func compileSources(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []string, cxxFlags []string, asFlags []string, deps []Library, includes []core.Path, toolchain Toolchain, orderDeps []core.Path, compileDeps map[core.Path][]core.Path) []core.Path {
 	objs := []core.Path{}
-	for _, obj := range getObjs(out, ctx, srcs, cFlags, cxxFlags, asFlags, deps, includes, toolchain, orderDeps) {
+	for _, obj := range getObjs(out, ctx, srcs, cFlags, cxxFlags, asFlags, deps, includes, toolchain, orderDeps, compileDeps) {
 		obj.Build(ctx)
 		objs = append(objs, obj.Out)
 	}
@@ -304,6 +306,7 @@ type Library struct {
 	Srcs          []core.Path
 	GeneratedSrcs []core.Path
 	Blobs         []core.Path
+	CompileDeps   map[core.Path][]core.Path
 	Objs          []core.Path
 	Includes      []core.Path
 	CFlags        []string
@@ -325,7 +328,7 @@ func (lib Library) TranslationUnits(ctx core.Context) []core.TranslationUnit {
 	toolchain := toolchainOrDefault(lib.Toolchain)
 	deps := collectDepsWithToolchain(toolchain, append(lib.Deps, toolchain.StdDeps()...))
 
-	objs := getObjs(lib.Out, ctx, append(lib.Srcs, lib.GeneratedSrcs...), lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, lib.Includes, toolchain, lib.GeneratedSrcs)
+	objs := getObjs(lib.Out, ctx, append(lib.Srcs, lib.GeneratedSrcs...), lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, lib.Includes, toolchain, lib.GeneratedSrcs, map[core.Path][]core.Path{})
 
 	for _, obj := range objs {
 		result = append(result, core.TranslationUnit{
@@ -415,7 +418,7 @@ func (lib Library) build(ctx core.Context) {
 
 	deps := collectDepsWithToolchain(toolchain, append(lib.Deps, toolchain.StdDeps()...))
 
-	objs := compileSources(lib.Out, ctx, append(lib.Srcs, lib.GeneratedSrcs...), lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, lib.Includes, toolchain, lib.GeneratedSrcs)
+	objs := compileSources(lib.Out, ctx, append(lib.Srcs, lib.GeneratedSrcs...), lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, lib.Includes, toolchain, lib.GeneratedSrcs, lib.CompileDeps)
 	objs = append(objs, lib.Objs...)
 
 	for _, blob := range lib.Blobs {
@@ -503,7 +506,7 @@ func (bin Binary) TranslationUnits(ctx core.Context) []core.TranslationUnit {
 	toolchain := toolchainOrDefault(bin.Toolchain)
 	deps := collectDepsWithToolchain(toolchain, append(bin.Deps, toolchain.StdDeps()...))
 
-	objs := getObjs(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, bin.Includes, toolchain, []core.Path{})
+	objs := getObjs(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, bin.Includes, toolchain, []core.Path{}, map[core.Path][]core.Path{})
 
 	for _, obj := range objs {
 		result = append(result, core.TranslationUnit{
@@ -573,7 +576,7 @@ func (bin Binary) build(ctx core.Context) {
 	for _, d := range deps {
 		d.Build(ctx)
 	}
-	objs := compileSources(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, bin.Includes, toolchain, []core.Path{})
+	objs := compileSources(bin.Out, ctx, bin.Srcs, bin.CFlags, bin.CxxFlags, bin.AsFlags, deps, bin.Includes, toolchain, []core.Path{}, map[core.Path][]core.Path{})
 
 	objs = append(objs, bin.Objs...)
 
