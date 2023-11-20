@@ -16,7 +16,7 @@ type Context interface {
 	AddBuildStep(BuildStep)
 	AddBuildStepWithRule(BuildStepWithRule)
 	Cwd() OutPath
-	BuildChild(c buildInterface)
+	BuildChild(c BuildInterface)
 
 	// WithTrace calls the given function, with the given value added
 	// to the trace.
@@ -83,7 +83,7 @@ func (step *BuildStep) ins() []Path {
 	return append(step.Ins, step.In)
 }
 
-type buildInterface interface {
+type BuildInterface interface {
 	Build(ctx Context)
 }
 
@@ -100,7 +100,7 @@ type runInterface interface {
 }
 
 type reportInterface interface {
-	Report(allTargets []interface{}, selectedTargets []interface{}) interface{}
+	Report(allTargets []interface{}, selectedTargets []interface{}) BuildInterface
 }
 
 // An interface for runnables that depend on some other set of targets to run, but not to build
@@ -139,7 +139,6 @@ type AnalyzeInterface interface {
 	AnalysisDeps(ctx Context) []AnalyzeInterface
 }
 
-
 type context struct {
 	cwd              OutPath
 	nextRuleID       int
@@ -148,9 +147,8 @@ type context struct {
 	buildSteps       map[string]*BuildStepWithRule
 	targetRules      []TargetRule
 	compDbBuildRules map[string]*BuildRule
-	nestedBuild 	 bool
+	nestedBuild      bool
 }
-
 
 func newContext(vars map[string]interface{}) *context {
 	ctx := &context{
@@ -158,7 +156,7 @@ func newContext(vars map[string]interface{}) *context {
 		leafOutputs:      map[Path]bool{},
 		buildSteps:       map[string]*BuildStepWithRule{},
 		compDbBuildRules: map[string]*BuildRule{},
-		nestedBuild:	false,
+		nestedBuild:      false,
 	}
 	return ctx
 }
@@ -288,14 +286,14 @@ func (ctx *context) Cwd() OutPath {
 	return ctx.cwd
 }
 
-func (ctx *context) BuildChild(c buildInterface) {
+func (ctx *context) BuildChild(c BuildInterface) {
 	nb := ctx.nestedBuild
 	ctx.nestedBuild = true
 	c.Build(ctx)
 	ctx.nestedBuild = nb
 }
 
-func (ctx *context) handleTarget(targetPath string, target buildInterface) {
+func (ctx *context) handleTarget(targetPath string, target BuildInterface) {
 	currentTarget = targetPath
 	ctx.cwd = outPath{path.Dir(targetPath)}
 	ctx.leafOutputs = map[Path]bool{}

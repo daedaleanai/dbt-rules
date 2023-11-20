@@ -2,12 +2,12 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"path"
+	"regexp"
 	"sort"
 	"unicode"
-	"regexp"
-	"fmt"
 )
 
 const inputFileName = "input.json"
@@ -28,37 +28,99 @@ type targetInfo struct {
 	Runnable    bool
 	Testable    bool
 	Report      bool
-	Selected	bool
+	Selected    bool
 }
 
 type generatorInput struct {
-	DbtVersion           version
-	SourceDir            string
-	WorkingDir           string
-	OutputDir            string
-	CmdlineFlags         map[string]string
-	WorkspaceFlags       map[string]string
-	CompletionsOnly      bool
-	RunArgs              []string
-	TestArgs             []string
-	Layout               string
-	SelectedTargets      []string
-	PersistFlags         bool
+	DbtVersion       version
+	SourceDir        string
+	WorkingDir       string
+	OutputDir        string
+	CmdlineFlags     map[string]string
+	WorkspaceFlags   map[string]string
+	CompletionsOnly  bool
+	RunArgs          []string
+	TestArgs         []string
+	Layout           string
+	SelectedTargets  []string
+	PersistFlags     bool
 	PositivePatterns []string
 	NegativePatterns []string
-	Mode				  mode
+	Mode             mode
 }
 
 type generatorOutput struct {
-	NinjaFile   string
-	Targets     map[string]targetInfo
-	Flags       map[string]flagInfo
-	CompDbRules []string
+	NinjaFile       string
+	Targets         map[string]targetInfo
+	Flags           map[string]flagInfo
+	CompDbRules     []string
 	SelectedTargets []string
 }
 
 var input = loadInput()
 
+// Determine the set of targets to be built.
+type targetFilter struct {
+	positiveRegexps []*regexp.Regexp
+	negativeRegexps []*regexp.Regexp
+}
+
+func makeFilter() targetFilter {
+	filter := targetFilter{}
+
+	for _, pattern := range input.PositivePatterns {
+		re, err := regexp.Compile(fmt.Sprintf("^%s$", pattern))
+		if err != nil {
+			Fatal("Positive target pattern '%s' is not a valid regular expression: %s.\n", pattern, err)
+		}
+		filter.positiveRegexps = append(filter.positiveRegexps, re)
+	}
+
+	for _, pattern := range input.NegativePatterns {
+		re, err := regexp.Compile(fmt.Sprintf("^%s$", pattern))
+		if err != nil {
+			Fatal("Negative target pattern '%s' is not a valid regular expression: %s.\n", pattern, err)
+		}
+		filter.negativeRegexps = append(filter.negativeRegexps, re)
+	}
+
+	return filter
+}
+
+func (f targetFilter) isSelected(targetPath string, info targetInfo) bool {
+	// Negative patterns have precedence
+
+	for _, re := range f.negativeRegexps {
+		if re.MatchString(targetPath) {
+			return false
+		}
+	}
+
+	for idx, re := range f.positiveRegexps {
+		if info.Report {
+			if input.PositivePatterns[idx] == targetPath {
+				return true
+			}
+		} else {
+			if re.MatchString(targetPath) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func skipTarget(info targetInfo) bool {
+	if input.Mode == modeRun && !info.Runnable {
+		return true
+	}
+
+	if input.Mode == modeTest && !info.Testable {
+		return true
+	}
+
+	return false
+}
 
 func GeneratorMain(vars map[string]interface{}) {
 	output := generatorOutput{
@@ -66,24 +128,7 @@ func GeneratorMain(vars map[string]interface{}) {
 		Flags:   lockAndGetFlags(input.PersistFlags),
 	}
 
-	// Determine the set of targets to be built.
-	positiveRegexps := []*regexp.Regexp{}
-	for _, pattern := range input.PositivePatterns {
-		re, err := regexp.Compile(fmt.Sprintf("^%s$", pattern))
-		if err != nil {
-			Fatal("Positive target pattern '%s' is not a valid regular expression: %s.\n", pattern, err)
-		}
-		positiveRegexps = append(positiveRegexps, re)
-	}
-
-	negativeRegexps := []*regexp.Regexp{}
-	for _, pattern := range input.NegativePatterns {
-		re, err := regexp.Compile(fmt.Sprintf("^%s$", pattern))
-		if err != nil {
-			Fatal("Negative target pattern '%s' is not a valid regular expression: %s.\n", pattern, err)
-		}
-		negativeRegexps = append(negativeRegexps, re)
-	}
+	filter := makeFilter()
 
 	var selectedTargets = []interface{}{}
 
@@ -92,9 +137,10 @@ func GeneratorMain(vars map[string]interface{}) {
 		if !unicode.IsUpper([]rune(targetName)[0]) {
 			continue
 		}
-		if _, ok := variable.(buildInterface); !ok {
+		if _, ok := variable.(BuildInterface); !ok {
 			continue
 		}
+
 		info := targetInfo{}
 		if descriptionIface, ok := variable.(descriptionInterface); ok {
 			info.Description = descriptionIface.Description()
@@ -109,43 +155,17 @@ func GeneratorMain(vars map[string]interface{}) {
 			info.Report = true
 		}
 
-		if input.Mode == modeRun && !info.Runnable {
+		if skipTarget(info) {
 			continue
 		}
 
-		if input.Mode == modeTest && !info.Testable {
-			continue
-		}
+		info.Selected = filter.isSelected(targetPath, info)
 
-		info.Selected = false
+		if info.Selected {
+			selectedTargets = append(selectedTargets, variable)
 
-		// Negative patterns have precedence
-		matchesNegativePattern := false
-		for _, re := range negativeRegexps {
-			if re.MatchString(targetPath) {
-				matchesNegativePattern = true
-				break
-			}
-		}
-
-		if !matchesNegativePattern {	
-			for idx, re := range positiveRegexps {
-				selected := false
-				if info.Report {
-					selected = input.PositivePatterns[idx] == targetPath
-				} else {
-					selected = re.MatchString(targetPath)
-				}
-				if selected {
-					info.Selected = true
-					selectedTargets = append(selectedTargets, variable)
-
-					if _, ok := variable.(buildInterface); ok {
-						output.SelectedTargets = append(output.SelectedTargets, targetPath)
-					}
-
-					break
-				}
+			if _, ok := variable.(BuildInterface); ok {
+				output.SelectedTargets = append(output.SelectedTargets, targetPath)
 			}
 		}
 
@@ -169,7 +189,7 @@ func GeneratorMain(vars map[string]interface{}) {
 		for _, targetPath := range targetPaths {
 			tgt := vars[targetPath]
 			allTargets = append(allTargets, tgt)
-			
+
 			if rep, ok := tgt.(reportInterface); ok {
 				reportTargets = append(reportTargets, rep)
 			}
@@ -178,18 +198,14 @@ func GeneratorMain(vars map[string]interface{}) {
 		for _, targetPath := range targetPaths {
 			tgt := vars[targetPath]
 			if rep, ok := tgt.(reportInterface); ok {
-				if info,iok := output.Targets[targetPath]; iok {
-					if !info.Selected {
-						continue
-					}
-				} else {
+				if info, iok := output.Targets[targetPath]; !iok || !info.Selected {
 					continue
 				}
 
 				tgt = rep.Report(allTargets, selectedTargets)
 			}
-			
-			if build, ok := tgt.(buildInterface); ok {
+
+			if build, ok := tgt.(BuildInterface); ok {
 				ctx.handleTarget(targetPath, build)
 			}
 		}
