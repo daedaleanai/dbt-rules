@@ -20,6 +20,7 @@ const (
 	modeList
 	modeRun
 	modeTest
+	modeReport
 	modeFlags
 )
 
@@ -96,15 +97,9 @@ func (f targetFilter) isSelected(targetPath string, info targetInfo) bool {
 		}
 	}
 
-	for idx, re := range f.positiveRegexps {
-		if info.Report {
-			if input.PositivePatterns[idx] == targetPath {
-				return true
-			}
-		} else {
-			if re.MatchString(targetPath) {
-				return true
-			}
+	for _, re := range f.positiveRegexps {
+		if re.MatchString(targetPath) {
+			return true
 		}
 	}
 	return false
@@ -116,6 +111,10 @@ func skipTarget(info targetInfo) bool {
 	}
 
 	if input.Mode == modeTest && !info.Testable {
+		return true
+	}
+
+	if input.Mode != modeReport && info.Report {
 		return true
 	}
 
@@ -165,7 +164,10 @@ func GeneratorMain(vars map[string]interface{}) {
 			selectedTargets = append(selectedTargets, variable)
 
 			if _, ok := variable.(BuildInterface); ok {
-				output.SelectedTargets = append(output.SelectedTargets, targetPath)
+				if input.Mode != modeReport || info.Report {
+					// In report mode do not pass non-report targets to ninja
+					output.SelectedTargets = append(output.SelectedTargets, targetPath)
+				}
 			}
 		}
 
