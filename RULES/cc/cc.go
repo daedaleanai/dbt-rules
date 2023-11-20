@@ -304,6 +304,7 @@ type Library struct {
 	Srcs          []core.Path
 	GeneratedSrcs []core.Path
 	Blobs         []core.Path
+	ExtraDeps     []core.Path
 	Objs          []core.Path
 	Includes      []core.Path
 	CFlags        []string
@@ -415,7 +416,7 @@ func (lib Library) build(ctx core.Context) {
 
 	deps := collectDepsWithToolchain(toolchain, append(lib.Deps, toolchain.StdDeps()...))
 
-	objs := compileSources(lib.Out, ctx, append(lib.Srcs, lib.GeneratedSrcs...), lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, lib.Includes, toolchain, lib.GeneratedSrcs)
+	objs := compileSources(lib.Out, ctx, append(lib.Srcs, lib.GeneratedSrcs...), lib.CFlags, lib.CxxFlags, lib.AsFlags, deps, lib.Includes, toolchain, append(lib.GeneratedSrcs, lib.ExtraDeps...))
 	objs = append(objs, lib.Objs...)
 
 	for _, blob := range lib.Blobs {
