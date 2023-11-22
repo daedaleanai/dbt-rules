@@ -108,9 +108,7 @@ foreach ip [get_ips] {
 }
 `
 
-const vivado_command = `#!/bin/env -S vivado -nojournal -nolog -mode batch -source`
-
-//const vivado_command = `#!/bin/env -S vivado -nojournal -nolog -mode gui -source`
+const vivado_command = `#!/usr/bin/env -S vivado -nojournal -nolog -mode batch -source`
 
 const create_project_template = `
 {{- if .Dir }}
@@ -338,7 +336,7 @@ type implementationTemplateParams struct {
 	Properties   map[string]map[string]string
 }
 
-const implementation_project_template = `#!/bin/env -S vivado -mode {{ if .Gui }}gui{{ else }}batch{{ end }} -nojournal -log {{ .Dir.String }}/{{ .Top }}.log -source
+const implementation_project_template = `#!/usr/bin/env -S vivado -mode {{ if .Gui }}gui{{ else }}batch{{ end }} -nojournal -log {{ .Dir.String }}/{{ .Top }}.log -source
 create_project -force -part {{ .Part }} {{ .Top }} {{ .Dir.String }}
 set_property target_language verilog [current_project]
 set_property source_mgmt_mode All [current_project]
@@ -543,6 +541,10 @@ func BuildVivado(ctx core.Context, rule Fpga) {
 	sources := rule.AllSources()
 	dir := core.BuildPath("/" + rule.Top)
 	project := dir.WithSuffix("/" + rule.Top + ".xpr")
+	if rule.Name != "" {
+		dir = core.BuildPath("/" + rule.Name)
+		project = dir.WithSuffix("/" + rule.Name + ".xpr")
+	}
 	step := ImplementationStep.Value()
 	switch step {
 	case "placement":
