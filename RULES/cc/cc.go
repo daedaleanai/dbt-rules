@@ -14,7 +14,7 @@ import (
 type objectFile struct {
 	Out       core.OutPath
 	Src       core.Path
-	Deps 	  []core.Path
+	Deps      []core.Path
 	OrderDeps []core.Path
 	Includes  []core.Path
 	CFlags    []string
@@ -139,10 +139,11 @@ func (obj objectFile) Build(ctx core.Context) {
 
 	ctx.WithTrace("obj:"+obj.Out.Relative(), func(ctx core.Context) {
 		ctx.AddBuildStepWithRule(core.BuildStepWithRule{
-			Outs:      []core.OutPath{obj.Out},
-			Ins:       append(obj.Deps, obj.Src),
-			OrderDeps: obj.OrderDeps,
-			Rule:      rule,
+			Outs:         []core.OutPath{obj.Out},
+			Ins:          []core.Path{obj.Src},
+			ImplicitDeps: obj.Deps,
+			OrderDeps:    obj.OrderDeps,
+			Rule:         rule,
 			Variables: map[string]string{
 				"flags": strings.Join(flags, " "),
 			},
@@ -267,7 +268,7 @@ func getObjs(out core.OutPath, ctx core.Context, srcs []core.Path, cFlags []stri
 		objs = append(objs, objectFile{
 			Out:       out.WithSuffix(src.WithSuffix(".o").Relative()),
 			Src:       src,
-			Deps: 	   compileDeps[src],	
+			Deps:      compileDeps[src],
 			OrderDeps: orderDeps,
 			Includes:  includes,
 			CFlags:    cFlags,
