@@ -135,6 +135,7 @@ type PropMap map[string]map[string]string
 
 type Fpga struct {
 	Library
+	Name      string
 	Top       string
 	Part      string
 	Board     string
