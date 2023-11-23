@@ -54,13 +54,14 @@ type BuildRule struct {
 }
 
 type BuildStepWithRule struct {
-	Outs      []OutPath
-	Ins       []Path
-	OrderDeps []Path
-	Variables map[string]string
-	Rule      BuildRule
-	Phony     bool
-	traces    [][]string
+	Outs         []OutPath
+	Ins          []Path
+	ImplicitDeps []Path
+	OrderDeps    []Path
+	Variables    map[string]string
+	Rule         BuildRule
+	Phony        bool
+	traces       [][]string
 }
 
 type TargetRule struct {
@@ -502,6 +503,11 @@ func (ctx *context) ninjaFile() string {
 			orderDeps = append(orderDeps, ninjaEscape(in.Absolute()))
 		}
 
+		implicitDeps := []string{}
+		for _, in := range step.ImplicitDeps {
+			implicitDeps = append(implicitDeps, ninjaEscape(in.Absolute()))
+		}
+
 		for i, trace := range step.traces {
 			fmt.Fprintf(ninjaFile, "# trace: %s\n", strings.Join(trace, " --> "))
 			if i == 10 {
@@ -510,7 +516,7 @@ func (ctx *context) ninjaFile() string {
 			}
 		}
 
-		fmt.Fprintf(ninjaFile, "build %s: %s %s || %s\n", strings.Join(outs, " "), step.Rule.Name, strings.Join(ins, " "), strings.Join(orderDeps, " "))
+		fmt.Fprintf(ninjaFile, "build %s: %s %s | %s || %s\n", strings.Join(outs, " "), step.Rule.Name, strings.Join(ins, " "), strings.Join(implicitDeps, " "), strings.Join(orderDeps, " "))
 		for _, kv := range sortedKvs(step.Variables) {
 			fmt.Fprintf(ninjaFile, "  %s = %s\n", kv.k, kv.v)
 		}
