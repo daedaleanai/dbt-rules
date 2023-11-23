@@ -2,8 +2,10 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"path"
+	"regexp"
 	"sort"
 	"unicode"
 )
@@ -11,63 +13,111 @@ import (
 const inputFileName = "input.json"
 const outputFileName = "output.json"
 
+type mode uint
+
+const (
+	modeBuild mode = iota
+	modeList
+	modeRun
+	modeTest
+	modeReport
+	modeFlags
+)
+
 type targetInfo struct {
 	Description string
 	Runnable    bool
 	Testable    bool
 	Report      bool
+	Selected    bool
 }
 
 type generatorInput struct {
-	DbtVersion           version
-	SourceDir            string
-	WorkingDir           string
-	OutputDir            string
-	CmdlineFlags         map[string]string
-	WorkspaceFlags       map[string]string
-	CompletionsOnly      bool
-	RunArgs              []string
-	TestArgs             []string
-	Layout               string
-	SelectedTargets      []string
-	BuildAnalyzerTargets bool
-	PersistFlags         bool
+	DbtVersion       version
+	SourceDir        string
+	WorkingDir       string
+	OutputDir        string
+	CmdlineFlags     map[string]string
+	WorkspaceFlags   map[string]string
+	CompletionsOnly  bool
+	RunArgs          []string
+	TestArgs         []string
+	Layout           string
+	SelectedTargets  []string
+	PersistFlags     bool
+	PositivePatterns []string
+	NegativePatterns []string
+	Mode             mode
 }
 
 type generatorOutput struct {
-	NinjaFile   string
-	Targets     map[string]targetInfo
-	Flags       map[string]flagInfo
-	CompDbRules []string
+	NinjaFile       string
+	Targets         map[string]targetInfo
+	Flags           map[string]flagInfo
+	CompDbRules     []string
+	SelectedTargets []string
 }
 
 var input = loadInput()
 
-func checkHasAnySelectedTargetsOtherThanReports(vars map[string]interface{}) bool {
-	for _, targetPath := range input.SelectedTargets {
-		tgt := vars[targetPath]
-		if _, ok := tgt.(coverageReportInterface); ok {
-			continue
+// Determine the set of targets to be built.
+type targetFilter struct {
+	positiveRegexps []*regexp.Regexp
+	negativeRegexps []*regexp.Regexp
+}
+
+func makeFilter() targetFilter {
+	filter := targetFilter{}
+
+	for _, pattern := range input.PositivePatterns {
+		re, err := regexp.Compile(fmt.Sprintf("^%s$", pattern))
+		if err != nil {
+			Fatal("Positive target pattern '%s' is not a valid regular expression: %s.\n", pattern, err)
 		}
-		if _, ok := tgt.(analyzerReportInterface); ok {
-			continue
+		filter.positiveRegexps = append(filter.positiveRegexps, re)
+	}
+
+	for _, pattern := range input.NegativePatterns {
+		re, err := regexp.Compile(fmt.Sprintf("^%s$", pattern))
+		if err != nil {
+			Fatal("Negative target pattern '%s' is not a valid regular expression: %s.\n", pattern, err)
 		}
-		return true
+		filter.negativeRegexps = append(filter.negativeRegexps, re)
+	}
+
+	return filter
+}
+
+func (f targetFilter) isSelected(targetPath string, info targetInfo) bool {
+	// Negative patterns have precedence
+
+	for _, re := range f.negativeRegexps {
+		if re.MatchString(targetPath) {
+			return false
+		}
+	}
+
+	for _, re := range f.positiveRegexps {
+		if re.MatchString(targetPath) {
+			return true
+		}
 	}
 	return false
 }
 
-func isAnalyzerReportTarget(target interface{}) bool {
-	_, ok := target.(analyzerReportInterface)
-	return ok
-}
-
-func isTargetSelected(targetPath string) bool {
-	for _, path := range input.SelectedTargets {
-		if path == targetPath {
-			return true
-		}
+func skipTarget(info targetInfo) bool {
+	if input.Mode == modeRun && !info.Runnable {
+		return true
 	}
+
+	if input.Mode == modeTest && !info.Testable {
+		return true
+	}
+
+	if input.Mode != modeReport && info.Report {
+		return true
+	}
+
 	return false
 }
 
@@ -77,14 +127,19 @@ func GeneratorMain(vars map[string]interface{}) {
 		Flags:   lockAndGetFlags(input.PersistFlags),
 	}
 
+	filter := makeFilter()
+
+	var selectedTargets = []interface{}{}
+
 	for targetPath, variable := range vars {
 		targetName := path.Base(targetPath)
 		if !unicode.IsUpper([]rune(targetName)[0]) {
 			continue
 		}
-		if _, ok := variable.(buildInterface); !ok {
+		if _, ok := variable.(BuildInterface); !ok {
 			continue
 		}
+
 		info := targetInfo{}
 		if descriptionIface, ok := variable.(descriptionInterface); ok {
 			info.Description = descriptionIface.Description()
@@ -95,15 +150,29 @@ func GeneratorMain(vars map[string]interface{}) {
 		if _, ok := variable.(testInterface); ok {
 			info.Testable = true
 		}
-		if _, ok := variable.(coverageReportInterface); ok {
+		if _, ok := variable.(reportInterface); ok {
 			info.Report = true
 		}
-		if !isAnalyzerReportTarget(variable) || input.BuildAnalyzerTargets {
-			output.Targets[targetPath] = info
-		}
-	}
 
-	hasAnySelectedTargetsOtherThanReports := checkHasAnySelectedTargetsOtherThanReports(vars)
+		if skipTarget(info) {
+			continue
+		}
+
+		info.Selected = filter.isSelected(targetPath, info)
+
+		if info.Selected {
+			selectedTargets = append(selectedTargets, variable)
+
+			if _, ok := variable.(BuildInterface); ok {
+				if input.Mode != modeReport || info.Report {
+					// In report mode do not pass non-report targets to ninja
+					output.SelectedTargets = append(output.SelectedTargets, targetPath)
+				}
+			}
+		}
+
+		output.Targets[targetPath] = info
+	}
 
 	// Create build files.
 	if !input.CompletionsOnly {
@@ -116,39 +185,33 @@ func GeneratorMain(vars map[string]interface{}) {
 		}
 		sort.Strings(targetPaths)
 
-		var targetsForCoverage = []CoverageInterface{}
-		var targetsForAnalyze = []AnalyzeInterface{}
+		var allTargets = []interface{}{}
+		var reportTargets = []reportInterface{}
 
 		for _, targetPath := range targetPaths {
 			tgt := vars[targetPath]
-			if cov, ok := tgt.(CoverageInterface); ok {
-				if !hasAnySelectedTargetsOtherThanReports || isTargetSelected(targetPath) {
-					targetsForCoverage = append(targetsForCoverage, cov)
-				}
-			}
-			if input.BuildAnalyzerTargets {
-				if sa, ok := tgt.(AnalyzeInterface); ok {
-					if !hasAnySelectedTargetsOtherThanReports || isTargetSelected(targetPath) {
-						targetsForAnalyze = append(targetsForAnalyze, sa)
-					}
-				}
+			allTargets = append(allTargets, tgt)
+
+			if rep, ok := tgt.(reportInterface); ok {
+				reportTargets = append(reportTargets, rep)
 			}
 		}
 
 		for _, targetPath := range targetPaths {
 			tgt := vars[targetPath]
-			if !isAnalyzerReportTarget(tgt) || input.BuildAnalyzerTargets {
-				if build, ok := tgt.(coverageReportInterface); ok {
-					tgt = build.CoverageReport(targetsForCoverage)
+			if rep, ok := tgt.(reportInterface); ok {
+				if info, iok := output.Targets[targetPath]; !iok || !info.Selected {
+					continue
 				}
-				if build, ok := tgt.(analyzerReportInterface); ok {
-					tgt = build.AnalyzerReport(targetsForAnalyze)
-				}
-				if build, ok := tgt.(buildInterface); ok {
-					ctx.handleTarget(targetPath, build)
-				}
+
+				tgt = rep.Report(allTargets, selectedTargets)
+			}
+
+			if build, ok := tgt.(BuildInterface); ok {
+				ctx.handleTarget(targetPath, build)
 			}
 		}
+
 		output.NinjaFile = ctx.ninjaFile()
 
 		output.CompDbRules = []string{}
