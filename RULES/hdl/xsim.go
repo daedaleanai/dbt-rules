@@ -146,7 +146,8 @@ func createPrjFile(ctx core.Context, rule Simulation) core.Path {
 
 	// Setup macros
 	macros := []string{"SIMULATION"}
-	for key, value := range rule.Defines {
+	for _, key := range sortedStringKeys(rule.Defines) {
+    value := rule.Defines[key]
 		macro := key
 		if value != "" {
 			macro = fmt.Sprintf("%s=%s", key, value)

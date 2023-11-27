@@ -98,6 +98,17 @@ func (rule Simulation) Path() core.Path {
 	return core.BuildPath("/" + rule.Name)
 }
 
+func (rule Simulation) SortedParams() []string {
+	keys := make([]string, len(rule.Params))
+	i := 0
+	for k := range rule.Params {
+		keys[i] = k
+		i++
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	return keys
+}
+
 func (rule Simulation) SortedParamSet(paramset string) []string {
 	params := rule.Params[paramset]
 	keys := make([]string, len(params))
@@ -174,7 +185,7 @@ func (rule Simulation) Description() string {
 	// Print the rule name as its needed for parameter selection
 	description := ""
 	first := true
-	for param, _ := range rule.Params {
+	for _, param := range rule.SortedParams() {
 		if first {
 			description = description + " -params=" + param
 			first = false
