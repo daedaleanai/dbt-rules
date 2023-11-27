@@ -401,7 +401,7 @@ func compileSrcs(ctx core.Context, rule Simulation,
 		} else if IsXilinxIpCheckpoint(src.String()) {
 			tool = "vsim"
 			src = ExportXilinxIpCheckpoint(ctx, rule, src, rule.Defines, flags)
-			cmd = "vsim -batch -do " + src.String() + " -do exit -logfile " + log.String()
+			cmd = fmt.Sprintf("vsim -batch -do \"set t [exec date -R -r modelsim.ini]\" -do %s -do \"exec touch -d \\$$t modelsim.ini\" -do exit -logfile %s", src.String(), log.String())
 		} else if IsHeader(src.String()) {
 			// Header files are added to the list to be able to set include directories correctly
 			incs = append(incs, src)
@@ -451,7 +451,7 @@ func compileBlockDesign(ctx core.Context, rule Simulation, ip BlockDesign, deps 
 		ctx.AddBuildStep(core.BuildStep{
 			Out:   log,
 			In:    do,
-			Cmd:   fmt.Sprintf("vsim -batch -do \"set t [exec date -R -r modelsim.ini]\" -do %s -do \"exec touch -d ${t} modelsim.ini\" -do exit -logfile %s", do.Relative(), log.Relative()),
+			Cmd:   fmt.Sprintf("vsim -batch -do \"set t [exec date -R -r modelsim.ini]\" -do %s -do \"exec touch -d \\$$t modelsim.ini\" -do exit -logfile %s", do.String(), log.String()),
 			Descr: fmt.Sprintf("vsim: %s", do.Absolute()),
 		})
 
@@ -921,7 +921,7 @@ func simulateQuesta(rule Simulation, args []string, gui bool) string {
 
 	// If no parameters have been specified, simulate them all
 	if rule.Params != nil && len(params) == 0 {
-		for key := range rule.Params {
+		for _, key := range rule.SortedParams() {
 			params = append(params, key)
 		}
 	} else if len(params) == 0 {
