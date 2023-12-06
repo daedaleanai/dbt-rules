@@ -179,7 +179,7 @@ const export_simulation_template = `
 
 const source_utils = `
 foreach f [get_files -of [get_filesets utils_1]] {
-  if {[string match *_pre_*.tcl $f] || [string match *_post_*.tcl $f]} {
+  if {[string match *pre_*.tcl $f] || [string match *post_*.tcl $f]} {
     continue
   } else {
     puts "INFO: Sourcing utility file $f"
@@ -437,7 +437,7 @@ catch {
 
 # Source all utility files
 foreach f [get_files -of [get_filesets utils_1]] {
-  if {[string match *_pre_*.tcl $f] || [string match *_post_*.tcl $f]} {
+  if {[string match *pre_*.tcl $f] || [string match *post_*.tcl $f]} {
     continue
   } else {
     puts "INFO: Sourcing utility file $f"
@@ -472,7 +472,7 @@ set_property {{ $name }} "{{ $value }}" [get_runs {{ $run }}]
 
 # Configure scripts
 foreach f [get_files -of [get_filesets utils_1]] {
-  if [regexp -nocase {.*_(pre|post)_(\w+).tcl} $f total pre_or_post step] {
+  if [regexp -nocase {.*(pre|post)_(\w+).tcl} $f total pre_or_post step] {
     if {$step == "synthesis"} {
       set property "synth_design"
       set run "synth_*"
