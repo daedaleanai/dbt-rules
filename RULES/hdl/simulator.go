@@ -340,9 +340,11 @@ func Preamble(rule Simulation, testcase string) (string, string) {
 func copySrcsBinaries(ctx core.Context, srcs []core.Path) {
 	for _, src := range srcs {
 		if strings.HasSuffix(src.String(), ".hex") || strings.HasSuffix(src.String(), ".dat") {
+      // Get the actual file name to use as a destination for the copy operation to avoid clashes between multiple targets
+      _, name := path.Split(src.String())
 			copyMemory := core.CopyFile{
 				From: src,
-				To:   core.BuildPath("/"),
+				To:   core.BuildPath("/" + name),
 			}
 			copyMemory.Build(ctx)
 		}
