@@ -567,6 +567,7 @@ func BuildVivado(ctx core.Context, rule Fpga) {
 		Params:       rule.Params,
 		Defines:      rule.Defines,
 		Step:         step,
+    Properties:   rule.ToolProps,
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
