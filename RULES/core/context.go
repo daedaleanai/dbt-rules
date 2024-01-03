@@ -108,7 +108,7 @@ type reportInterface interface {
 // For example, when using a test wrapper.
 type extendedRunInterface interface {
 	runInterface
-	RunDeps() []OutPath
+	RunDeps() []Path
 }
 
 type testInterface interface {
@@ -119,7 +119,7 @@ type testInterface interface {
 // For example, when using a test wrapper.
 type extendedTestInterface interface {
 	testInterface
-	TestDeps() []OutPath
+	TestDeps() []Path
 }
 
 type CoverageInterface interface {
