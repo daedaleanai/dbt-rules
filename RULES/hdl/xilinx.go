@@ -289,10 +289,12 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags 
 		options = append(options, fmt.Sprintf("%s:%s", tool, option))
 	}
 
+  dir := ctx.Cwd().WithSuffix("/" + rule.Name)
+
 	// Template parameters are the direct and parent script sources.
 	data := exportTemplateParams{
 		Sources:   sources,
-		Dir:       ctx.Cwd().Absolute(),
+		Dir:       dir.Absolute(),
 		Name:      rule.Name,
 		Part:      strings.ToLower(part),
 		Board:     strings.ToLower(board),
@@ -302,7 +304,7 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags 
 		Options:   options,
 	}
 
-	do := ctx.Cwd().WithSuffix(fmt.Sprintf("/%s/compile.do", Simulator.Value()))
+	do := dir.WithSuffix(fmt.Sprintf("/%s/compile.do", Simulator.Value()))
 
 	ctx.AddBuildStep(core.BuildStep{
 		Ins: sources,
