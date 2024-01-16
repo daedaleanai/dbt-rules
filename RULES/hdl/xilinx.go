@@ -82,6 +82,18 @@ type exportTemplateParams struct {
 }
 
 const export_ip_template = `
+{{- if .Dir }}
+if [file exists {{ .Dir }}] {
+  file delete -force -- {{ .Dir }}
+}
+{{- end }}
+create_project -force -part {{ .Part }} project export_ip
+set_property target_language verilog [current_project]
+set_property source_mgmt_mode All [current_project]
+{{- if .Board }}
+catch {set_property board_part {{ .Board }} [current_project]}
+{{- end }}
+
 {{- range .Sources }}
 {{- if or (hasSuffix .String ".xci") }}
 if {[file exists .srcs] && [file isdirectory .srcs]} {
@@ -97,6 +109,9 @@ if {[file exists .srcs] && [file isdirectory .srcs]} {
 puts "Reading IP from {{ .String }}"
 import_ip {{ .String }}
 {{- end }}
+close_project
+open_project export_ip/project.xpr
+
 {{- end }}
 foreach ip [get_ips] {
   puts "Upgrade IP"
@@ -240,7 +255,7 @@ func ExportXilinxIpCheckpoint(ctx core.Context, rule Simulation, src core.Path, 
 	ctx.AddBuildStep(core.BuildStep{
 		Out:    do,
 		In:     src,
-		Script: core.CompileTemplate(vivado_command+create_project_template+export_ip_template, "export_ip", data),
+		Script: core.CompileTemplate(vivado_command+export_ip_template, "export_ip", data),
 		Descr:  fmt.Sprintf("export: %s", src.Relative()),
 	})
 
