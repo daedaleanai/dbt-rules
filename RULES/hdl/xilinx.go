@@ -409,6 +409,8 @@ catch {
 {{- end }}
   }
 }
+close_project
+open_project "{{.Top}}/{{.Top}}.xpr"
 
 # Reopen the project to fix IPs
 close_project
