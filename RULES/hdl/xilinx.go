@@ -410,6 +410,10 @@ catch {
   }
 }
 
+# Reopen the project to fix IPs
+close_project
+open_project {{ .Dir.String }}/{{ .Top }}
+
 # Add data files for simulation
 if {[string equal [get_filesets -quiet sim_1] ""]} {
   create_fileset -simset sim_1
