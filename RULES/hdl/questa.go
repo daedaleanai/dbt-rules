@@ -516,7 +516,7 @@ func compile(ctx core.Context, rule Simulation) []core.Path {
 	if val, ok := flags["vcom"]; !ok {
 		flags["vcom"] = VcomFlags.Value()
 	} else {
-		flags["vcom"] = val + " " + VlogFlags.Value()
+		flags["vcom"] = val + " " + VcomFlags.Value()
 	}
 
 	deps = createModelsimIni(ctx, rule, deps)
