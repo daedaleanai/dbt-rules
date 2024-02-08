@@ -83,11 +83,11 @@ type exportTemplateParams struct {
 
 const export_ip_template = `
 {{- if .Dir }}
-if [file exists {{ .Dir }}] {
-  file delete -force -- {{ .Dir }}
+if [file exists {{ .Dir }}/{{ .Name }}] {
+  file delete -force -- {{ .Dir }}/{{ .Name }}*
 }
 {{- end }}
-create_project -force -part {{ .Part }} project export_ip
+create_project -force -part {{ .Part }} {{ .Name }} {{ .Dir }}
 set_property target_language verilog [current_project]
 set_property source_mgmt_mode All [current_project]
 {{- if .Board }}
@@ -110,7 +110,7 @@ puts "Reading IP from {{ .String }}"
 import_ip {{ .String }}
 {{- end }}
 close_project
-open_project export_ip/project.xpr
+open_project {{ $.Dir }}/{{ $.Name}}.xpr
 
 {{- end }}
 foreach ip [get_ips] {
@@ -237,13 +237,14 @@ func ExportXilinxIpCheckpoint(ctx core.Context, rule Simulation, src core.Path, 
 
 	// Determine name of .do file
 	oldExt := path.Ext(src.Relative())
-	newRel := strings.TrimSuffix(src.Relative(), oldExt)
-	dir := core.BuildPath(path.Dir(src.Relative()))
-	do := core.BuildPath(newRel).WithSuffix(fmt.Sprintf("/%s/compile.do", Simulator.Value()))
+  name := path.Base(strings.TrimSuffix(src.Relative(), oldExt))
+	dir := core.BuildPath(path.Dir(src.Relative())).WithSuffix("/export_ip")
+	do := dir.WithSuffix(fmt.Sprintf("/%s/%s/compile.do", name, Simulator.Value()))
 
 	// Template parameters are the direct and parent script sources.
 	data := exportTemplateParams{
 		Sources:   []core.Path{src},
+    Name:      name,
 		Dir:       dir.Absolute(),
 		Part:      strings.ToLower(part),
 		Simulator: Simulator.Value(),
