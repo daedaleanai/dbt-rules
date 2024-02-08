@@ -87,6 +87,9 @@ if [file exists {{ .Dir }}] {
   file delete -force -- {{ .Dir }}
 }
 {{- end }}
+if [file exists export_ip] {
+  file delete -force -- export_ip
+}
 create_project -force -part {{ .Part }} project export_ip
 set_property target_language verilog [current_project]
 set_property source_mgmt_mode All [current_project]
@@ -304,7 +307,7 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags 
 		options = append(options, fmt.Sprintf("%s:%s", tool, option))
 	}
 
-  dir := ctx.Cwd().WithSuffix("/" + rule.Name)
+	dir := ctx.Cwd().WithSuffix("/" + rule.Name)
 
 	// Template parameters are the direct and parent script sources.
 	data := exportTemplateParams{
@@ -409,8 +412,6 @@ catch {
 {{- end }}
   }
 }
-close_project
-open_project "{{.Top}}/{{.Top}}.xpr"
 
 # Reopen the project to fix IPs
 close_project
@@ -590,7 +591,7 @@ func BuildVivado(ctx core.Context, rule Fpga) {
 		Params:       rule.Params,
 		Defines:      rule.Defines,
 		Step:         step,
-    Properties:   rule.ToolProps,
+		Properties:   rule.ToolProps,
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
