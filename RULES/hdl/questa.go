@@ -316,9 +316,11 @@ func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []co
 	}
 
 	if SimulatorLibDir.Value() != "" {
-		cmds = append(cmds, fmt.Sprintf(
-			"if [ -d \"%s\" ]; then for lib in $$(find %s -mindepth 1 -maxdepth 1 -type d); do vmap $$(basename $$lib) $$lib; done; fi",
-			SimulatorLibDir.Value(), SimulatorLibDir.Value()))
+    for _, lib := range(strings.Split(SimulatorLibDir.Value(), ",")) {
+      cmds = append(cmds, fmt.Sprintf(
+			  "if [ -d \"%s\" ]; then for lib in $$(find %s -mindepth 1 -maxdepth 1 -type d); do vmap $$(basename $$lib) $$lib; done; fi",
+  			lib, lib))
+    }
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
