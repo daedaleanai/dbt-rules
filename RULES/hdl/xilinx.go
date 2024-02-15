@@ -76,7 +76,7 @@ type exportTemplateParams struct {
 	Part      string
 	Board     string
 	Dir       string
-	LibDir    string
+	LibDir    []string
 	Defines   []string
 	Options   []string
 }
@@ -119,7 +119,10 @@ foreach ip [get_ips] {
   puts "Generating IP"
   generate_target simulation $ip
   puts "Exporting IP to {{ .Dir }}"
-  export_simulation -simulator {{ .Simulator }} -quiet -force -absolute_path -use_ip_compiled_libs -lib_map_path {{ .LibDir }} -of_objects $ip -step compile -directory {{ .Dir }}
+  export_simulation -simulator {{ .Simulator }} \
+    -quiet -force -absolute_path -use_ip_compiled_libs\
+    -lib_map_path {{ range $i, $v := .LibDir }}{{ if $i }},{{ end }}{{ $v }}{{ end }} \
+    -of_objects $ip -step compile -directory {{ .Dir }}
 }
 `
 
@@ -173,7 +176,7 @@ const export_simulation_template = `
   export_simulation -simulator {{ .Simulator }}\
     -force -absolute_path\
     -use_ip_compiled_libs\
-    -lib_map_path {{ .LibDir }}\
+    -lib_map_path {{ range $i, $v := .LibDir }}{{ if $i }},{{ end }}{{ $v }}{{ end }} \
     -step compile\
 {{- if .Defines }}
     -define [list\
@@ -248,7 +251,7 @@ func ExportXilinxIpCheckpoint(ctx core.Context, rule Simulation, src core.Path, 
 		Dir:       dir.Absolute(),
 		Part:      strings.ToLower(part),
 		Simulator: Simulator.Value(),
-		LibDir:    SimulatorLibDir.Value(),
+		LibDir:    strings.Split(SimulatorLibDir.Value(), ","),
 		Defines:   defines,
 		Options:   options,
 	}
@@ -315,7 +318,7 @@ func ExportBlockDesign(ctx core.Context, rule BlockDesign, def DefineMap, flags 
 		Part:      strings.ToLower(part),
 		Board:     strings.ToLower(board),
 		Simulator: Simulator.Value(),
-		LibDir:    SimulatorLibDir.Value(),
+		LibDir:    strings.Split(SimulatorLibDir.Value(), ","),
 		Defines:   defines,
 		Options:   options,
 	}
