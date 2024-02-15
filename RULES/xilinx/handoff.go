@@ -9,6 +9,10 @@ import (
 	"dbt-rules/RULES/hdl"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&Handoff{})
+}
+
 type HandoffScriptParams struct {
 	HwDef      core.Path
 	EmbeddedSw core.Path

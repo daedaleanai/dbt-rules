@@ -10,6 +10,14 @@ import (
 	"dbt-rules/RULES/core"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&Library{})
+	core.AssertIsBuildableTarget(&Binary{})
+	core.AssertIsBuildableTarget(&BlobObject{})
+	core.AssertIsBuildableTarget(&objectFile{})
+	core.AssertIsRunnableTarget(&Binary{})
+}
+
 // objectFile compiles a single C++ source file.
 type objectFile struct {
 	Out       core.OutPath

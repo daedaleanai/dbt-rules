@@ -7,6 +7,10 @@ import (
 	"fmt"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&SynthOutOfContext{})
+}
+
 type ConstraintsFileScriptParams struct {
 	Out         core.Path
 	ClockSignal string

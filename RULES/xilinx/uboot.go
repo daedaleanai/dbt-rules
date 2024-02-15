@@ -8,6 +8,10 @@ import (
 	"dbt-rules/RULES/hdl"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&UBoot{})
+}
+
 type UBootScriptParams struct {
 	Out    core.OutPath
 	Repo   core.Path

@@ -6,6 +6,10 @@ import (
 	"dbt-rules/RULES/core"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&ArmTrustedFirmware{})
+}
+
 type AtfScriptParams struct {
 	Bl31 core.Path
 	Repo core.Path

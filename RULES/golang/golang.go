@@ -12,6 +12,11 @@ import (
 	"strings"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&Binary{})
+	core.AssertIsRunnableTarget(&Binary{})
+}
+
 type Binary struct {
 	Out     core.OutPath
 	Package core.Path

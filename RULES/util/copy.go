@@ -6,6 +6,10 @@ import (
 	"dbt-rules/RULES/core"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&CopyFile{})
+}
+
 // CopyFile copies a single file.
 type CopyFile struct {
 	From core.Path

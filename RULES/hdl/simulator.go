@@ -14,6 +14,10 @@ import (
 	"strings"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&Simulation{})
+}
+
 var Simulator = core.StringFlag{
 	Name:        "hdl-simulator",
 	Description: "Select HDL simulator",
