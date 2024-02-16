@@ -8,6 +8,10 @@ import (
 	"dbt-rules/RULES/core"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&ExpandTemplate{})
+}
+
 // ExpandTemplate expands `Template` by performing `Substitutions` and storing the result in `Out`.
 type ExpandTemplate struct {
 	Out           core.OutPath

@@ -9,6 +9,10 @@ import (
 	"dbt-rules/RULES/hdl"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&DeviceTree{})
+}
+
 type DeviceTreeScriptParams struct {
 	Out            core.OutPath
 	In             core.Path

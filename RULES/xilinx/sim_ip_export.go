@@ -7,6 +7,10 @@ import (
 	"dbt-rules/RULES/hdl"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&ExportSimulatorIp{})
+}
+
 type ExportScriptParams struct {
 	Family    string
 	Language  string

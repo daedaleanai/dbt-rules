@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&Fpga{})
+}
+
 // The name of a specific FPGA evaluation board if supported by the implementation tool
 var BoardName = core.StringFlag{
 	Name: "board",

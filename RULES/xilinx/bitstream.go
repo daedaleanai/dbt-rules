@@ -8,6 +8,10 @@ import (
 	h "dbt-rules/hdl"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&Bitstream{})
+}
+
 var SynthFlattenStrategy = core.StringFlag{
 	Name:        "xilinx-synth-flatten_strategy",
 	Description: "Choose synthesis-time hierarchy flattening strategy",

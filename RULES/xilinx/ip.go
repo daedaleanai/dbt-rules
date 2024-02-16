@@ -8,6 +8,10 @@ import (
 	h "dbt-rules/hdl"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&Ip{})
+}
+
 type IpScriptParams struct {
 	PartName   string
 	BoardName  string

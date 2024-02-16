@@ -10,6 +10,11 @@ import (
 	"strings"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&Binary{})
+	core.AssertIsRunnableTarget(&Binary{})
+}
+
 var dockerRegexp = regexp.MustCompile(`docker-([0-9a-f]*)`)
 
 type Binary struct {

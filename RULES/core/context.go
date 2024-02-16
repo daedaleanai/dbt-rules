@@ -88,6 +88,11 @@ type BuildInterface interface {
 	Build(ctx Context)
 }
 
+func AssertIsBuildableTarget(iface BuildInterface) {
+	// Do nothing. This function is simply supposed to cause a compilation fail if the
+	// type passed does not implement the interface
+}
+
 type outputsInterface interface {
 	Outputs() []Path
 }
@@ -100,8 +105,18 @@ type runInterface interface {
 	Run(args []string) string
 }
 
+func AssertIsRunnableTarget(iface runInterface) {
+	// Do nothing. This function is simply supposed to cause a compilation fail if the
+	// type passed does not implement the interface
+}
+
 type reportInterface interface {
 	Report(allTargets []interface{}, selectedTargets []interface{}) BuildInterface
+}
+
+func AssertIsReportTarget(iface reportInterface) {
+	// Do nothing. This function is simply supposed to cause a compilation fail if the
+	// type passed does not implement the interface
 }
 
 // An interface for runnables that depend on some other set of targets to run, but not to build
@@ -122,10 +137,20 @@ type extendedTestInterface interface {
 	TestDeps() []Path
 }
 
+func AssertIsTestableTarget(iface testInterface) {
+	// Do nothing. This function is simply supposed to cause a compilation fail if the
+	// type passed does not implement the interface
+}
+
 type CoverageInterface interface {
 	Test(args []string) string
 	Binaries() []Path
 	CoverageData() []OutPath
+}
+
+func AssertIsCoverageTarget(iface CoverageInterface) {
+	// Do nothing. This function is simply supposed to cause a compilation fail if the
+	// type passed does not implement the interface
 }
 
 type TranslationUnit struct {
@@ -138,6 +163,11 @@ type TranslationUnit struct {
 type AnalyzeInterface interface {
 	TranslationUnits(ctx Context) []TranslationUnit
 	AnalysisDeps(ctx Context) []AnalyzeInterface
+}
+
+func AssertIsAnalyzeTarget(iface AnalyzeInterface) {
+	// Do nothing. This function is simply supposed to cause a compilation fail if the
+	// type passed does not implement the interface
 }
 
 type context struct {

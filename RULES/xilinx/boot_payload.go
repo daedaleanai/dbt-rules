@@ -6,6 +6,10 @@ import (
 	"dbt-rules/RULES/core"
 )
 
+func init() {
+	core.AssertIsBuildableTarget(&BootPayload{})
+}
+
 type BootPayloadScriptParams struct {
 	Out   core.OutPath
 	Fsbl  core.Path
