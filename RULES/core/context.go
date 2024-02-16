@@ -12,6 +12,15 @@ import (
 	"unicode"
 )
 
+type Pool struct {
+	Name  string
+	Depth uint
+}
+
+var ConsolePool Pool = Pool{
+	Name: "console",
+}
+
 type Context interface {
 	AddBuildStep(BuildStep)
 	AddBuildStepWithRule(BuildStepWithRule)
@@ -30,6 +39,8 @@ type Context interface {
 
 	// Obtains a registered rule (if it exists). The boolean is true if it exists
 	GetCompDbRule(name string) (*BuildRule, bool)
+
+	registerPool(pool Pool) error
 }
 
 // BuildStep represents one build step (i.e., one build command).
@@ -46,6 +57,7 @@ type BuildStep struct {
 	DataFileMode os.FileMode
 	Descr        string
 	Phony        bool
+	Pool         *Pool
 }
 
 type BuildRule struct {
@@ -179,6 +191,7 @@ type context struct {
 	targetRules      []TargetRule
 	compDbBuildRules map[string]*BuildRule
 	nestedBuild      bool
+	pools            map[string]uint
 }
 
 func newContext(vars map[string]interface{}) *context {
@@ -258,6 +271,12 @@ func (ctx *context) AddBuildStep(step BuildStep) {
 	if step.Depfile != nil {
 		rule.Variables["depfile"] = ninjaEscape(step.Depfile.Absolute())
 	}
+	if step.Pool != nil {
+		if err := ctx.registerPool(*step.Pool); err != nil {
+			Fatal("Failed to register ninja pool: %v", err)
+		}
+		rule.Variables["pool"] = ninjaEscape(step.Pool.Name)
+	}
 
 	ctx.AddBuildStepWithRule(BuildStepWithRule{
 		Outs:  step.outs(),
@@ -322,6 +341,23 @@ func (ctx *context) BuildChild(c BuildInterface) {
 	ctx.nestedBuild = true
 	c.Build(ctx)
 	ctx.nestedBuild = nb
+}
+
+func (ctx *context) registerPool(pool Pool) error {
+	if pool.Name == "" {
+		return fmt.Errorf("Cannot register a pool with an empty name")
+	} else if pool.Name == "console" {
+		// console pool is implicitly defined
+		return nil
+	}
+	if depth, ok := ctx.pools[pool.Name]; ok {
+		if depth != pool.Depth {
+			return fmt.Errorf("Incompatible pool %q already registered with different depth: %d vs %d", pool.Name, pool.Depth, depth)
+		}
+		return nil
+	}
+	ctx.pools[pool.Name] = pool.Depth
+	return nil
 }
 
 func (ctx *context) handleTarget(targetPath string, target BuildInterface) {
@@ -481,6 +517,13 @@ func (ctx *context) ninjaFile() string {
 	buildKeys := sortedBuildRules(ctx.buildSteps)
 
 	fmt.Fprintf(ninjaFile, "build __phony__: phony\n\n")
+
+	fmt.Fprintf(ninjaFile, "# pools\n\n")
+
+	for poolName, poolDepth := range ctx.pools {
+		fmt.Fprintf(ninjaFile, "pool %s\n", ninjaEscape(poolName))
+		fmt.Fprintf(ninjaFile, "  depth = %u\n\n", poolDepth)
+	}
 
 	fmt.Fprintf(ninjaFile, "# build rules\n\n")
 
