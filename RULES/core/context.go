@@ -346,16 +346,17 @@ func (ctx *context) BuildChild(c BuildInterface) {
 func (ctx *context) registerPool(pool Pool) error {
 	if pool.Name == "" {
 		return fmt.Errorf("Cannot register a pool with an empty name")
-	} else if pool.Name == "console" {
+	}
+
+	if pool.Name == "console" {
 		// console pool is implicitly defined
 		return nil
 	}
-	if depth, ok := ctx.pools[pool.Name]; ok {
-		if depth != pool.Depth {
-			return fmt.Errorf("Incompatible pool %q already registered with different depth: %d vs %d", pool.Name, pool.Depth, depth)
-		}
-		return nil
+
+	if depth, ok := ctx.pools[pool.Name]; ok && depth != pool.Depth {
+		return fmt.Errorf("Incompatible pool %q already registered with different depth: %d vs %d", pool.Name, pool.Depth, depth)
 	}
+
 	ctx.pools[pool.Name] = pool.Depth
 	return nil
 }
