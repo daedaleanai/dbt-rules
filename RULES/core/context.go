@@ -113,43 +113,43 @@ type descriptionInterface interface {
 	Description() string
 }
 
-type runInterface interface {
+type RunInterface interface {
 	Run(args []string) string
 }
 
-func AssertIsRunnableTarget(iface runInterface) {
+func AssertIsRunnableTarget(iface RunInterface) {
 	// Do nothing. This function is simply supposed to cause a compilation fail if the
 	// type passed does not implement the interface
 }
 
-type reportInterface interface {
+type ReportInterface interface {
 	Report(allTargets []interface{}, selectedTargets []interface{}) BuildInterface
 }
 
-func AssertIsReportTarget(iface reportInterface) {
+func AssertIsReportTarget(iface ReportInterface) {
 	// Do nothing. This function is simply supposed to cause a compilation fail if the
 	// type passed does not implement the interface
 }
 
 // An interface for runnables that depend on some other set of targets to run, but not to build
 // For example, when using a test wrapper.
-type extendedRunInterface interface {
-	runInterface
+type ExtendedRunInterface interface {
+	RunInterface
 	RunDeps() []Path
 }
 
-type testInterface interface {
+type TestInterface interface {
 	Test(args []string) string
 }
 
 // An interface for tests that depend on some other set of targets to run, but not to build
 // For example, when using a test wrapper.
-type extendedTestInterface interface {
-	testInterface
+type ExtendedTestInterface interface {
+	TestInterface
 	TestDeps() []Path
 }
 
-func AssertIsTestableTarget(iface testInterface) {
+func AssertIsTestableTarget(iface TestInterface) {
 	// Do nothing. This function is simply supposed to cause a compilation fail if the
 	// type passed does not implement the interface
 }
@@ -406,9 +406,9 @@ func (ctx *context) handleTarget(targetPath string, target BuildInterface) {
 		},
 	})
 
-	if runIface, ok := target.(runInterface); ok {
+	if runIface, ok := target.(RunInterface); ok {
 		deps := []string{}
-		if extendedRunIface, ok := target.(extendedRunInterface); ok {
+		if extendedRunIface, ok := target.(ExtendedRunInterface); ok {
 			depsPaths := extendedRunIface.RunDeps()
 			for _, dep := range depsPaths {
 				deps = append(deps, dep.Absolute())
@@ -426,9 +426,9 @@ func (ctx *context) handleTarget(targetPath string, target BuildInterface) {
 		})
 	}
 
-	if testIface, ok := target.(testInterface); ok {
+	if testIface, ok := target.(TestInterface); ok {
 		deps := []string{}
-		if extendedTestIface, ok := target.(extendedTestInterface); ok {
+		if extendedTestIface, ok := target.(ExtendedTestInterface); ok {
 			depsPaths := extendedTestIface.TestDeps()
 			for _, dep := range depsPaths {
 				deps = append(deps, dep.Absolute())

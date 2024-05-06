@@ -144,13 +144,13 @@ func GeneratorMain(vars map[string]interface{}) {
 		if descriptionIface, ok := variable.(descriptionInterface); ok {
 			info.Description = descriptionIface.Description()
 		}
-		if _, ok := variable.(runInterface); ok {
+		if _, ok := variable.(RunInterface); ok {
 			info.Runnable = true
 		}
-		if _, ok := variable.(testInterface); ok {
+		if _, ok := variable.(TestInterface); ok {
 			info.Testable = true
 		}
-		if _, ok := variable.(reportInterface); ok {
+		if _, ok := variable.(ReportInterface); ok {
 			info.Report = true
 		}
 
@@ -186,20 +186,20 @@ func GeneratorMain(vars map[string]interface{}) {
 		sort.Strings(targetPaths)
 
 		var allTargets = []interface{}{}
-		var reportTargets = []reportInterface{}
+		var reportTargets = []ReportInterface{}
 
 		for _, targetPath := range targetPaths {
 			tgt := vars[targetPath]
 			allTargets = append(allTargets, tgt)
 
-			if rep, ok := tgt.(reportInterface); ok {
+			if rep, ok := tgt.(ReportInterface); ok {
 				reportTargets = append(reportTargets, rep)
 			}
 		}
 
 		for _, targetPath := range targetPaths {
 			tgt := vars[targetPath]
-			if rep, ok := tgt.(reportInterface); ok {
+			if rep, ok := tgt.(ReportInterface); ok {
 				if info, iok := output.Targets[targetPath]; !iok || !info.Selected {
 					continue
 				}
