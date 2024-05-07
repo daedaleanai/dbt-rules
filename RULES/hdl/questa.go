@@ -316,11 +316,11 @@ func createModelsimIni(ctx core.Context, rule Simulation, deps []core.Path) []co
 	}
 
 	if SimulatorLibDir.Value() != "" {
-    for _, lib := range(strings.Split(SimulatorLibDir.Value(), ",")) {
-      cmds = append(cmds, fmt.Sprintf(
-			  "if [ -d \"%s\" ]; then for lib in $$(find %s -mindepth 1 -maxdepth 1 -type d); do vmap $$(basename $$lib) $$lib; done; fi",
-  			lib, lib))
-    }
+		for _, lib := range strings.Split(SimulatorLibDir.Value(), ",") {
+			cmds = append(cmds, fmt.Sprintf(
+				"if [ -d \"%s\" ]; then for lib in $$(find %s -mindepth 1 -maxdepth 1 -type d); do vmap $$(basename $$lib) $$lib; done; fi",
+				lib, lib))
+		}
 	}
 
 	ctx.AddBuildStep(core.BuildStep{
@@ -585,6 +585,14 @@ func optimize(ctx core.Context, rule Simulation, deps []core.Path) {
 	case "":
 	default:
 		access_flag = fmt.Sprintf("+acc=%s", Access.Value())
+	}
+
+	// Override access flag if provided by ToolFlags
+	if rule.ToolFlags != nil {
+		if access_flag_from_rule, ok := rule.ToolFlags["questa-access"]; ok {
+			access_flag = access_flag_from_rule
+		}
+
 	}
 
 	for _, target := range targets {
